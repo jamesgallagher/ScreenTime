@@ -56,7 +56,7 @@ Platforms in v1: Android kid app (one APK for phone and tablet), Windows 11 kid 
 
 The daughter's school laptop is **not** managed.
 
-XPPen tablet runs Android 14 (sets minSdk 34, see 12.1). Unknown: Windows edition on the kids' PCs (Home or Pro).
+XPPen tablet runs Android 14 (sets minSdk 34, see 12.1). Both kids' PCs run **Windows 11 Pro**.
 
 ## 3. Requirements decisions (interview log)
 
@@ -588,7 +588,7 @@ Messages and requests are sent through the server. If the phone has no data, the
 
 **Locked PC (Q32):** the Windows lock screen cannot show our buttons. The kid asks in person or from their phone; a parent grants time or starts parent mode remotely from the parent app, and the kid can then unlock normally.
 
-**Hardening at install:** remove the "Change the time zone" right (`SeTimeZonePrivilege`) from kid accounts via `LsaRemoveAccountRights`; the guide also recommends a BIOS password and disabling USB boot.
+**Hardening at install** (PCs are Windows 11 Pro): remove the "Change the time zone" right (`SeTimeZonePrivilege`) from kid accounts via `LsaRemoveAccountRights` (works on any edition, no Group Policy needed); the guide also recommends a BIOS password and disabling USB boot. Pro also allows Local Group Policy and AppLocker, which the future app-allowlist feature can use.
 
 ### 12.3 Parent mode (Q15, Q24)
 
@@ -805,7 +805,7 @@ Pages: Sign in (email, then 6-digit code boxes), Today (kid cards as 16.4 in a r
 | P2 | Essential notification kinds (section 13) | Notifications card |
 | P3 | ~~Email provider~~ Decided: Brevo SMTP relay, sender "ScreenTime App" <no-reply@gallagherhome.au> | none |
 | P4 | ~~Public hostname~~ Decided: `screentime.gallagherhome.au` (not configured yet) | none |
-| P5 | Windows edition on the kids' PCs (Home or Pro) | Windows hardening card |
+| P5 | ~~Windows edition~~ Decided: Windows 11 Pro on both PCs | none |
 | P6 | Whether the XPPen has Google Play services (needed for FCM) | Android push card |
 | P7 | Which parent Google account to use for Factory Reset Protection | Android policies card |
 | P8 | Firebase project creation (James, free tier) | Push cards |

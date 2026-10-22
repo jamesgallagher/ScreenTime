@@ -95,7 +95,7 @@ Spikes come early on purpose: Device Owner + Lock Task on the real phones, and a
 | 048 | Service: lock and relock, WebSocket, tray launcher, named pipe | 017, 047 | M | | 12.2 |
 | 049 | Tray: flyout and toasts | 048 | M | | 16.3 |
 | 050 | Tray: ask, message, parent mode dialogs | 018, 019, 049 | M | | 16.3 |
-| 051 | Tamper and hardening: time zone right, tray kill counter, Safe Mode registration | 021, 048, P5 | M | | 12.2, 14 |
+| 051 | Tamper and hardening: time zone right, tray kill counter, Safe Mode registration | 021, 048 | M | | 12.2, 14 |
 | 052 | Installer (WiX MSI) | 049 | M | | 12.2 |
 
 ## Phase 6: deploy and rollout
