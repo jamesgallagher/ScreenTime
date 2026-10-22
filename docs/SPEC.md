@@ -163,7 +163,7 @@ ScreenTime/
 │   ├── core-model/           generated API client + models
 │   ├── core-time/            Kotlin time engine
 │   └── core-ui/              theme + shared Compose components
-├── windows/                  one .NET solution (ScreenTime.sln)
+├── windows/                  one .NET solution (ScreenTime.slnx)
 │   ├── src/ScreenTime.Core/       generated client, cache, C# time engine
 │   ├── src/ScreenTime.Service/    LocalSystem worker
 │   ├── src/ScreenTime.Tray/       WinUI 3 tray helper
