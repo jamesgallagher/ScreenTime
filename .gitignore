@@ -1,0 +1,45 @@
+# Node / TypeScript
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+.pnpm-store/
+
+# Env and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+google-services.json
+firebase-service-account*.json
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Android (Gradle)
+.gradle/
+android/**/build/
+android/local.properties
+*.iml
+*.apk
+*.aab
+*.jks
+*.keystore
+
+# Windows (.NET)
+windows/**/bin/
+windows/**/obj/
+.vs/
+*.user
+*.suo
+*.msi
