@@ -68,7 +68,7 @@ These are James's answers from the requirements interview (22 Oct 2026). Section
 | Q2 | When the phone is out of time it shows an undismissable blocker. From the blocker the kid can still call a whitelist, make emergency calls and SMS, and press SOS. | 12.1, 15 |
 | Q3 | The parent app receives SOS as a critical alert. | 13, 15 |
 | Q4 | All Android in v1. The REST API must be platform agnostic for a future iOS app. | 9 |
-| Q5 | No separate decision recorded. James to confirm nothing is missing. | 17 |
+| Q5 | Push uses Firebase Cloud Messaging (approved). Android-only push is accepted for v1. Use the best free services. | 10, 13 |
 | Q6 / Q9 | Android enforcer becomes **Device Owner via ADB**, with no factory wipe. | 12.1 |
 | Q7 | Two warnings before lock, configurable (default 15 and 5 minutes). On a PC they are toasts. Windows **locks** at zero and never signs the kid out. | 7, 12.2 |
 | Q8 | Parent adjustments apply to **today only**, can be plus or minus, are entered with a 15-minute-step roller, and have no cap. Bedtime always locks. After bedtime the kid can use only the time a parent grants after bedtime. Adjustments are per kid per pool. | 7 |
@@ -78,7 +78,7 @@ These are James's answers from the requirements interview (22 Oct 2026). Section
 | Q13 / Q30 | No app allowlists in v1. | 18 |
 | Q14 | Parent auth by email + one-time code. The parent phone app is unlocked with biometrics or PIN. A super admin is set by a Docker environment variable. Families contain parents and kids. Multi-tenant. | 6, 11 |
 | Q15 | "Parent mode" on a kid device: the parent approves by push and picks 2 min, 5 min, 15 min, 1 h or indefinite, and the device is unlocked and not counting. If the kid device is offline, a rotating code from the parent app works instead. All parents are notified. | 12.3 |
-| Q16 | No separate decision recorded. James to confirm nothing is missing. | 17 |
+| Q16 | Multi-family: v1 serves only James's family, but is multi-tenant from day one with strict per-family isolation (Postgres row-level security), so other families can be added later. Self sign-up and the 20-device sideload limit are later concerns. | 6, 11.4, 18 |
 | Q17 | Each parent can opt out of non-essential notifications. Essential ones are always on. | 13 |
 | Q18 | Reporting in v1: time used and time remaining today, per kid per pool. | 16.4 |
 | Q19 | Counting: a phone or tablet counts while the screen is on **and** unlocked. A PC counts while the kid is signed in **and** the session is unlocked. There is no idle pause. | 12 |
@@ -798,8 +798,7 @@ Pages: Sign in (email, then 6-digit code boxes), Today (kid cards as 16.4 in a r
 | P6 | Whether the XPPen has Google Play services (needed for FCM) | Android push card |
 | P7 | Which parent Google account to use for Factory Reset Protection | Android policies card |
 | P8 | Firebase project creation (James, free tier) | Push cards |
-| P9 | Q5 and Q16 have no recorded answer; confirm nothing was missed | none |
-| P10 | **[PROPOSED]** items above: time request amounts 15/30/60, "Lock now" as negative grant, SMS fallback for messages, remote parent mode, 12-hour times | the card that builds each |
+| P9 | **[PROPOSED]** items above: time request amounts 15/30/60, "Lock now" as negative grant, SMS fallback for messages, remote parent mode, 12-hour times | the card that builds each |
 
 ## 18. Future (not v1)
 
@@ -814,4 +813,5 @@ Pages: Sign in (email, then 6-digit code boxes), Today (kid cards as 16.4 in a r
 - MDM extras: app inventory, install/remove apps, location outside SOS, remote wipe.
 - Accessibility-service fallback for devices that cannot be Device Owner.
 - Browser push for the web app.
+- Self sign-up for other families (super admin creates families in v1).
 - Android developer verification (2027): register a free limited-distribution account and re-check that ADB installs stay exempt.
