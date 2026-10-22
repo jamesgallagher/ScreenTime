@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>WinExe</OutputType>
+        <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+        <TargetPlatformMinVersion>10.0.22000.0</TargetPlatformMinVersion>
+        <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+        <UseWinUI>true</UseWinUI>
+        <WindowsPackageType>None</WindowsPackageType>
+        <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+        <AssemblyName>ScreenTime.Tray</AssemblyName>
+        <RootNamespace>ScreenTime.Tray</RootNamespace>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.5.1" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\ScreenTime.Core\ScreenTime.Core.csproj" />
+    </ItemGroup>
+
+</Project>
