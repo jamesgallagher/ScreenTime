@@ -1,0 +1,60 @@
+name: TypeScript
+
+on:
+  pull_request:
+    paths:
+      - "packages/**"
+      - "server/**"
+      - "web/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "tsconfig.base.json"
+      - ".nvmrc"
+      - ".github/workflows/typescript.yml"
+  push:
+    branches: [main]
+    paths:
+      - "packages/**"
+      - "server/**"
+      - "web/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "tsconfig.base.json"
+      - ".nvmrc"
+      - ".github/workflows/typescript.yml"
+
+concurrency:
+  group: typescript-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: typecheck and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out
+        uses: actions/checkout@v5
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm build && pnpm typecheck
+
+      - name: Test
+        run: pnpm test
