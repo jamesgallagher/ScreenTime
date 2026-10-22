@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "au.screentime.parent"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "au.screentime.parent"
