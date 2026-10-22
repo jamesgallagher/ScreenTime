@@ -133,7 +133,7 @@ Also decided in research (22 Oct 2026): the tech stack in section 4, the sync de
 ### 4.2 Hosting
 
 - Two containers on Unraid: `api` (also serves the built web app) and `postgres`. Docker Compose file in `deploy/`.
-- One public hostname through the existing Cloudflare Tunnel, for example `screentime.<domain>`. **[PENDING]** exact hostname.
+- One public hostname through the Cloudflare Tunnel: **`screentime.gallagherhome.au`** (decided 22 Oct 2026; DNS and tunnel route are set up in the deploy card). Set as `PUBLIC_HOSTNAME`.
 - Web app at `/`, API at `/v1/*`, health at `/health`, device WebSocket at `/v1/device/ws`.
 - Cloudflare Access must **not** be put in front of `/v1/*`, because devices authenticate with their own tokens.
 - Nightly `pg_dump` to an Unraid share.
@@ -793,7 +793,7 @@ Pages: Sign in (email, then 6-digit code boxes), Today (kid cards as 16.4 in a r
 | P1 | ~~XPPen Android version~~ Decided: Android 14, minSdk 34 | none |
 | P2 | Essential notification kinds (section 13) | Notifications card |
 | P3 | Free email provider for OTP (any SMTP) | Deploy card |
-| P4 | Public hostname for the Cloudflare Tunnel | Deploy card |
+| P4 | ~~Public hostname~~ Decided: `screentime.gallagherhome.au` (not configured yet) | none |
 | P5 | Windows edition on the kids' PCs (Home or Pro) | Windows hardening card |
 | P6 | Whether the XPPen has Google Play services (needed for FCM) | Android push card |
 | P7 | Which parent Google account to use for Factory Reset Protection | Android policies card |
