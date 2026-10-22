@@ -70,19 +70,20 @@ Use **exactly** these versions. Do not upgrade or downgrade any of them, even if
 | `androidx.activity:activity-compose` | 1.13.0 |
 | JUnit (BOM) | 6.1.3 |
 | Java bytecode target | 17 |
-| `compileSdk` / `targetSdk` | 36 |
+| `compileSdk` | 37 (Compose 1.12 requires it) |
+| `targetSdk` | 36 |
 | `minSdk` | 34 (Android 14) |
 
 ### Tools James must install first
 
 1. **Android Studio** (current stable) from https://developer.android.com/studio. Open it once and finish the setup wizard (Standard install). This installs the Android SDK to `C:\Users\james\AppData\Local\Android\Sdk` and a Java runtime (JBR, Java 21) to `C:\Program Files\Android\Android Studio\jbr`.
-2. In Android Studio: **More Actions › SDK Manager › SDK Platforms**, tick **Android 16 (API 36)** (named "Android 16.0 (Baklava)" or similar), then **Apply**. Accept the licences.
+2. In Android Studio: **More Actions › SDK Manager › SDK Platforms**, tick **Android 17 (API 37)** (the newest "Android 17.x" entry), then **Apply**. Accept the licences.
 
 ### Check the tools (PowerShell)
 
 ```powershell
 Test-Path "C:\Program Files\Android\Android Studio\jbr\bin\java.exe"
-Test-Path "$env:LOCALAPPDATA\Android\Sdk\platforms\android-36"
+Test-Path "$env:LOCALAPPDATA\Android\Sdk\platforms\android-37*"
 ```
 
 Both must print `True`. If either prints `False`, stop and ask James to do the install steps above.
@@ -363,7 +364,7 @@ plugins {
 
 android {
     namespace = "au.screentime.core.ui"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         minSdk = 34
@@ -646,7 +647,7 @@ plugins {
 
 android {
     namespace = "au.screentime.kid"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "au.screentime.kid"
@@ -748,7 +749,7 @@ One Gradle project with two apps and shared modules, all Kotlin + Jetpack Compos
 
 ## Build
 
-Needs Android Studio (for its Java runtime and the Android SDK with API 36). From this folder in PowerShell:
+Needs Android Studio (for its Java runtime and the Android SDK with API 37). From this folder in PowerShell:
 
 ```powershell
 $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
@@ -830,7 +831,7 @@ Both apps open straight to `PlaceholderScreen`:
 
 ### 6.3 Build rules
 
-- `minSdk = 34`, `compileSdk = 36`, `targetSdk = 36` (apps). Bytecode target Java 17.
+- `minSdk = 34`, `compileSdk = 37`, `targetSdk = 36` (apps). Bytecode target Java 17.
 - Kotlin JVM modules (`core-time`, `core-model`) must not depend on any Android library, so they stay usable from a future iOS or desktop target.
 - `core-ui` exposes Compose Material 3 through `api(...)`, so apps that use `core-ui` see Material 3 too.
 
@@ -957,7 +958,7 @@ Known traps, and what to do:
 
 - **"Plugin [id: 'org.jetbrains.kotlin.android'] ..." or "kotlin-android is not compatible with built-in Kotlin"**: you added the `kotlin-android` plugin. Remove it; the card never uses it.
 - **"SDK location not found"**: create `android\local.properties` as in step 9.
-- **"Failed to find target with hash string 'android-36'"** or a licence error: ask James to install Android 16 (API 36) in the SDK Manager (section 4).
+- **"Failed to find target with hash string 'android-37'"** or a licence error: ask James to install Android 17 (API 37) in the SDK Manager (section 4).
 - **"JAVA_HOME is not set"** or a Java version error: run the `$env:JAVA_HOME = ...` line from section 4 in this terminal.
 - **A version cannot be found** (for example "Could not find com.android.tools.build:gradle:9.4.0"): do **not** pick another version yourself. Stop and report the exact message in the PR.
 - **Gradle prints deprecation warnings** but ends with `BUILD SUCCESSFUL`: that is fine, ignore them.

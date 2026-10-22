@@ -572,7 +572,7 @@ From the block screen:
 
 Messages and requests are sent through the server. If the phone has no data, the message is offered as an SMS to all parents instead ("No internet. Send as a text?").
 
-**minSdk = 34 (Android 14)**, decided 22 Oct 2026: the XPPen tablet runs Android 14 and the Pixel 7 is newer. This lets the app use foreground service type `systemExempted` everywhere with no fallback code. `targetSdk` and `compileSdk` = 36. The parent app uses the same minSdk.
+**minSdk = 34 (Android 14)**, decided 22 Oct 2026: the XPPen tablet runs Android 14 and the Pixel 7 is newer. This lets the app use foreground service type `systemExempted` everywhere with no fallback code. `targetSdk` = 36 and `compileSdk` = 37 (Compose 1.12, in BOM 2026.09, requires compileSdk 37; found 22 Oct 2026). The parent app uses the same minSdk.
 
 ### 12.2 Windows kid enforcer
 
