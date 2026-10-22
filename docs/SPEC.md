@@ -553,7 +553,7 @@ Each kid device gets an opaque 32-byte token at enrolment, stored hashed on the 
 **Device Owner policies applied at startup:**
 
 - `setUninstallBlocked(self)`, user restrictions `DISALLOW_APPS_CONTROL`, `DISALLOW_SAFE_BOOT`, `DISALLOW_FACTORY_RESET`, `DISALLOW_CONFIG_DATE_TIME`, `DISALLOW_DEBUGGING_FEATURES`, `DISALLOW_ADD_USER`, `DISALLOW_AIRPLANE_MODE`. Auto time and auto time zone forced on.
-- Factory Reset Protection account set to a parent's Google account **[PENDING: which account]**.
+- Factory Reset Protection (`setFactoryResetProtectionPolicy`) set to **James's Google account** (decided 22 Oct 2026). The account's numeric Google ID is entered during provisioning and stored as a server family setting, never committed to the repo.
 - Self-grant runtime permissions (phone, SMS, location, notifications, camera for QR) with `setPermissionGrantState`.
 - Lock Task packages: our app, plus the system dialer / in-call UI package (resolved at runtime from `TelecomManager.getDefaultDialerPackage()`) only on devices with cellular.
 
@@ -807,7 +807,7 @@ Pages: Sign in (email, then 6-digit code boxes), Today (kid cards as 16.4 in a r
 | P4 | ~~Public hostname~~ Decided: `screentime.gallagherhome.au` (not configured yet) | none |
 | P5 | ~~Windows edition~~ Decided: Windows 11 Pro on both PCs | none |
 | P6 | ~~XPPen Play services~~ Decided: yes, it has the Play Store, so FCM works on all Android devices | none |
-| P7 | Which parent Google account to use for Factory Reset Protection | Android policies card |
+| P7 | ~~FRP account~~ Decided: James's own Google account | none |
 | P8 | Firebase project creation (James, free tier) | Push cards |
 | P9 | **[PROPOSED]** items above: time request amounts 15/30/60, "Lock now" as negative grant, SMS fallback for messages, remote parent mode, 12-hour times | the card that builds each |
 
