@@ -1,0 +1,32 @@
+{
+  "name": "grant before wake unlocks for that time only",
+  "tz": "Australia/Sydney",
+  "date": "2026-10-22",
+  "now": "2026-10-22T06:10:00+11:00",
+  "day": {
+    "allowanceMin": 120,
+    "wake": "07:00",
+    "bedtime": "20:30"
+  },
+  "grants": [
+    {
+      "minutes": 30,
+      "createdAt": "2026-10-22T06:00:00+11:00"
+    }
+  ],
+  "segments": [
+    {
+      "start": "2026-10-22T06:05:00+11:00",
+      "end": null
+    }
+  ],
+  "expect": {
+    "locked": false,
+    "lockReason": null,
+    "remainingSec": 1500,
+    "nextLockAt": "2026-10-22T06:35:00+11:00",
+    "reevaluateAt": "2026-10-22T06:35:00+11:00",
+    "usedSec": 300,
+    "overspendSec": 0
+  }
+}

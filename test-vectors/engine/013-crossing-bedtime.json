@@ -1,0 +1,27 @@
+{
+  "name": "use after bedtime with no grant is locked; only allowed part hits allowance",
+  "tz": "Australia/Sydney",
+  "date": "2026-10-22",
+  "now": "2026-10-22T20:45:00+11:00",
+  "day": {
+    "allowanceMin": 120,
+    "wake": "07:00",
+    "bedtime": "20:30"
+  },
+  "grants": [],
+  "segments": [
+    {
+      "start": "2026-10-22T20:00:00+11:00",
+      "end": "2026-10-22T20:40:00+11:00"
+    }
+  ],
+  "expect": {
+    "locked": true,
+    "lockReason": "bedtime",
+    "remainingSec": 0,
+    "nextLockAt": null,
+    "reevaluateAt": "2026-10-23T00:00:00+11:00",
+    "usedSec": 2400,
+    "overspendSec": 0
+  }
+}

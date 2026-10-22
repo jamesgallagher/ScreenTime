@@ -1,0 +1,32 @@
+{
+  "name": "grant after bedtime unlocks only for the granted time",
+  "tz": "Australia/Sydney",
+  "date": "2026-10-22",
+  "now": "2026-10-22T21:10:00+11:00",
+  "day": {
+    "allowanceMin": 120,
+    "wake": "07:00",
+    "bedtime": "20:30"
+  },
+  "grants": [
+    {
+      "minutes": 15,
+      "createdAt": "2026-10-22T21:00:00+11:00"
+    }
+  ],
+  "segments": [
+    {
+      "start": "2026-10-22T21:01:00+11:00",
+      "end": null
+    }
+  ],
+  "expect": {
+    "locked": false,
+    "lockReason": null,
+    "remainingSec": 360,
+    "nextLockAt": "2026-10-22T21:16:00+11:00",
+    "reevaluateAt": "2026-10-22T21:16:00+11:00",
+    "usedSec": 540,
+    "overspendSec": 0
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "name": "allowance left over does not carry past bedtime",
+  "tz": "Australia/Sydney",
+  "date": "2026-10-22",
+  "now": "2026-10-22T21:00:00+11:00",
+  "day": {
+    "allowanceMin": 240,
+    "wake": "07:00",
+    "bedtime": "20:30"
+  },
+  "grants": [],
+  "segments": [],
+  "expect": {
+    "locked": true,
+    "lockReason": "bedtime",
+    "remainingSec": 0,
+    "nextLockAt": null,
+    "reevaluateAt": "2026-10-23T00:00:00+11:00",
+    "usedSec": 0,
+    "overspendSec": 0
+  }
+}
