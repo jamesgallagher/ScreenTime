@@ -1,0 +1,27 @@
+{
+  "name": "2026-10-04 clocks go forward 02:00->03:00 (23-hour day)",
+  "tz": "Australia/Sydney",
+  "date": "2026-10-04",
+  "now": "2026-10-04T01:30:00+10:00",
+  "day": {
+    "allowanceMin": 180,
+    "wake": "00:00",
+    "bedtime": "24:00"
+  },
+  "grants": [],
+  "segments": [
+    {
+      "start": "2026-10-04T00:30:00+10:00",
+      "end": null
+    }
+  ],
+  "expect": {
+    "locked": false,
+    "lockReason": null,
+    "remainingSec": 7200,
+    "nextLockAt": "2026-10-04T04:30:00+11:00",
+    "reevaluateAt": "2026-10-04T04:30:00+11:00",
+    "usedSec": 3600,
+    "overspendSec": 0
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "name": "45 min used, 75 min left",
+  "tz": "Australia/Sydney",
+  "date": "2026-10-22",
+  "now": "2026-10-22T16:00:00+11:00",
+  "day": {
+    "allowanceMin": 120,
+    "wake": "07:00",
+    "bedtime": "20:30"
+  },
+  "grants": [],
+  "segments": [
+    {
+      "start": "2026-10-22T15:00:00+11:00",
+      "end": "2026-10-22T15:45:00+11:00"
+    }
+  ],
+  "expect": {
+    "locked": false,
+    "lockReason": null,
+    "remainingSec": 4500,
+    "nextLockAt": "2026-10-22T17:15:00+11:00",
+    "reevaluateAt": "2026-10-22T17:15:00+11:00",
+    "usedSec": 2700,
+    "overspendSec": 0
+  }
+}

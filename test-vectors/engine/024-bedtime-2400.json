@@ -1,0 +1,27 @@
+{
+  "name": "bedtime 24:00 means no evening curfew; no lock before midnight",
+  "tz": "Australia/Sydney",
+  "date": "2026-10-22",
+  "now": "2026-10-22T23:00:00+11:00",
+  "day": {
+    "allowanceMin": 120,
+    "wake": "07:00",
+    "bedtime": "24:00"
+  },
+  "grants": [],
+  "segments": [
+    {
+      "start": "2026-10-22T22:00:00+11:00",
+      "end": null
+    }
+  ],
+  "expect": {
+    "locked": false,
+    "lockReason": null,
+    "remainingSec": 3600,
+    "nextLockAt": null,
+    "reevaluateAt": "2026-10-23T00:00:00+11:00",
+    "usedSec": 3600,
+    "overspendSec": 0
+  }
+}

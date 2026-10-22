@@ -1,0 +1,27 @@
+{
+  "name": "open segment counts up to now",
+  "tz": "Australia/Sydney",
+  "date": "2026-10-22",
+  "now": "2026-10-22T16:30:00+11:00",
+  "day": {
+    "allowanceMin": 120,
+    "wake": "07:00",
+    "bedtime": "20:30"
+  },
+  "grants": [],
+  "segments": [
+    {
+      "start": "2026-10-22T16:00:00+11:00",
+      "end": null
+    }
+  ],
+  "expect": {
+    "locked": false,
+    "lockReason": null,
+    "remainingSec": 5400,
+    "nextLockAt": "2026-10-22T18:00:00+11:00",
+    "reevaluateAt": "2026-10-22T18:00:00+11:00",
+    "usedSec": 1800,
+    "overspendSec": 0
+  }
+}

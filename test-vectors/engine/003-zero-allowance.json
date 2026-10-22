@@ -1,0 +1,22 @@
+{
+  "name": "allowance 0 locks during the day",
+  "tz": "Australia/Sydney",
+  "date": "2026-10-22",
+  "now": "2026-10-22T10:00:00+11:00",
+  "day": {
+    "allowanceMin": 0,
+    "wake": "07:00",
+    "bedtime": "20:30"
+  },
+  "grants": [],
+  "segments": [],
+  "expect": {
+    "locked": true,
+    "lockReason": "out_of_time",
+    "remainingSec": 0,
+    "nextLockAt": null,
+    "reevaluateAt": "2026-10-22T20:30:00+11:00",
+    "usedSec": 0,
+    "overspendSec": 0
+  }
+}

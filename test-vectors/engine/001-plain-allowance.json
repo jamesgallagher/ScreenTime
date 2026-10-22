@@ -1,0 +1,22 @@
+{
+  "name": "no usage yet, full allowance left",
+  "tz": "Australia/Sydney",
+  "date": "2026-10-22",
+  "now": "2026-10-22T10:00:00+11:00",
+  "day": {
+    "allowanceMin": 120,
+    "wake": "07:00",
+    "bedtime": "20:30"
+  },
+  "grants": [],
+  "segments": [],
+  "expect": {
+    "locked": false,
+    "lockReason": null,
+    "remainingSec": 7200,
+    "nextLockAt": "2026-10-22T12:00:00+11:00",
+    "reevaluateAt": "2026-10-22T12:00:00+11:00",
+    "usedSec": 0,
+    "overspendSec": 0
+  }
+}
