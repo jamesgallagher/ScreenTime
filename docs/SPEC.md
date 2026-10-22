@@ -56,7 +56,7 @@ Platforms in v1: Android kid app (one APK for phone and tablet), Windows 11 kid 
 
 The daughter's school laptop is **not** managed.
 
-XPPen tablet runs Android 14 (sets minSdk 34, see 12.1). Both kids' PCs run **Windows 11 Pro**.
+XPPen tablet runs Android 14 (sets minSdk 34, see 12.1). Both kids' PCs run **Windows 11 Pro**. The XPPen tablet has Google Play services, so FCM push works on every Android device.
 
 ## 3. Requirements decisions (interview log)
 
@@ -806,7 +806,7 @@ Pages: Sign in (email, then 6-digit code boxes), Today (kid cards as 16.4 in a r
 | P3 | ~~Email provider~~ Decided: Brevo SMTP relay, sender "ScreenTime App" <no-reply@gallagherhome.au> | none |
 | P4 | ~~Public hostname~~ Decided: `screentime.gallagherhome.au` (not configured yet) | none |
 | P5 | ~~Windows edition~~ Decided: Windows 11 Pro on both PCs | none |
-| P6 | Whether the XPPen has Google Play services (needed for FCM) | Android push card |
+| P6 | ~~XPPen Play services~~ Decided: yes, it has the Play Store, so FCM works on all Android devices | none |
 | P7 | Which parent Google account to use for Factory Reset Protection | Android policies card |
 | P8 | Firebase project creation (James, free tier) | Push cards |
 | P9 | **[PROPOSED]** items above: time request amounts 15/30/60, "Lock now" as negative grant, SMS fallback for messages, remote parent mode, 12-hour times | the card that builds each |
