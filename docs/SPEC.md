@@ -803,7 +803,7 @@ Pages: Sign in (email, then 6-digit code boxes), Today (kid cards as 16.4 in a r
 | # | Decision | Blocks |
 |---|---|---|
 | P1 | ~~XPPen Android version~~ Decided: Android 14, minSdk 34 | none |
-| P2 | Essential notification kinds (section 13) | Notifications card |
+| P2 | ~~Essential notifications~~ Decided: only SOS and approval requests; everything else mutable but always in event history | none |
 | P3 | ~~Email provider~~ Decided: Brevo SMTP relay, sender "ScreenTime App" <no-reply@gallagherhome.au> | none |
 | P4 | ~~Public hostname~~ Decided: `screentime.gallagherhome.au` (not configured yet) | none |
 | P5 | ~~Windows edition~~ Decided: Windows 11 Pro on both PCs | none |
