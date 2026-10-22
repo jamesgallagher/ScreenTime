@@ -7,7 +7,7 @@ Philosophy: **keep it simple**. Build the smallest thing that meets the requirem
 Markers used below:
 
 - **[PENDING]** a decision we know we still need. Listed again in section 17.
-- a detail the architect chose that James has not explicitly confirmed. Build it as written unless James changes it.
+- **[PROPOSED]** a detail the architect chose that James has not yet confirmed. (All v1 proposals were accepted on 22 Oct 2026.)
 
 ---
 
