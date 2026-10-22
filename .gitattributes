@@ -1,0 +1,18 @@
+* text=auto eol=lf
+
+*.sln  text eol=crlf
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.webp binary
+*.jar  binary
+*.keystore binary
+*.jks  binary
+*.ttf  binary
+*.woff binary
+*.woff2 binary
