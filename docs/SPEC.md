@@ -137,6 +137,7 @@ Also decided in research (22 Oct 2026): the tech stack in section 4, the sync de
 - Web app at `/`, API at `/v1/*`, health at `/health`, device WebSocket at `/v1/device/ws`.
 - Cloudflare Access must **not** be put in front of `/v1/*`, because devices authenticate with their own tokens.
 - Nightly `pg_dump` to an Unraid share.
+- Firebase project `screentime-d307c` (free Spark plan) provides FCM for both Android apps. The service account JSON is passed as `FIREBASE_SERVICE_ACCOUNT_JSON`; `google-services.json` files are never committed.
 
 ## 5. Repository layout
 
@@ -808,7 +809,7 @@ Pages: Sign in (email, then 6-digit code boxes), Today (kid cards as 16.4 in a r
 | P5 | ~~Windows edition~~ Decided: Windows 11 Pro on both PCs | none |
 | P6 | ~~XPPen Play services~~ Decided: yes, it has the Play Store, so FCM works on all Android devices | none |
 | P7 | ~~FRP account~~ Decided: James's own Google account | none |
-| P8 | Firebase project creation (James, free tier) | Push cards |
+| P8 | ~~Firebase project~~ Done: project "ScreenTime", ID `screentime-d307c` (James's Gmail account) | none |
 | P9 | **[PROPOSED]** items above: time request amounts 15/30/60, "Lock now" as negative grant, SMS fallback for messages, remote parent mode, 12-hour times | the card that builds each |
 
 ## 18. Future (not v1)
