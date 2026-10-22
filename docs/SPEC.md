@@ -598,17 +598,17 @@ Parent notifications go to the Android parent app by FCM. The web app shows the 
 | Kind | When | Essential (cannot be turned off) |
 |---|---|---|
 | `sos.started`, `sos.update`, `sos.ended` | Section 15 | Yes, critical alert |
-| `tamper.*` | Section 14 | Yes |
+| `tamper.*` | Section 14 | No **[PROPOSED: confirm]** |
 | `parent_mode.request` | Kid asks for parent mode | Yes |
-| `parent_mode.used` | Parent mode started on any device | Yes |
-| `time_request` | Kid asks for more time | No **[PROPOSED]** |
-| `kid_message` | Kid sends a message | No **[PROPOSED]** |
+| `parent_mode.used` | Parent mode started on any device | No **[PROPOSED: confirm]** |
+| `time_request` | Kid asks for more time | No |
+| `kid_message` | Kid sends a message | No |
 | `overspend` | Offline overspend detected | No |
 | `device.offline` | Not seen for 6 h during allowed hours | No |
 | `device.enrolled` | New device added | No |
 | `grant.by_other_parent` | The other parent changed time | No |
 
-**[PENDING]** James to confirm which kinds are essential (Q17).
+Rule (James, 22 Oct 2026): approval requests and SOS are essential; every informational kind can be switched off per parent. Sign-in code emails are always sent. **[PENDING]** confirm tamper and parent-mode-used count as informational.
 
 Android parent app channels: `critical` (SOS: high importance, bypass Do Not Disturb, full-screen intent, alarm sound on the alarm stream looping until acknowledged), `alerts` (tamper, parent mode: high importance), `requests` (time requests, messages: default importance), `info` (the rest: low). First-run setup asks the parent to allow notifications, Do Not Disturb access and full-screen intents.
 
