@@ -507,7 +507,18 @@ WebSocket extras: client sends `{ "type": "ping" }` every 30 s, server answers `
 3. Android parent app stores tokens in app storage encrypted with an Android Keystore key, and requires `BiometricPrompt` (strong biometric **or** device PIN/pattern) every time the app is opened after 5 minutes in the background.
 4. The web app keeps the refresh token in an `HttpOnly; Secure; SameSite=Strict` cookie and the access token in memory.
 
-Email is sent over SMTP using env vars (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`), so any free provider works. **[PENDING]** which provider.
+Email is sent over SMTP with nodemailer using env vars, so the provider can be swapped by config alone. Provider (decided 22 Oct 2026): **Brevo SMTP relay**, reusing James's existing Brevo account (the one the Stremio AI Recommender uses):
+
+| Env var | Value |
+|---|---|
+| `SMTP_HOST` | `smtp-relay.brevo.com` |
+| `SMTP_PORT` | `587` (STARTTLS; `465` means implicit TLS) |
+| `SMTP_USER` | Brevo SMTP login (secret-ish, from the existing deployment, never committed) |
+| `SMTP_PASS` | Brevo SMTP key `xsmtpsib-…` (secret, from the existing deployment, never committed) |
+| `SMTP_FROM` | `no-reply@gallagherhome.au` (already a verified Brevo sender) |
+| `SMTP_FROM_NAME` | `ScreenTime App` |
+
+If `SMTP_USER`, `SMTP_PASS` or `SMTP_FROM` is unset, the server logs the code to the console instead of sending (dev and tests only). Email subject: "Your ScreenTime sign-in code: 123456".
 
 ### 11.2 Devices
 
@@ -525,7 +536,7 @@ Each kid device gets an opaque 32-byte token at enrolment, stored hashed on the 
 
 - Postgres RLS by `family_id` (section 6). The super admin role is used only in `/v1/admin/*`.
 - Rate limits per IP and per email on auth and enrolment.
-- `JWT_SECRET`, `DATABASE_URL`, `SUPER_ADMIN_EMAIL`, `PUBLIC_HOSTNAME`, SMTP vars and `FIREBASE_SERVICE_ACCOUNT_JSON` come from env. Never commit secrets; `deploy/.env.example` lists them.
+- `JWT_SECRET`, `DATABASE_URL`, `SUPER_ADMIN_EMAIL`, `PUBLIC_HOSTNAME`, SMTP vars (11.1) and `FIREBASE_SERVICE_ACCOUNT_JSON` come from env. Never commit secrets; `deploy/.env.example` lists them.
 
 ## 12. Enforcement per platform
 
@@ -792,7 +803,7 @@ Pages: Sign in (email, then 6-digit code boxes), Today (kid cards as 16.4 in a r
 |---|---|---|
 | P1 | ~~XPPen Android version~~ Decided: Android 14, minSdk 34 | none |
 | P2 | Essential notification kinds (section 13) | Notifications card |
-| P3 | Free email provider for OTP (any SMTP) | Deploy card |
+| P3 | ~~Email provider~~ Decided: Brevo SMTP relay, sender "ScreenTime App" <no-reply@gallagherhome.au> | none |
 | P4 | ~~Public hostname~~ Decided: `screentime.gallagherhome.au` (not configured yet) | none |
 | P5 | Windows edition on the kids' PCs (Home or Pro) | Windows hardening card |
 | P6 | Whether the XPPen has Google Play services (needed for FCM) | Android push card |

@@ -102,7 +102,7 @@ Spikes come early on purpose: Device Owner + Lock Task on the real phones, and a
 
 | Card | Title | Depends on | Size | James | Spec |
 |---|---|---|---|---|---|
-| 053 | Deploy to Unraid: compose, tunnel route, backups, `docs/guides/deploy.md` | 027, P3 | M | Unraid, Cloudflare | 4.2 |
+| 053 | Deploy to Unraid: compose, tunnel route, backups, `docs/guides/deploy.md` | 027 | M | Unraid, Cloudflare | 4.2 |
 | 054 | Guides: Android provisioning, Windows install | 038, 052 | S | | 12 |
 | 055 | Household rollout and end-to-end acceptance checklist | all | S | All devices | all |
 
