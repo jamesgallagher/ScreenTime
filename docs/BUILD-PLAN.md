@@ -23,7 +23,7 @@ Spikes come early on purpose: Device Owner + Lock Task on the real phones, and a
 | 001 | Monorepo skeleton: pnpm workspace, `@screentime/schemas`, server `/health`, placeholder folders | none | S | Node 24 + pnpm installed | 5 |
 | 002 | CI for TypeScript: GitHub Actions install, typecheck, test, path filters | 001 | S | | 4.1 |
 | 003 | Time engine in TypeScript (`packages/engine`) + first 20 test vectors | 001 | M | | 7 |
-| 004 | Android Gradle skeleton: `app-kid`, `app-parent`, `core-model`, `core-time`, `core-ui`, theme tokens, empty screens | 001, P1 (minSdk) | M | Android Studio + SDK | 5, 16.1 |
+| 004 | Android Gradle skeleton: `app-kid`, `app-parent`, `core-model`, `core-time`, `core-ui`, theme tokens, empty screens | 001 | M | Android Studio + SDK (minSdk 34) | 5, 16.1 |
 | 005 | Spike: Device Owner + Lock Task + dialer allowlist on Pixel 7 and XPPen; FCM in Doze; Play services check | 004 | M | Phones, ADB | 12.1 |
 | 006 | Windows .NET 10 solution skeleton: Core, Service, Tray, Installer, Core.Tests | 001 | S | .NET 10 SDK, Windows App SDK | 5 |
 | 007 | Spike: service session events, tray in kid session, `LockWorkStation`, pipe, RAM, sleep/resume | 006 | M | Kid test account on PC | 12.2 |
@@ -108,4 +108,4 @@ Spikes come early on purpose: Device Owner + Lock Task on the real phones, and a
 
 ## Pending decisions that block cards
 
-See SPEC section 17. The ones that block early cards: **P1** (XPPen Android version → minSdk) blocks 004; **P8** (Firebase project) blocks 016.
+See SPEC section 17. The one that blocks an early card: **P8** (Firebase project) blocks 016.

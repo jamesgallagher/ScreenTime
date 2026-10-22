@@ -56,7 +56,7 @@ Platforms in v1: Android kid app (one APK for phone and tablet), Windows 11 kid 
 
 The daughter's school laptop is **not** managed.
 
-Unknowns: XPPen Android version (sets Android minSdk, see 17), Windows edition on the kids' PCs (Home or Pro).
+XPPen tablet runs Android 14 (sets minSdk 34, see 12.1). Unknown: Windows edition on the kids' PCs (Home or Pro).
 
 ## 3. Requirements decisions (interview log)
 
@@ -560,7 +560,7 @@ From the block screen:
 
 Messages and requests are sent through the server. If the phone has no data, the message is offered as an SMS to all parents instead ("No internet. Send as a text?") **[PROPOSED]**.
 
-**minSdk [PENDING]:** waits for the XPPen Android version. Every API above exists from Android 10 (API 29) except foreground service type `systemExempted` (API 34; on older versions the service runs without a type). `targetSdk` and `compileSdk` = 36.
+**minSdk = 34 (Android 14)**, decided 22 Oct 2026: the XPPen tablet runs Android 14 and the Pixel 7 is newer. This lets the app use foreground service type `systemExempted` everywhere with no fallback code. `targetSdk` and `compileSdk` = 36. The parent app uses the same minSdk.
 
 ### 12.2 Windows kid enforcer
 
@@ -790,7 +790,7 @@ Pages: Sign in (email, then 6-digit code boxes), Today (kid cards as 16.4 in a r
 
 | # | Decision | Blocks |
 |---|---|---|
-| P1 | XPPen tablet Android version → Android `minSdk` | Android skeleton card |
+| P1 | ~~XPPen Android version~~ Decided: Android 14, minSdk 34 | none |
 | P2 | Essential notification kinds (section 13) | Notifications card |
 | P3 | Free email provider for OTP (any SMTP) | Deploy card |
 | P4 | Public hostname for the Cloudflare Tunnel | Deploy card |
