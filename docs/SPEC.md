@@ -7,7 +7,7 @@ Philosophy: **keep it simple**. Build the smallest thing that meets the requirem
 Markers used below:
 
 - **[PENDING]** a decision we know we still need. Listed again in section 17.
-- **[PROPOSED]** a detail the architect chose that James has not explicitly confirmed. Build it as written unless James changes it.
+- a detail the architect chose that James has not explicitly confirmed. Build it as written unless James changes it.
 
 ---
 
@@ -220,7 +220,7 @@ A Windows device row is one PC **plus** one Windows user account (Q10). Pools an
 
 **usage_segments** (Q19, append only, upsert by id): `id` (device generated), `family_id`, `kid_id`, `device_id`, `pool`, `started_at`, `ended_at` (nullable while open), `recorded_offline` (bool: the device had no server contact while recording), `received_at`. Upsert rule: same id may be sent again with a later `ended_at`; the server keeps the latest `ended_at` and never moves `started_at`.
 
-**time_requests** (Q25): `id` (client generated), `family_id`, `kid_id`, `device_id`, `pool`, `minutes` (15, 30 or 60) **[PROPOSED]**, `reason` (nullable, max 160), `status` (`pending` | `approved` | `denied` | `expired`), `created_at`, `resolved_by`, `resolved_at`, `grant_id`. Pending requests expire at local midnight.
+**time_requests** (Q25): `id` (client generated), `family_id`, `kid_id`, `device_id`, `pool`, `minutes` (15, 30 or 60), `reason` (nullable, max 160), `status` (`pending` | `approved` | `denied` | `expired`), `created_at`, `resolved_by`, `resolved_at`, `grant_id`. Pending requests expire at local midnight.
 
 **kid_messages** (Q29): `id` (client generated), `family_id`, `kid_id`, `device_id`, `body` (max 160), `preset_id` (nullable), `created_at`.
 
@@ -297,7 +297,7 @@ Notes:
 - Reset at midnight is automatic: a new `D` has no grants and no segments (Q21). A segment that crosses midnight is split by clipping.
 - Bedtime always locks (Q8). A parent can still unlock after bedtime by granting time (a curfew grant) or by parent mode.
 - Parent mode is outside the engine: while a parent-mode session is active the device is unlocked and records no segments.
-- "Lock now" in the parent app is just a negative grant of the current remaining minutes, rounded up to a whole minute **[PROPOSED]**.
+- "Lock now" in the parent app is just a negative grant of the current remaining minutes, rounded up to a whole minute.
 
 ### 7.4 Test vector format
 
@@ -546,7 +546,7 @@ Each kid device gets an opaque 32-byte token at enrolment, stored hashed on the 
 **Setup (Q6/Q9, no wipe)**, documented in `docs/guides/android-provisioning.md`:
 
 1. On the kid device: temporarily remove every account (Settings › Accounts), extra users and guest, and any work profile. Turn on USB debugging.
-2. From James's PC: `adb install app-kid.apk`, then `adb shell dpm set-device-owner au.screentime.kid/.admin.KidDeviceAdminReceiver` **[PROPOSED package name]**.
+2. From James's PC: `adb install app-kid.apk`, then `adb shell dpm set-device-owner au.screentime.kid/.admin.KidDeviceAdminReceiver`.
 3. Re-add the Google account. Open the app, scan the enrolment QR.
 4. The app then applies restrictions, and USB debugging is turned off by `DISALLOW_DEBUGGING_FEATURES`.
 5. Also turn on Android's own Emergency SOS with the parents as emergency contacts.
@@ -570,7 +570,7 @@ From the block screen:
 - **All devices:** Ask for more time, Message Mum/Dad, I'm the parent.
 - **Tablets and Wi-Fi devices:** no call, emergency or SOS buttons (Q28, Q31).
 
-Messages and requests are sent through the server. If the phone has no data, the message is offered as an SMS to all parents instead ("No internet. Send as a text?") **[PROPOSED]**.
+Messages and requests are sent through the server. If the phone has no data, the message is offered as an SMS to all parents instead ("No internet. Send as a text?").
 
 **minSdk = 34 (Android 14)**, decided 22 Oct 2026: the XPPen tablet runs Android 14 and the Pixel 7 is newer. This lets the app use foreground service type `systemExempted` everywhere with no fallback code. `targetSdk` and `compileSdk` = 36. The parent app uses the same minSdk.
 
@@ -598,7 +598,7 @@ Parent mode makes one kid device unlocked and not counting for a chosen time. It
 1. On the kid device the parent taps **I'm the parent**.
 2. Device sends `POST /v1/device/parent-mode-requests`. Every parent gets a `parent_mode_request` push with actions. A parent opens it (biometric unlock), picks **2 min, 5 min, 15 min, 1 h or Until I end it**, and approves. The device gets a `parent_mode` push and unlocks.
 3. If the device is offline, or no one answers, the same screen offers **Enter parent code**: a 6-digit TOTP (RFC 6238, SHA-1, 30 s step, accept ±1 step) shown in the parent app, computed from the family `parent_code_secret`. After a correct code the device asks the duration and starts locally. It raises a `parent_mode.used` event when it next syncs.
-4. A parent can also start parent mode remotely from the parent app's device screen (needed for a locked Windows PC) **[PROPOSED]**.
+4. A parent can also start parent mode remotely from the parent app's device screen (needed for a locked Windows PC).
 5. While active: no segments are recorded, Lock Task is off, and a banner/notification says "Parent mode · ends 4:15 pm" with **End now**.
 6. "Until I end it" lasts until a parent ends it on the device or in the parent app.
 7. All parents get a `parent_mode.used` notification whenever it starts (Q15).
@@ -691,7 +691,7 @@ Shape and spacing: 8 px grid; cards 16 px radius; buttons fully rounded (pill) 4
 
 Icons: Material Symbols Rounded on Android, lucide on web, Segoe Fluent Icons on Windows.
 
-Time formatting: "1h 12m", "45m", "less than a minute". Times of day in the family locale, 12-hour with am/pm ("8:30 pm") **[PROPOSED for en-AU]**.
+Time formatting: "1h 12m", "45m", "less than a minute". Times of day in the family locale, 12-hour with am/pm ("8:30 pm") (en-AU, decided).
 
 Copy tone: short, warm, Australian English ("Mum"). The kid UI never shows error codes.
 
@@ -810,7 +810,7 @@ Pages: Sign in (email, then 6-digit code boxes), Today (kid cards as 16.4 in a r
 | P6 | ~~XPPen Play services~~ Decided: yes, it has the Play Store, so FCM works on all Android devices | none |
 | P7 | ~~FRP account~~ Decided: James's own Google account | none |
 | P8 | ~~Firebase project~~ Done: project "ScreenTime", ID `screentime-d307c` (James's Gmail account) | none |
-| P9 | **[PROPOSED]** items above: time request amounts 15/30/60, "Lock now" as negative grant, SMS fallback for messages, remote parent mode, 12-hour times | the card that builds each |
+| P9 | ~~Architect's proposed details~~ Accepted by James 22 Oct 2026: time request amounts 15/30/60, "Lock now" as negative grant, SMS fallback for messages, remote parent mode, 12-hour times, package name | none |
 
 ## 18. Future (not v1)
 
