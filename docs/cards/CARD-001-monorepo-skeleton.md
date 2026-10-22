@@ -40,10 +40,10 @@ Do **not** do any of these in this card (each has its own later card):
 | Tool | Version | Check with |
 |---|---|---|
 | Node.js | 24 LTS (any 24.x) | `node --version` → `v24.…` |
-| pnpm | 10.x | `pnpm --version` → `10.…` |
+| pnpm | 11.x | `pnpm --version` → `11.…` |
 | Git | any recent | `git --version` |
 
-If pnpm is missing, install it with `npm install -g pnpm@10` (James may need to do this). If Node 24 is missing, stop and ask James to install Node 24 LTS from https://nodejs.org.
+If pnpm is missing, install it with `npm install -g pnpm@11` (James may need to do this). If Node 24 is missing, stop and ask James to install Node 24 LTS from https://nodejs.org.
 
 Packages (use exactly these version ranges; pnpm will resolve the newest matching versions and write them to `pnpm-lock.yaml`):
 
@@ -224,7 +224,7 @@ A self-hosted parental screen-time limiter. Kid devices (Android phone and table
 
 ## Quick start (TypeScript parts)
 
-Needs Node.js 24 and pnpm 10.
+Needs Node.js 24 and pnpm 11.
 
 ```powershell
 pnpm install
@@ -237,14 +237,14 @@ Then open http://localhost:8080/health.
 
 ### 5.6 `package.json` (root)
 
-Replace `10.0.0` with the exact output of `pnpm --version` on your machine (for example `10.28.0`).
+Replace `11.0.0` with the exact output of `pnpm --version` on your machine (for example `11.22.0`).
 
 ```json
 {
   "name": "screentime",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@10.0.0",
+  "packageManager": "pnpm@11.0.0",
   "engines": {
     "node": ">=24"
   },
@@ -267,9 +267,11 @@ packages:
   - "packages/*"
   - "server"
 
-onlyBuiltDependencies:
-  - esbuild
+allowBuilds:
+  esbuild: true
 ```
+
+`allowBuilds` is the pnpm 11 setting that lets esbuild (used by `tsx` and Vitest) run its install script. Do **not** use the older pnpm 10 setting `onlyBuiltDependencies`: pnpm 11 ignores it and `pnpm install` fails with `ERR_PNPM_IGNORED_BUILDS`.
 
 (`web` is added to this list by a later card, when `web/package.json` exists.)
 
@@ -590,7 +592,7 @@ Run these in PowerShell in `C:\Users\james\OpenCode\Testing\ScreenTime`.
    git pull origin main
    git checkout -b bob/card-001-monorepo-skeleton
    ```
-2. Check tools: `node --version` (must start with `v24`) and `pnpm --version` (must start with `10`). Note the exact pnpm version for the root `package.json`.
+2. Check tools: `node --version` (must start with `v24`) and `pnpm --version` (must start with `11`). Note the exact pnpm version for the root `package.json`.
 3. Create every file in section 5 with the exact contents given.
 4. Install: `pnpm install`. This creates `pnpm-lock.yaml` and `node_modules/`. If pnpm prints "Ignored build scripts", check that `pnpm-workspace.yaml` matches section 5.7 exactly.
 5. Run `pnpm build`, `pnpm typecheck` and `pnpm test`. All must pass.
@@ -641,7 +643,7 @@ Exactly the two test files in sections 5.13 and 5.18. Do not add more in this ca
    - [x] no docs/ or AGENTS.md changes
 
    ## Versions
-   node: v24.x.x, pnpm: 10.x.x
+   node: v24.x.x, pnpm: 11.x.x
 
    ## Deviations from the card
    None.
