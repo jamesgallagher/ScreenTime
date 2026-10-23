@@ -53,20 +53,3 @@ Edit `server/src/db/schema.ts`, then generate a migration and commit it with the
 ```powershell
 pnpm --filter @screentime/server db:generate --name <short_name>
 ```
-
-Row-level security is hand-written SQL, not generated. To add a family-owned table, also create a custom migration and give it the same policy as the others in `server/drizzle/0002_rls.sql`:
-
-```powershell
-pnpm --filter @screentime/server exec drizzle-kit generate --custom --name rls_<table>
-```
-
-## Dev data
-
-Fill an empty development database with one family (parent with your email, kids Alex and Sam, a weekly schedule each, and the five message presets). It refuses to run twice for the same email.
-
-```powershell
-$env:DATABASE_URL = "postgres://screentime:<POSTGRES_PASSWORD>@localhost:5432/screentime"
-pnpm --filter @screentime/server exec tsx scripts/seed-dev.ts you@example.com
-```
-
-Never run it against the production database.
