@@ -1399,6 +1399,7 @@ All commands in PowerShell from `C:\Users\james\OpenCode\Testing\ScreenTime` unl
 7. Create `server/scripts/seed-dev.ts` (5.6) and append to `deploy/README.md` (5.7). Commit: `CARD-010: add dev seed script`.
 8. Run the acceptance checks in section 8.
 9. Push and open the PR (section 10).
+10. Send James the handback report (section 12).
 
 ## 8. Acceptance criteria
 
@@ -1477,6 +1478,7 @@ Use a throwaway password for local checks, for example `local-dev-only`. Never p
    ```
    Only tick a box if you ran the command and saw that output. If you could not run something, leave the box empty and say why.
 6. **Do not merge the PR.** Do not push to `main`. Claude reviews and merges.
+7. Send James the handback report (section 12).
 
 ## 11. If something is wrong
 
@@ -1491,3 +1493,44 @@ Known traps, and what to do:
 - **`function uuidv7() does not exist`**: the database is not PostgreSQL 18. Use the Compose `db` service.
 - **`password authentication failed`**: the password in the URL must match `POSTGRES_PASSWORD` in `deploy/.env`. If you changed `deploy/.env` after the first start, run `down -v` and start again.
 - **A test fails**: do not change the test to make it pass, and do not skip it. Report it.
+
+## 12. Handback report (required)
+
+When the PR is open, your **last message to James** must be the handback report below, inside one fenced code block so James can copy it in one go and paste it to Claude. Claude checks every line of it against the PR, the CI logs and its own test run, so write only what you actually saw.
+
+Rules:
+
+- Every command line shows the **real** output you saw, copied, not retyped from the card. If you did not run a command, write `NOT RUN` and the reason. Never write the expected output from the card as if you saw it.
+- "Deviations" lists every way your files differ from the card, including comments, wording and whitespace. If you think the card is wrong, quote the exact card line and say what is wrong with it.
+- "Outside the repo" lists anything you changed on James's PC outside the repo folder (config files, global tools, environment variables). Write `None` if there was nothing.
+
+The report, filled in:
+
+````text
+Claude, here is Bob's handback for CARD-010. Please review and merge if it is good.
+
+CARD: CARD-010 Database tables and row-level security
+PR: <full PR URL>
+Branch: bob/card-010-database-tables
+Head commit: <output of `git rev-parse HEAD`>
+
+Files changed (`git diff --name-only main...HEAD`):
+<paste the list>
+
+Commands run, with real output:
+- <command> -> <key output lines, or NOT RUN: reason>
+- ...
+
+Acceptance criteria:
+- [x] <criterion> (ran it, output above)
+- [ ] <criterion> NOT RUN: <reason>
+
+Deviations from the card:
+<None, or each one: file, what differs, why>
+
+Outside the repo:
+<None, or each change>
+
+Questions / blockers:
+<None, or each one>
+````
