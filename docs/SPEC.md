@@ -183,7 +183,7 @@ ScreenTime/
 
 PostgreSQL. All ids are UUIDs (v7 where the server generates them; clients generate ids for rows they create offline, such as usage segments and requests, so re-sending is idempotent). All timestamps are `timestamptz` in UTC. Local dates (`day`) are `date` in the family's time zone.
 
-Every family-owned table has `family_id` and a row-level security policy `family_id = current_setting('app.family_id')::uuid`. The API sets `app.family_id` at the start of each request transaction. The super admin bypasses this through a separate role used only by `/v1/admin/*`.
+Every family-owned table (all except `otp_codes`) has `family_id` and a row-level security policy `family_id = NULLIF(current_setting('app.family_id', true), '')::uuid` (on `families` itself the column is `id`). Each family request runs in a transaction that does `SET LOCAL ROLE screentime_app` and sets `app.family_id` (`withFamily` in `server/src/db/family.ts`). The database user the server connects as owns the tables and so bypasses the policies; only sign-in and `/v1/admin/*` use it directly. `screentime_app` has no access to `otp_codes`.
 
 ### 6.1 Tables
 
@@ -195,7 +195,7 @@ Every family-owned table has `family_id` and a row-level security policy `family
 
 **parent_sessions**: `id`, `parent_id`, `family_id`, `refresh_token_hash`, `client` (`web` | `android`), `client_label`, `fcm_token` (nullable, Android only), `created_at`, `last_used_at`, `revoked_at`.
 
-**notification_prefs**: `parent_id`, `kind`, `enabled`. Missing row means enabled. Essential kinds ignore this table (section 13).
+**notification_prefs**: `family_id`, `parent_id`, `kind`, `enabled`. Missing row means enabled. Essential kinds ignore this table (section 13).
 
 **kids**: `id`, `family_id`, `name`, `avatar_color` (one of the 8 tokens in 16.1), `created_at`, `archived_at`.
 
@@ -227,8 +227,8 @@ A Windows device row is one PC **plus** one Windows user account (Q10). Pools an
 **parent_mode_sessions** (Q15): `id`, `family_id`, `kid_id`, `device_id`, `method` (`push` | `code` | `remote`), `requested_at`, `approved_by` (nullable for `code`), `duration_min` (2, 5, 15, 60, or null = indefinite), `started_at`, `ends_at` (null = indefinite), `ended_at`, `ended_by`.
 
 **sos_incidents** (Q31): `id` (device generated), `family_id`, `kid_id`, `device_id`, `started_at`, `auto_stop_at` (start + 2 h, extendable), `ended_at`, `ended_by_kind` (`kid` | `parent` | `auto`), `ended_by_parent`.
-**sos_locations**: `id`, `sos_id`, `at`, `lat`, `lng`, `accuracy_m`, `battery_pct`, `via` (`data` | `sms`).
-**sos_acks**: `sos_id`, `parent_id`, `at`.
+**sos_locations**: `id`, `family_id`, `sos_id`, `at`, `lat`, `lng`, `accuracy_m`, `battery_pct`, `via` (`data` | `sms`).
+**sos_acks**: `family_id`, `sos_id`, `parent_id`, `at`.
 
 **events** (audit and notification feed): `id` (client or server generated), `family_id`, `kid_id`, `device_id`, `kind`, `at`, `payload` (jsonb), `created_at`. Kinds are listed in sections 13 and 14.
 
