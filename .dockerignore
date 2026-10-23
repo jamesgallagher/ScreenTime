@@ -1,0 +1,14 @@
+**/node_modules
+**/dist
+**/coverage
+.git
+.github
+android
+windows
+docs
+web
+test-vectors
+deploy
+**/*.log
+**/.env
+**/.env.*
