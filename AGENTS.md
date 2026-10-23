@@ -35,5 +35,6 @@ pnpm install       # install all workspace packages
 pnpm build         # build every package
 pnpm typecheck     # type-check every package
 pnpm test          # build, then run all tests
-pnpm dev:server    # run the API on http://localhost:8080
+pnpm dev:server    # run the API on http://localhost:8080 (needs DATABASE_URL, see deploy/README.md)
+pnpm contract      # regenerate contract/openapi.json after changing routes or schemas
 ```

@@ -10,7 +10,8 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm build && pnpm -r test",
-    "dev:server": "pnpm --filter @screentime/schemas build && pnpm --filter @screentime/server dev"
+    "dev:server": "pnpm --filter @screentime/schemas build && pnpm --filter @screentime/server dev",
+    "contract": "pnpm --filter @screentime/schemas build && pnpm --filter @screentime/server contract"
   },
   "devDependencies": {
     "typescript": "^5.9.0"
