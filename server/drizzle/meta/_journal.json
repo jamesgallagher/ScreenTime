@@ -15,6 +15,13 @@
       "when": 1792796499832,
       "tag": "0001_tables",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792796566661,
+      "tag": "0002_rls",
+      "breakpoints": true
     }
   ]
 }
