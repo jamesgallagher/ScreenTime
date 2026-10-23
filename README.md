@@ -27,7 +27,6 @@ Needs Node.js 24 and pnpm 11.
 ```powershell
 pnpm install
 pnpm test
-pnpm dev:server
 ```
 
-Then open http://localhost:8080/health.
+The server needs PostgreSQL. Start it with Docker and run the server as described in [deploy/README.md](deploy/README.md), then open http://localhost:8080/health.
