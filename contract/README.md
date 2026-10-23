@@ -1,5 +1,11 @@
 # contract
 
-Generated API contract. `openapi.json` is generated from the Zod schemas in `packages/schemas` and committed, so the Android (Kotlin) and Windows (C#) clients can be generated from it. CI fails if it is out of date.
+Generated API contract. `openapi.json` (OpenAPI 3.1) is generated from the Hono routes and the Zod schemas in `packages/schemas`, and committed, so the Android (Kotlin) and Windows (C#) clients can be generated from it.
 
-Filled in by CARD-009. Do not edit generated files by hand.
+Regenerate it after changing any route or schema, from the repo root:
+
+```powershell
+pnpm contract
+```
+
+Do not edit `openapi.json` by hand. `server/test/openapi.test.ts` fails (locally and in CI) if it is out of date.
