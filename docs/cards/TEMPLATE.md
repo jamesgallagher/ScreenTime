@@ -85,7 +85,49 @@ Screen Time is a self-hosted parental screen-time limiter for one family. Kid de
    None. (Or list them.)
    ```
 6. **Do not merge the PR.** Do not push to `main`. Claude reviews and merges.
+7. Send James the handback report (section 12).
 
 ## 11. If something is wrong
 
 If the card is wrong, impossible, or a command fails in a way you cannot fix within the card's scope: stop, do not improvise a different design, commit what works, and describe the problem under "Blockers / questions" in the PR.
+
+## 12. Handback report (required)
+
+When the PR is open, your **last message to James** must be the handback report below, inside one fenced code block so James can copy it in one go and paste it to Claude. Claude checks every line of it against the PR, the CI logs and its own test run, so write only what you actually saw.
+
+Rules:
+
+- Every command line shows the **real** output you saw, copied, not retyped from the card. If you did not run a command, write `NOT RUN` and the reason. Never write the expected output from the card as if you saw it.
+- "Deviations" lists every way your files differ from the card, including comments, wording and whitespace. If you think the card is wrong, quote the exact card line and say what is wrong with it.
+- "Outside the repo" lists anything you changed on James's PC outside the repo folder (config files, global tools, environment variables). Write `None` if there was nothing.
+
+The report, filled in:
+
+````text
+Claude, here is Bob's handback for CARD-NNN. Please review and merge if it is good.
+
+CARD: CARD-NNN <title>
+PR: <full PR URL>
+Branch: bob/card-NNN-<slug>
+Head commit: <output of `git rev-parse HEAD`>
+
+Files changed (`git diff --name-only main...HEAD`):
+<paste the list>
+
+Commands run, with real output:
+- <command> -> <key output lines, or NOT RUN: reason>
+- ...
+
+Acceptance criteria:
+- [x] <criterion> (ran it, output above)
+- [ ] <criterion> NOT RUN: <reason>
+
+Deviations from the card:
+<None, or each one: file, what differs, why>
+
+Outside the repo:
+<None, or each change>
+
+Questions / blockers:
+<None, or each one>
+````
