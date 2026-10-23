@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { HealthResponse } from '@screentime/schemas';
-import { type AppDeps, createApp } from '../src/app.js';
-
-// GET /health and unknown paths touch no dependency, so empty ones are enough.
-const app = createApp({} as AppDeps);
+import { app } from '../src/app.js';
 
 describe('GET /health', () => {
   it('returns 200 with a valid health body', async () => {

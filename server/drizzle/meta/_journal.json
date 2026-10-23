@@ -22,13 +22,6 @@
       "when": 1792796566661,
       "tag": "0002_rls",
       "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1792797781920,
-      "tag": "0003_super_admin_sessions",
-      "breakpoints": true
     }
   ]
 }

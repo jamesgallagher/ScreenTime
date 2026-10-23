@@ -77,9 +77,10 @@ export const parentSessions = pgTable(
   'parent_sessions',
   {
     id: uuid('id').primaryKey().default(sql`uuidv7()`),
-    // Both null for a super admin who is not a parent (docs/SPEC.md §6.2).
-    parentId: uuid('parent_id').references(() => parents.id),
-    familyId: uuid('family_id').references(() => families.id),
+    parentId: uuid('parent_id')
+      .notNull()
+      .references(() => parents.id),
+    familyId: familyId(),
     refreshTokenHash: text('refresh_token_hash').notNull(),
     client: text('client').notNull(),
     clientLabel: text('client_label').notNull(),
@@ -91,7 +92,6 @@ export const parentSessions = pgTable(
   (t) => [
     uniqueIndex('parent_sessions_refresh_token_hash_key').on(t.refreshTokenHash),
     check('parent_sessions_client', sql`${t.client} in ('web', 'android')`),
-    check('parent_sessions_parent_family', sql`(${t.parentId} is null) = (${t.familyId} is null)`),
   ],
 );
 

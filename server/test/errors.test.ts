@@ -1,13 +1,13 @@
 import { createRoute, z } from '@hono/zod-openapi';
 import { describe, expect, it, vi } from 'vitest';
 import { ErrorResponse } from '@screentime/schemas';
-import { type AppDeps, createApp } from '../src/app.js';
+import { app } from '../src/app.js';
 import { ApiError, errorBody } from '../src/errors.js';
 import { createRouter } from '../src/router.js';
 
 describe('error responses', () => {
   it('answers an unknown path with 404 not_found', async () => {
-    const res = await createApp({} as AppDeps).request('/nope');
+    const res = await app.request('/nope');
     expect(res.status).toBe(404);
     const body = await res.json();
     expect(ErrorResponse.safeParse(body).success).toBe(true);

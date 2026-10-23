@@ -94,7 +94,6 @@ jobs:
       - name: Start the stack
         run: |
           echo "POSTGRES_PASSWORD=ci-only-password" > deploy/.env
-          echo "JWT_SECRET=ci-only-secret-that-is-at-least-32-characters" >> deploy/.env
           docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build --wait
 
       - name: Check health
