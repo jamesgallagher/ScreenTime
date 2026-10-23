@@ -23,7 +23,7 @@ Screen Time: a self-hosted parental screen-time limiter. Monorepo with a TypeScr
 - **TypeScript:** ESM only (`"type": "module"`), `strict` on, relative imports end in `.js` (for example `import { app } from './app.js'`). Package names are `@screentime/<name>`.
 - **Names:** API JSON fields are camelCase; database columns are snake_case.
 - **Time:** store and send instants in UTC ISO 8601. Local dates and times always use the family time zone.
-- **Tests:** every card that adds logic adds tests. TypeScript uses Vitest; Kotlin uses JUnit 5; C# uses xUnit.
+- **Tests:** every card that adds logic adds tests. TypeScript uses Vitest; Kotlin uses JUnit 6 (Jupiter API); C# uses xUnit.
 - **Commits:** `CARD-NNN: <what changed>`.
 
 ## Commands (TypeScript workspace)
