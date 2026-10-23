@@ -193,7 +193,7 @@ Every family-owned table (all except `otp_codes`) has `family_id` and a row-leve
 
 **otp_codes**: `id`, `email`, `code_hash`, `expires_at` (10 min), `attempts`, `consumed_at`, `created_at`. Not family scoped.
 
-**parent_sessions**: `id`, `parent_id`, `family_id`, `refresh_token_hash`, `client` (`web` | `android`), `client_label`, `fcm_token` (nullable, Android only), `created_at`, `last_used_at`, `revoked_at`.
+**parent_sessions**: `id`, `parent_id`, `family_id` (both null for a super admin who is not a parent), `refresh_token_hash`, `client` (`web` | `android`), `client_label`, `fcm_token` (nullable, Android only), `created_at`, `last_used_at`, `revoked_at`.
 
 **notification_prefs**: `family_id`, `parent_id`, `kind`, `enabled`. Missing row means enabled. Essential kinds ignore this table (section 13).
 
@@ -387,9 +387,9 @@ Two kinds of caller: **parent** (Bearer access token from OTP login) and **devic
 |---|---|---|
 | GET | `/health` | `{ status: "ok", service, time }` |
 | POST | `/v1/auth/otp/request` | `{ email }` → always 204 (does not reveal whether the email exists) |
-| POST | `/v1/auth/otp/verify` | `{ email, code, client, clientLabel }` → `{ accessToken, refreshToken, me }` |
-| POST | `/v1/auth/refresh` | `{ refreshToken }` → new pair (refresh token rotates) |
-| POST | `/v1/auth/logout` | revokes the current session |
+| POST | `/v1/auth/otp/verify` | `{ email, code, client, clientLabel }` → `{ accessToken, refreshToken, expiresIn, me }` |
+| POST | `/v1/auth/refresh` | `{ refreshToken }` → same shape as verify (refresh token rotates) |
+| POST | `/v1/auth/logout` | Bearer access token; revokes the session's refresh token (the access token runs out within 15 min) |
 | POST | `/v1/enrol` | `{ code, platform, form, hasCellular, model, osVersion, appVersion, machineId?, windowsUserSid?, windowsUserName? }` → `{ deviceId, deviceToken, kid, family }` |
 
 ### 9.2 Parent
@@ -504,7 +504,8 @@ WebSocket extras: client sends `{ "type": "ping" }` every 30 s, server answers `
 ### 11.1 Parents (Q14)
 
 1. Enter email → server emails a 6-digit code (expires 10 min, max 5 attempts, max 5 codes per email per hour).
-2. Verify → access token (JWT, HS256, 15 min, claims: `sub` parent id, `fam` family id, `roles`) and refresh token (opaque 32 random bytes, stored hashed, 90-day sliding, rotated on each use).
+2. Verify → access token (JWT, HS256, 15 min, claims: `sid` session id, `sub` parent id, `fam` family id, `roles`) and refresh token (opaque 32 random bytes, stored hashed, 90-day sliding, rotated on each use).
+   Details (CARD-011): a code row is stored for every requested email, known or not, so the per-email limit does not reveal which emails exist; only emails of enabled parents in enabled families, and `SUPER_ADMIN_EMAIL`, are actually sent a code. Only the newest unexpired code for an email works, and a successful sign-in uses up all of that email's codes. Codes are stored as HMAC-SHA256 keyed with `JWT_SECRET`. Per IP (Cloudflare's `CF-Connecting-IP`): 20 code requests per hour and 30 verify attempts per 15 minutes, in memory.
 3. Android parent app stores tokens in app storage encrypted with an Android Keystore key, and requires `BiometricPrompt` (strong biometric **or** device PIN/pattern) every time the app is opened after 5 minutes in the background.
 4. The web app keeps the refresh token in an `HttpOnly; Secure; SameSite=Strict` cookie and the access token in memory.
 

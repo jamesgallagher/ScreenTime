@@ -35,8 +35,8 @@ Spikes come early on purpose: Device Owner + Lock Task on the real phones, and a
 | 008 | Docker: server Dockerfile, `deploy/docker-compose.yml` with Postgres 18, Drizzle setup, migration runner | 001 | M | Docker Desktop | 4.2 |
 | 009 | API conventions: `@hono/zod-openapi`, error shape, logging, OpenAPI export to `contract/openapi.json`, CI drift check | 002, 008 | M | | 9 |
 | 010 | Database schema: every table in section 6, RLS policies, seed script for a dev family | 008 | M | | 6 |
-| 011 | Parent auth: OTP request/verify, SMTP mailer, JWT + refresh rotation, rate limits, super admin | 009, 010 | M | | 11.1, 6.2 |
-| 012 | Family, parents, kids, schedules, contacts, message presets endpoints | 011 | M | | 9.2 |
+| 011 | Parent auth: OTP request/verify, SMTP mailer, JWT + refresh rotation, rate limits, super admin role, `GET /v1/me` | 009, 010 | M | | 11.1, 6.2 |
+| 012 | Family, parents, kids, schedules, contacts, message presets endpoints; super admin `/v1/admin/*` | 011 | M | | 9.2, 6.2 |
 | 013 | Enrolment codes, `/v1/enrol`, device token auth, device list/rename/revoke | 012 | M | | 11.3 |
 | 014 | Device state snapshot with ETag, usage upload, `/v1/today` using the engine | 003, 013 | M | | 8, 9.3 |
 | 015 | Grants endpoints (add, remove, lock now) | 014 | S | | 7, 9.2 |
