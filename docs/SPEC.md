@@ -338,6 +338,13 @@ KISS: there is no cursor protocol. A device fetches one small snapshot, `GET /v1
 
 The snapshot includes the other pool devices' segments for today, so the device can merge its own unsent segments with them and run the engine locally.
 
+Details:
+
+- `stateVersion` is a hash of the whole snapshot except `serverTime`, so it changes only when something the device enforces changes. The `ETag` header is the version in double quotes. `If-None-Match` may hold several tags or a weak tag (`W/"…"`, which Cloudflare can produce); any match gives `304` with no body. A `304` still has the standard `Date` header, which the device uses as `serverTime`.
+- `today.grants` holds only grants for this device's pool. `today.poolSegments` holds the segments of every device of this kid in this pool, this device's own too, that overlap today. The device merges them with its unsent segments by id.
+- An open segment (no `endedAt`) of a device that has not been heard from for 10 minutes is shown as ending at that device's `last_seen_at`, so a phone that died while in use does not keep using up the pool. Devices upload at least every 5 minutes while in use (8.3), so a working device never looks stale. The stored segment is not changed.
+- `parents` lists every enabled parent, oldest first, with `phoneE164` null when the parent has no phone. `pendingRequest` is the newest pending time request for this kid and pool made today, as `{ id, minutes, createdAt }`. `activeSos` is the kid's newest SOS that has not ended or auto-stopped, as `{ id, startedAt }`.
+
 ### 8.3 When devices sync
 
 | Trigger | Android | Windows |
@@ -359,7 +366,7 @@ Expected grant latency: PC about 1 s, Android 1 to 5 s, worst case about 10 s.
 
 ### 8.4 Offline and overspend (Q27)
 
-A device that cannot reach the server keeps enforcing with what it knows. Segments recorded without server contact are flagged `recorded_offline`. When they arrive, the server recomputes the pool; if `overspendSec > 0` it raises an `overspend` event for parents ("Screens went 12 min over: tablet was offline"). Overspend is never carried to the next day. If an upload makes another online device's pool empty, that device gets the normal warnings, then locks.
+A device that cannot reach the server keeps enforcing with what it knows. Segments recorded without server contact are flagged `recorded_offline`. When they arrive, the server recomputes the pool; if `overspendSec > 0` it raises an `overspend` event for parents (added with notifications, CARD-016) ("Screens went 12 min over: tablet was offline"). Overspend is never carried to the next day. If an upload makes another online device's pool empty, that device gets the normal warnings, then locks.
 
 ### 8.5 Trusted time
 
@@ -405,7 +412,7 @@ Two kinds of caller: **parent** (Bearer access token from OTP login) and **devic
 | GET / PUT | `/v1/family/message-presets` | whole list replaced on PUT |
 | GET | `/v1/family/parent-code` | `{ secret }` for offline parent-mode codes (cached by the parent app) |
 | POST | `/v1/family/parent-code/rotate` | new secret; devices pick it up on next sync |
-| GET | `/v1/today` | dashboard: every kid, every pool: `usedSec`, `remainingSec`, `locked`, `lockReason`, `overspendSec`, devices with `inUse` and `lastSeenAt`, active parent mode |
+| GET | `/v1/today` | dashboard `{ serverTime, date, kids }`: every kid (oldest first) and both pools (Screens first): `allowanceMin`, `grantedMin`, `usedSec`, `remainingSec`, `locked`, `lockReason`, `nextLockAt`, `overspendSec`, and the pool's devices with `inUse`, `lastSeenAt` and active parent mode. Worked out by the engine (section 7) |
 | GET / POST | `/v1/kids` | list, create |
 | GET / PATCH / DELETE | `/v1/kids/{kidId}` | read, edit, archive |
 | GET / PUT | `/v1/kids/{kidId}/schedule` | PUT writes a new version |
@@ -452,7 +459,7 @@ Rules for the kid routes:
 |---|---|---|
 | GET | `/v1/device/me` | `{ device, kid, family }`; a 401 means the device was revoked and must enrol again |
 | GET | `/v1/device/state` | snapshot, ETag (below) |
-| POST | `/v1/device/usage` | `{ segments: [{ id, startedAt, endedAt \| null, recordedOffline }] }` up to 500 per call |
+| POST | `/v1/device/usage` | `{ segments: [{ id, startedAt, endedAt \| null, recordedOffline }] }` 1 to 500 per call → `{ received }`. Upsert by id (6.1): `startedAt` never moves, the latest `endedAt` wins and a closed segment never reopens, `recordedOffline` once true stays true. Repeats of one id in a call are joined first. An id that belongs to another device is ignored (not counted in `received`). A new segment takes the device's current pool |
 | POST | `/v1/device/events` | `{ events: [{ id, kind, at, payload }] }` tamper, parent mode by code, etc. |
 | PUT | `/v1/device/push-token` | `{ fcmToken }` (Android) |
 | POST | `/v1/device/time-requests` | `{ id, minutes, reason? }` |
