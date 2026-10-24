@@ -199,7 +199,7 @@ Every family-owned table (all except `otp_codes`) has `family_id` and a row-leve
 
 **kids**: `id`, `family_id`, `name`, `avatar_color` (one of the 8 tokens in 16.1), `created_at`, `archived_at`.
 
-**kid_contacts** (Q33 always-callable list): `id`, `family_id`, `kid_id`, `label` (for example "Dad", "Grandma"), `phone_e164`, `sort`. Parents with a phone number appear automatically at the top and are not stored here.
+**kid_contacts** (Q33 always-callable list): `id`, `family_id`, `kid_id`, `label` (for example "Dad", "Grandma"), `phone_e164`, `sort`. At most 10 per kid. Parents with a phone number appear automatically at the top and are not stored here.
 
 **message_presets** (Q29): `id`, `family_id`, `text` (max 160), `sort`. At most 10 per family. Seeded on family creation with: "Can I have more time?", "I'm done, you can lock it", "Can you call me?", "I'm on my way home", "I need help with homework".
 
@@ -438,6 +438,13 @@ Rules for the family routes:
 - A parent cannot remove themselves (409). Removing a parent sets `disabled_at` and signs out all their sessions. Removed parents are not listed.
 - Message presets: at most 10, each 1 to 160 characters after trimming. PUT replaces the whole list, in the order given.
 - `parentCodeSecret` is 32 base32 characters (20 random bytes).
+
+Rules for the kid routes:
+
+- A new kid starts with schedule version 1: Monday to Friday 120 min Screens, 90 min Phone, 07:00 to 20:30; Saturday and Sunday 180 and 120 min, 08:00 to 21:00; warnings 15 and 5 min. A kid name is 1 to 40 characters after trimming.
+- DELETE archives the kid (`archived_at`); the history stays. An archived kid is left out of lists and every `/v1/kids/{kidId}...` route answers 404. Revoking the kid's devices comes with the device routes.
+- Schedule PUT takes `{ warn1Min, warn2Min, days }` with exactly 7 days in order Monday (1) to Sunday (7) and the rules in 6.1, and stores the next version. Two saves at the same moment: the second gets 409 and tries again.
+- Contacts: at most 10, each with a label of 1 to 40 characters and an E.164 number. PUT replaces the whole list, in the order given.
 
 ### 9.3 Device
 
