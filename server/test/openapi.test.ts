@@ -92,6 +92,36 @@ describe('OpenAPI contract', () => {
     );
   });
 
+  it('describes enrolment and the device routes, each with the right auth', () => {
+    const parentRoutes: Array<[string, 'get' | 'post' | 'patch' | 'delete']> = [
+      ['/v1/kids/{kidId}/enrolment-codes', 'post'],
+      ['/v1/devices', 'get'],
+      ['/v1/devices/{id}', 'patch'],
+      ['/v1/devices/{id}', 'delete'],
+    ];
+    for (const [path, method] of parentRoutes) {
+      expect(doc.paths?.[path]?.[method]?.security, `${method} ${path}`).toEqual([{ bearerAuth: [] }]);
+    }
+    expect(doc.paths?.['/v1/enrol']?.post).toBeDefined();
+    expect(doc.paths?.['/v1/enrol']?.post?.security).toBeUndefined();
+    expect(doc.paths?.['/v1/device/me']?.get?.security).toEqual([{ deviceAuth: [] }]);
+    expect(doc.components?.securitySchemes?.deviceAuth).toMatchObject({ type: 'http', scheme: 'bearer' });
+    expect(Object.keys(doc.components?.schemas ?? {})).toEqual(
+      expect.arrayContaining([
+        'Device',
+        'DeviceForm',
+        'DeviceMe',
+        'DevicePatch',
+        'EnrolmentCode',
+        'EnrolmentCodeCreate',
+        'EnrolRequest',
+        'EnrolResponse',
+        'Platform',
+        'Pool',
+      ]),
+    );
+  });
+
   it('matches the committed contract/openapi.json (run `pnpm contract` if this fails)', () => {
     const committed = readFileSync(new URL('../../contract/openapi.json', import.meta.url), 'utf8');
     expect(committed).toBe(`${JSON.stringify(doc, null, 2)}\n`);
