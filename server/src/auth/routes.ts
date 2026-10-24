@@ -2,15 +2,13 @@ import { createRoute } from '@hono/zod-openapi';
 import { getConnInfo } from '@hono/node-server/conninfo';
 import { and, count, desc, eq, gt, isNull, sql } from 'drizzle-orm';
 import type { Context } from 'hono';
-import { AuthResponse, Me, OtpRequest, OtpVerifyRequest, RefreshRequest, type Role } from '@screentime/schemas';
+import { AuthResponse, ErrorResponse, Me, OtpRequest, OtpVerifyRequest, RefreshRequest, type Role } from '@screentime/schemas';
 import type { AppDeps } from '../app.js';
 import type { Db } from '../db/client.js';
 import { withFamily } from '../db/family.js';
 import { families, otpCodes, parentSessions, parents } from '../db/schema.js';
 import { ApiError } from '../errors.js';
-import { bearer, errorResponses, jsonBody } from '../openapi.js';
 import type { createRouter } from '../router.js';
-import { requireParent } from './guards.js';
 import { RateLimiter } from './rate-limit.js';
 import {
   ACCESS_TOKEN_TTL_SEC,
@@ -21,6 +19,7 @@ import {
   type ParentAuth,
   sameHash,
   signAccessToken,
+  verifyAccessToken,
 } from './tokens.js';
 
 type Router = ReturnType<typeof createRouter>;
@@ -32,14 +31,30 @@ const MAX_CODES_PER_HOUR = 5;
 /** Refresh tokens slide: a session unused for 90 days is dead. */
 const SESSION_IDLE_LIMIT = sql`now() - interval '90 days'`;
 
+const errors = (...statuses: (401 | 422 | 429)[]) =>
+  Object.fromEntries(
+    statuses.map((status) => [
+      status,
+      { description: ERROR_TEXT[status], content: { 'application/json': { schema: ErrorResponse } } },
+    ]),
+  );
+
+const ERROR_TEXT = {
+  401: 'Not signed in, or the code or token is wrong or expired.',
+  422: 'The request body is not valid.',
+  429: 'Too many attempts. Try again later.',
+} as const;
+
+const json = <T>(schema: T) => ({ content: { 'application/json': { schema } }, required: true });
+
 const otpRequestRoute = createRoute({
   method: 'post',
   path: '/v1/auth/otp/request',
   tags: ['auth'],
   summary: 'Email a sign-in code',
   description: 'Always answers 204, whether or not the email belongs to a parent.',
-  request: { body: jsonBody(OtpRequest) },
-  responses: { 204: { description: 'Code sent if the email can sign in.' }, ...errorResponses(422, 429) },
+  request: { body: json(OtpRequest) },
+  responses: { 204: { description: 'Code sent if the email can sign in.' }, ...errors(422, 429) },
 });
 
 const otpVerifyRoute = createRoute({
@@ -47,10 +62,10 @@ const otpVerifyRoute = createRoute({
   path: '/v1/auth/otp/verify',
   tags: ['auth'],
   summary: 'Sign in with an emailed code',
-  request: { body: jsonBody(OtpVerifyRequest) },
+  request: { body: json(OtpVerifyRequest) },
   responses: {
     200: { description: 'Signed in.', content: { 'application/json': { schema: AuthResponse } } },
-    ...errorResponses(401, 422, 429),
+    ...errors(401, 422, 429),
   },
 });
 
@@ -60,10 +75,10 @@ const refreshRoute = createRoute({
   tags: ['auth'],
   summary: 'Swap a refresh token for a new token pair',
   description: 'The refresh token rotates: the old one stops working.',
-  request: { body: jsonBody(RefreshRequest) },
+  request: { body: json(RefreshRequest) },
   responses: {
     200: { description: 'New tokens.', content: { 'application/json': { schema: AuthResponse } } },
-    ...errorResponses(401, 422),
+    ...errors(401, 422),
   },
 });
 
@@ -72,8 +87,8 @@ const logoutRoute = createRoute({
   path: '/v1/auth/logout',
   tags: ['auth'],
   summary: 'Sign out this session',
-  security: bearer,
-  responses: { 204: { description: 'Signed out.' }, ...errorResponses(401) },
+  security: [{ bearerAuth: [] }],
+  responses: { 204: { description: 'Signed out.' }, ...errors(401) },
 });
 
 const meRoute = createRoute({
@@ -81,10 +96,10 @@ const meRoute = createRoute({
   path: '/v1/me',
   tags: ['parent'],
   summary: 'The signed-in parent, family and roles',
-  security: bearer,
+  security: [{ bearerAuth: [] }],
   responses: {
     200: { description: 'The caller.', content: { 'application/json': { schema: Me } } },
-    ...errorResponses(401),
+    ...errors(401),
   },
 });
 
@@ -136,6 +151,15 @@ function clientIp(c: Context): string {
   } catch {
     return 'unknown';
   }
+}
+
+/** Reads the Bearer access token. Throws 401 if it is missing, forged or expired. */
+export async function requireParent(c: Context, jwtSecret: string): Promise<ParentAuth> {
+  const header = c.req.header('authorization') ?? '';
+  const token = header.startsWith('Bearer ') ? header.slice('Bearer '.length) : '';
+  const auth = token ? await verifyAccessToken(jwtSecret, token) : null;
+  if (!auth) throw new ApiError('unauthorized', 'Sign in first.');
+  return auth;
 }
 
 /** Sign-in, tokens and GET /v1/me (docs/SPEC.md §9.1, §9.2, §11.1). */

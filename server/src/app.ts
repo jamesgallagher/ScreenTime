@@ -1,11 +1,9 @@
 import { createRoute } from '@hono/zod-openapi';
 import { logger } from 'hono/logger';
 import { ErrorResponse, HealthResponse } from '@screentime/schemas';
-import { registerAdminRoutes } from './admin/routes.js';
 import { registerAuthRoutes } from './auth/routes.js';
 import type { Config } from './config.js';
 import type { Db } from './db/client.js';
-import { registerFamilyRoutes } from './family/routes.js';
 import type { Mailer } from './mailer.js';
 import { createRouter } from './router.js';
 
@@ -57,8 +55,6 @@ export function createApp(deps: AppDeps) {
   });
 
   registerAuthRoutes(app, deps);
-  registerFamilyRoutes(app, deps);
-  registerAdminRoutes(app, deps);
 
   return app;
 }
