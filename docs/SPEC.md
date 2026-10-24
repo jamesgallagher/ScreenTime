@@ -201,7 +201,7 @@ Every family-owned table (all except `otp_codes`) has `family_id` and a row-leve
 
 **kid_contacts** (Q33 always-callable list): `id`, `family_id`, `kid_id`, `label` (for example "Dad", "Grandma"), `phone_e164`, `sort`. Parents with a phone number appear automatically at the top and are not stored here.
 
-**message_presets** (Q29): `id`, `family_id`, `text` (max 160), `sort`. Seeded on family creation with: "Can I have more time?", "I'm done, you can lock it", "Can you call me?", "I'm on my way home", "I need help with homework".
+**message_presets** (Q29): `id`, `family_id`, `text` (max 160), `sort`. At most 10 per family. Seeded on family creation with: "Can I have more time?", "I'm done, you can lock it", "Can you call me?", "I'm on my way home", "I need help with homework".
 
 **schedule_versions** (Q21, append only): `id`, `family_id`, `kid_id`, `version` (int, increments per kid), `warn1_min` (default 15), `warn2_min` (default 5), `days` (jsonb, exactly 7 entries, ISO weekday 1 = Monday to 7 = Sunday), `created_by`, `created_at`. The current schedule is the highest version.
 
@@ -222,7 +222,7 @@ A Windows device row is one PC **plus** one Windows user account (Q10). Pools an
 
 **time_requests** (Q25): `id` (client generated), `family_id`, `kid_id`, `device_id`, `pool`, `minutes` (15, 30 or 60), `reason` (nullable, max 160), `status` (`pending` | `approved` | `denied` | `expired`), `created_at`, `resolved_by`, `resolved_at`, `grant_id`. Pending requests expire at local midnight.
 
-**kid_messages** (Q29): `id` (client generated), `family_id`, `kid_id`, `device_id`, `body` (max 160), `preset_id` (nullable), `created_at`.
+**kid_messages** (Q29): `id` (client generated), `family_id`, `kid_id`, `device_id`, `body` (max 160), `preset_id` (nullable; set to null when the preset is deleted, the body keeps the text), `created_at`.
 
 **parent_mode_sessions** (Q15): `id`, `family_id`, `kid_id`, `device_id`, `method` (`push` | `code` | `remote`), `requested_at`, `approved_by` (nullable for `code`), `duration_min` (2, 5, 15, 60, or null = indefinite), `started_at`, `ends_at` (null = indefinite), `ended_at`, `ended_by`.
 
@@ -234,7 +234,7 @@ A Windows device row is one PC **plus** one Windows user account (Q10). Pools an
 
 ### 6.2 Super admin
 
-The super admin is not a table row. The Docker env var `SUPER_ADMIN_EMAIL` names one email. Signing in with that email (normal OTP flow) gives the `superadmin` role, which can list, create and disable families and add the first parent to a family. A super admin who is also a parent in a family sees that family normally.
+The super admin is not a table row. The Docker env var `SUPER_ADMIN_EMAIL` names one email. Signing in with that email (normal OTP flow) gives the `superadmin` role, which can list, create and disable families and add the first parent to a family. Creating a family also creates its first parent, the default message presets and a parent-code secret, in one transaction. Disabling a family signs out every parent session in it at once. Removing `SUPER_ADMIN_EMAIL` takes the role away at once, without waiting for tokens to expire. The admin routes use the owner connection, not `withFamily`. A super admin who is also a parent in a family sees that family normally.
 
 ## 7. The time engine (shared maths)
 
@@ -430,6 +430,14 @@ Two kinds of caller: **parent** (Bearer access token from OTP login) and **devic
 | POST | `/v1/sos/{id}/end` | |
 
 Super admin: `GET/POST /v1/admin/families`, `POST /v1/admin/families/{id}/parents`, `POST /v1/admin/families/{id}/disable`.
+
+Rules for the family routes:
+
+- Every family route needs a parent of an enabled family. A super admin who is not a parent gets 403. A parent who was removed, or whose family was disabled, gets 401 straight away, without waiting for the access token to expire.
+- Parent emails are unique across all families and stored in lower case. Adding an email that is already used gives 409.
+- A parent cannot remove themselves (409). Removing a parent sets `disabled_at` and signs out all their sessions. Removed parents are not listed.
+- Message presets: at most 10, each 1 to 160 characters after trimming. PUT replaces the whole list, in the order given.
+- `parentCodeSecret` is 32 base32 characters (20 random bytes).
 
 ### 9.3 Device
 
