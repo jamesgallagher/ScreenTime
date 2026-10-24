@@ -158,9 +158,9 @@ describe.skipIf(!url)('kid routes', () => {
       expect(first.status).toBe(200);
       expect(first.body.map((c: { label: string }) => c.label)).toEqual(['Grandma', 'Uncle Tom']);
       const second = await api.put(`/v1/kids/${alex.id}/contacts`, mum.token, {
-        contacts: [{ label: 'Uncle Tom', phoneE164: '+6140000000002' }],
+        contacts: [{ label: 'Uncle Tom', phoneE164: '+61400000002' }],
       });
-      expect(second.body).toEqual([{ id: expect.any(String), label: 'Uncle Tom', phoneE164: '+6140000000002' }]);
+      expect(second.body).toEqual([{ id: expect.any(String), label: 'Uncle Tom', phoneE164: '+61400000002' }]);
       expect((await api.get(`/v1/kids/${alex.id}/contacts`, mum.token)).body).toEqual(second.body);
       expect((await api.get(`/v1/kids/${sam.id}/contacts`, mum.token)).body.map((c: { label: string }) => c.label)).toEqual([
         'Coach',
