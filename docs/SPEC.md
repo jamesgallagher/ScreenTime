@@ -390,7 +390,7 @@ Two kinds of caller: **parent** (Bearer access token from OTP login) and **devic
 | POST | `/v1/auth/otp/verify` | `{ email, code, client, clientLabel }` → `{ accessToken, refreshToken, expiresIn, me }` |
 | POST | `/v1/auth/refresh` | `{ refreshToken }` → same shape as verify (refresh token rotates) |
 | POST | `/v1/auth/logout` | Bearer access token; revokes the session's refresh token (the access token runs out within 15 min) |
-| POST | `/v1/enrol` | `{ code, platform, form, hasCellular, model, osVersion, appVersion, machineId?, windowsUserSid?, windowsUserName? }` → `{ deviceId, deviceToken, kid, family }` |
+| POST | `/v1/enrol` | `{ code, platform, hasCellular, model, osVersion, appVersion, machineId?, windowsUserSid?, windowsUserName? }` (the three Windows fields are required on Windows) → 201 `{ deviceId, deviceToken, kid, family }`. The code decides the kid and the form |
 
 ### 9.2 Parent
 
@@ -442,7 +442,7 @@ Rules for the family routes:
 Rules for the kid routes:
 
 - A new kid starts with schedule version 1: Monday to Friday 120 min Screens, 90 min Phone, 07:00 to 20:30; Saturday and Sunday 180 and 120 min, 08:00 to 21:00; warnings 15 and 5 min. A kid name is 1 to 40 characters after trimming.
-- DELETE archives the kid (`archived_at`); the history stays. An archived kid is left out of lists and every `/v1/kids/{kidId}...` route answers 404. Revoking the kid's devices comes with the device routes.
+- DELETE archives the kid (`archived_at`) and revokes the kid's devices; the history stays. An archived kid is left out of lists and every `/v1/kids/{kidId}...` route answers 404.
 - Schedule PUT takes `{ warn1Min, warn2Min, days }` with exactly 7 days in order Monday (1) to Sunday (7) and the rules in 6.1, and stores the next version. Two saves at the same moment: the second gets 409 and tries again.
 - Contacts: at most 10, each with a label of 1 to 40 characters and an E.164 number. PUT replaces the whole list, in the order given.
 
@@ -450,6 +450,7 @@ Rules for the kid routes:
 
 | Method | Path | Purpose |
 |---|---|---|
+| GET | `/v1/device/me` | `{ device, kid, family }`; a 401 means the device was revoked and must enrol again |
 | GET | `/v1/device/state` | snapshot, ETag (below) |
 | POST | `/v1/device/usage` | `{ segments: [{ id, startedAt, endedAt \| null, recordedOffline }] }` up to 500 per call |
 | POST | `/v1/device/events` | `{ events: [{ id, kind, at, payload }] }` tamper, parent mode by code, etc. |
@@ -544,10 +545,10 @@ Each kid device gets an opaque 32-byte token at enrolment, stored hashed on the 
 ### 11.3 Enrolment (Q22)
 
 1. Parent: kid → "Add device" → picks Phone, Tablet or PC.
-2. Server creates a 6-digit code valid for 10 minutes. The app shows the code in large digits and a QR code containing `screentime://enrol?host=<hostname>&code=<code>`.
+2. Server creates a 6-digit code valid for 10 minutes, unique among unused unexpired codes. The app shows the code in large digits and a QR code containing `screentime://enrol?host=<hostname>&code=<code>`, where the hostname is the one the parent app used to reach the server (the public hostname in production).
 3. Kid device: Android setup screen scans the QR (CameraX + ML Kit barcode, bundled model) or takes the code typed in. Windows: the installer asks for server hostname and code.
-4. `POST /v1/enrol` → device token. Wrong code: max 5 attempts per code, then the code is burned.
-5. Parents get a `device.enrolled` notification.
+4. `POST /v1/enrol` → device token. A code works once. A wrong code matches no row, so guesses are limited per IP: 10 enrol calls per 15 minutes, then 429. The code's form must fit the platform (phone and tablet: Android; PC: Windows), else 409 and the code stays usable. The device's form comes from the code and its pool from the form. Enrolling the same Windows machine and account again revokes the old device row. `enrolment_codes.attempts` is not used in v1.
+5. A `device.enrolled` event is written (payload `{ name, form, platform }`); parents get it as a notification once push exists. The device name starts as the model (Windows: `<user name> on <model>`), at most 40 characters; parents can rename it.
 
 ### 11.4 Server
 
