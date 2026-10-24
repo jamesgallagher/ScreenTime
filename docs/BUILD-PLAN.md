@@ -41,7 +41,7 @@ Spikes come early on purpose: Device Owner + Lock Task on the real phones, and a
 | 013 | Enrolment codes, `/v1/enrol`, device token auth, device list/rename/revoke | 012b | M | | 11.3 |
 | 014 | Device state snapshot with ETag, usage upload, `/v1/today` using the engine | 003, 013 | M | | 8, 9.3 |
 | 015 | Grants endpoints (add, remove, lock now) | 014 | S | | 7, 9.2 |
-| 016 | Push: firebase-admin sender, push tokens, notification dispatcher with prefs and essentials, events feed | 015 | M | Firebase project | 10, 13 |
+| 016 | Push: firebase-admin sender, push tokens, notification dispatcher with prefs and essentials, events feed, `overspend` events on usage upload | 015 | M | Firebase project | 10, 13 |
 | 017 | Device WebSocket hub (`/v1/device/ws`), ping/pong, fan-out of envelopes | 014 | M | | 8.3, 10 |
 | 018 | Time requests and kid messages (device + parent endpoints) | 016 | M | | 9 |
 | 019 | Parent mode: requests, approve/deny, remote start/end, parent code secret, `parent_mode.used` | 016 | M | | 12.3 |
