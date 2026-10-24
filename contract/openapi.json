@@ -927,6 +927,542 @@
           "family"
         ]
       },
+      "DeviceState": {
+        "type": "object",
+        "properties": {
+          "serverTime": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "stateVersion": {
+            "type": "string"
+          },
+          "device": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "name": {
+                "type": "string"
+              },
+              "form": {
+                "$ref": "#/components/schemas/DeviceForm"
+              },
+              "pool": {
+                "$ref": "#/components/schemas/Pool"
+              },
+              "hasCellular": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "form",
+              "pool",
+              "hasCellular"
+            ]
+          },
+          "kid": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name"
+            ]
+          },
+          "family": {
+            "type": "object",
+            "properties": {
+              "timezone": {
+                "type": "string"
+              },
+              "emergencyNumber": {
+                "type": "string"
+              },
+              "parentCodeSecret": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "timezone",
+              "emergencyNumber",
+              "parentCodeSecret"
+            ]
+          },
+          "parents": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "displayName": {
+                  "type": "string"
+                },
+                "phoneE164": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "displayName",
+                "phoneE164"
+              ]
+            }
+          },
+          "contacts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string"
+                },
+                "phoneE164": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "label",
+                "phoneE164"
+              ]
+            }
+          },
+          "messagePresets": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "text": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "text"
+              ]
+            }
+          },
+          "schedule": {
+            "$ref": "#/components/schemas/Schedule"
+          },
+          "today": {
+            "type": "object",
+            "properties": {
+              "date": {
+                "type": "string"
+              },
+              "grants": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/StateGrant"
+                }
+              },
+              "poolSegments": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/PoolSegment"
+                }
+              }
+            },
+            "required": [
+              "date",
+              "grants",
+              "poolSegments"
+            ]
+          },
+          "parentMode": {
+            "type": "object",
+            "properties": {
+              "active": {
+                "type": "boolean"
+              },
+              "endsAt": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "byName": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "active",
+              "endsAt",
+              "byName"
+            ]
+          },
+          "pendingRequest": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "minutes": {
+                "type": "integer"
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "required": [
+              "id",
+              "minutes",
+              "createdAt"
+            ]
+          },
+          "activeSos": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "startedAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "required": [
+              "id",
+              "startedAt"
+            ]
+          }
+        },
+        "required": [
+          "serverTime",
+          "stateVersion",
+          "device",
+          "kid",
+          "family",
+          "parents",
+          "contacts",
+          "messagePresets",
+          "schedule",
+          "today",
+          "parentMode",
+          "pendingRequest",
+          "activeSos"
+        ]
+      },
+      "StateGrant": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "minutes": {
+            "type": "integer"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "byName": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "minutes",
+          "createdAt",
+          "byName"
+        ]
+      },
+      "PoolSegment": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "deviceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "endedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "deviceId",
+          "startedAt",
+          "endedAt"
+        ]
+      },
+      "UsageReceipt": {
+        "type": "object",
+        "properties": {
+          "received": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "received"
+        ]
+      },
+      "UsageUpload": {
+        "type": "object",
+        "properties": {
+          "segments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UsageSegmentIn"
+            },
+            "minItems": 1,
+            "maxItems": 500
+          }
+        },
+        "required": [
+          "segments"
+        ]
+      },
+      "UsageSegmentIn": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "endedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "recordedOffline": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "startedAt",
+          "endedAt",
+          "recordedOffline"
+        ]
+      },
+      "Today": {
+        "type": "object",
+        "properties": {
+          "serverTime": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "date": {
+            "type": "string"
+          },
+          "kids": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TodayKid"
+            }
+          }
+        },
+        "required": [
+          "serverTime",
+          "date",
+          "kids"
+        ]
+      },
+      "TodayKid": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "avatarColor": {
+            "$ref": "#/components/schemas/AvatarColor"
+          },
+          "pools": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TodayPool"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "avatarColor",
+          "pools"
+        ]
+      },
+      "TodayPool": {
+        "type": "object",
+        "properties": {
+          "pool": {
+            "$ref": "#/components/schemas/Pool"
+          },
+          "allowanceMin": {
+            "type": "integer"
+          },
+          "grantedMin": {
+            "type": "integer"
+          },
+          "usedSec": {
+            "type": "integer"
+          },
+          "remainingSec": {
+            "type": "integer"
+          },
+          "locked": {
+            "type": "boolean"
+          },
+          "lockReason": {
+            "$ref": "#/components/schemas/LockReason"
+          },
+          "nextLockAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "overspendSec": {
+            "type": "integer"
+          },
+          "devices": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TodayDevice"
+            }
+          }
+        },
+        "required": [
+          "pool",
+          "allowanceMin",
+          "grantedMin",
+          "usedSec",
+          "remainingSec",
+          "locked",
+          "lockReason",
+          "nextLockAt",
+          "overspendSec",
+          "devices"
+        ]
+      },
+      "LockReason": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "enum": [
+          "out_of_time",
+          "bedtime",
+          "before_wake",
+          null
+        ]
+      },
+      "TodayDevice": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "form": {
+            "$ref": "#/components/schemas/DeviceForm"
+          },
+          "inUse": {
+            "type": "boolean"
+          },
+          "lastSeenAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "parentMode": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "endsAt": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "byName": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "endsAt",
+              "byName"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "form",
+          "inUse",
+          "lastSeenAt",
+          "parentMode"
+        ]
+      },
       "AdminFamily": {
         "type": "object",
         "properties": {
@@ -2925,6 +3461,154 @@
           },
           "401": {
             "description": "Not signed in, or the code or token is wrong or expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/device/state": {
+      "get": {
+        "tags": [
+          "device"
+        ],
+        "summary": "Everything this device needs to enforce",
+        "description": "Send the last `stateVersion` as `If-None-Match` to get 304 when nothing changed. A 304 has no body; use its `Date` header as the server time.",
+        "security": [
+          {
+            "deviceAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The snapshot.",
+            "headers": {
+              "ETag": {
+                "description": "The `stateVersion` in quotes.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceState"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Nothing changed since the `stateVersion` sent in `If-None-Match`."
+          },
+          "401": {
+            "description": "Not signed in, or the code or token is wrong or expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/device/usage": {
+      "post": {
+        "tags": [
+          "device"
+        ],
+        "summary": "Upload usage segments",
+        "description": "Safe to send again. A segment sent again keeps its first `startedAt` and the latest `endedAt`; once closed it never reopens.",
+        "security": [
+          {
+            "deviceAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UsageUpload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Stored.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageReceipt"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the code or token is wrong or expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/today": {
+      "get": {
+        "tags": [
+          "parent"
+        ],
+        "summary": "Used and remaining time today for every kid and pool",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The dashboard.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Today"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the code or token is wrong or expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Signed in, but not allowed to do this.",
             "content": {
               "application/json": {
                 "schema": {
