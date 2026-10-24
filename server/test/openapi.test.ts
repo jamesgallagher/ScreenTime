@@ -144,6 +144,15 @@ describe('OpenAPI contract', () => {
     );
   });
 
+  it('describes the grant routes, all behind bearer auth', () => {
+    expect(doc.paths?.['/v1/kids/{kidId}/grants']?.get?.security).toEqual([{ bearerAuth: [] }]);
+    expect(doc.paths?.['/v1/kids/{kidId}/grants']?.post?.security).toEqual([{ bearerAuth: [] }]);
+    expect(doc.paths?.['/v1/kids/{kidId}/lock-now']?.post?.security).toEqual([{ bearerAuth: [] }]);
+    expect(Object.keys(doc.components?.schemas ?? {})).toEqual(
+      expect.arrayContaining(['Grant', 'GrantCreate', 'LocalDate', 'LockNow']),
+    );
+  });
+
   it('matches the committed contract/openapi.json (run `pnpm contract` if this fails)', () => {
     const committed = readFileSync(new URL('../../contract/openapi.json', import.meta.url), 'utf8');
     expect(committed).toBe(`${JSON.stringify(doc, null, 2)}\n`);
