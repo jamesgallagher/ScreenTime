@@ -6,6 +6,7 @@ import { registerAuthRoutes } from './auth/routes.js';
 import type { Config } from './config.js';
 import type { Db } from './db/client.js';
 import { registerFamilyRoutes } from './family/routes.js';
+import { registerKidRoutes } from './kids/routes.js';
 import type { Mailer } from './mailer.js';
 import { createRouter } from './router.js';
 
@@ -58,6 +59,7 @@ export function createApp(deps: AppDeps) {
 
   registerAuthRoutes(app, deps);
   registerFamilyRoutes(app, deps);
+  registerKidRoutes(app, deps);
   registerAdminRoutes(app, deps);
 
   return app;
