@@ -8,10 +8,10 @@ All commands run from the **repo root** in PowerShell.
 
 ```powershell
 Copy-Item deploy\.env.example deploy\.env
-notepad deploy\.env        # set POSTGRES_PASSWORD to a long random value
+notepad deploy\.env        # set POSTGRES_PASSWORD and JWT_SECRET (see the comments in the file)
 ```
 
-`deploy/.env` is git-ignored. Never commit it.
+`deploy/.env` is git-ignored. Never commit it. The real SMTP password (the Brevo SMTP key) goes only in `deploy/.env` on the server, never in the repo.
 
 ## Run the whole stack
 
@@ -31,8 +31,13 @@ Start only the database, then run the server from source:
 ```powershell
 docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --wait db
 $env:DATABASE_URL = "postgres://screentime:<POSTGRES_PASSWORD>@localhost:5432/screentime"
+$env:JWT_SECRET = "<JWT_SECRET from deploy/.env>"
 pnpm dev:server
 ```
+
+## Sign in during development
+
+Without SMTP settings the server does not send email: it writes each sign-in code to its log, as `SMTP not configured: sign-in code for <email> is <code>`. With the whole stack running, read it with `docker compose -f deploy/docker-compose.yml --env-file deploy/.env logs api`. Codes go only to emails of existing parents (create one with the seed script below) or to `SUPER_ADMIN_EMAIL`.
 
 ## Database tests
 
