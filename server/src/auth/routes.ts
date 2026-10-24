@@ -1,7 +1,5 @@
 import { createRoute } from '@hono/zod-openapi';
-import { getConnInfo } from '@hono/node-server/conninfo';
 import { and, count, desc, eq, gt, isNull, sql } from 'drizzle-orm';
-import type { Context } from 'hono';
 import { AuthResponse, Me, OtpRequest, OtpVerifyRequest, RefreshRequest, type Role } from '@screentime/schemas';
 import type { AppDeps } from '../app.js';
 import type { Db } from '../db/client.js';
@@ -10,6 +8,7 @@ import { families, otpCodes, parentSessions, parents } from '../db/schema.js';
 import { ApiError } from '../errors.js';
 import { bearer, errorResponses, jsonBody } from '../openapi.js';
 import type { createRouter } from '../router.js';
+import { clientIp } from './client-ip.js';
 import { requireParent } from './guards.js';
 import { RateLimiter } from './rate-limit.js';
 import {
@@ -125,17 +124,6 @@ function parentUser({ parent, family }: ParentRow, isSuperAdmin: boolean): SignI
 function superAdminOnly(): SignInUser {
   const roles: Role[] = ['superadmin'];
   return { parentId: null, familyId: null, roles, me: { parent: null, family: null, roles } };
-}
-
-/** The caller's IP: Cloudflare's header in production, the socket address otherwise. */
-function clientIp(c: Context): string {
-  const forwarded = c.req.header('cf-connecting-ip');
-  if (forwarded) return forwarded;
-  try {
-    return getConnInfo(c).remote.address ?? 'unknown';
-  } catch {
-    return 'unknown';
-  }
 }
 
 /** Sign-in, tokens and GET /v1/me (docs/SPEC.md §9.1, §9.2, §11.1). */
