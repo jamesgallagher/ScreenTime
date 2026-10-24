@@ -40,3 +40,16 @@ export {
   ScheduleDay,
   ScheduleInput,
 } from './kids.js';
+export {
+  DeviceState,
+  LockReason,
+  PoolSegment,
+  StateGrant,
+  Today,
+  TodayDevice,
+  TodayKid,
+  TodayPool,
+  UsageReceipt,
+  UsageSegmentIn,
+  UsageUpload,
+} from './sync.js';
