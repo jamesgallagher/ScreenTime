@@ -17,14 +17,3 @@ export {
   TimeZone,
 } from './family.js';
 export { HealthResponse } from './health.js';
-export {
-  AvatarColor,
-  Kid,
-  KidContact,
-  KidContactsPut,
-  KidCreate,
-  KidPatch,
-  Schedule,
-  ScheduleDay,
-  ScheduleInput,
-} from './kids.js';
