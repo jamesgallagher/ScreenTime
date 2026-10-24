@@ -52,9 +52,6 @@ importers:
       '@hono/zod-openapi':
         specifier: ^1.6.3
         version: 1.6.3(hono@4.13.13)(zod@4.6.7)
-      '@screentime/engine':
-        specifier: workspace:*
-        version: link:../packages/engine
       '@screentime/schemas':
         specifier: workspace:*
         version: link:../packages/schemas

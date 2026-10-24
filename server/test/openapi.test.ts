@@ -122,28 +122,6 @@ describe('OpenAPI contract', () => {
     );
   });
 
-  it('describes the state snapshot, usage upload and the dashboard', () => {
-    expect(doc.paths?.['/v1/device/state']?.get?.security).toEqual([{ deviceAuth: [] }]);
-    expect(doc.paths?.['/v1/device/state']?.get?.responses?.['304']).toBeDefined();
-    expect(doc.paths?.['/v1/device/usage']?.post?.security).toEqual([{ deviceAuth: [] }]);
-    expect(doc.paths?.['/v1/today']?.get?.security).toEqual([{ bearerAuth: [] }]);
-    expect(Object.keys(doc.components?.schemas ?? {})).toEqual(
-      expect.arrayContaining([
-        'DeviceState',
-        'LockReason',
-        'PoolSegment',
-        'StateGrant',
-        'Today',
-        'TodayDevice',
-        'TodayKid',
-        'TodayPool',
-        'UsageReceipt',
-        'UsageSegmentIn',
-        'UsageUpload',
-      ]),
-    );
-  });
-
   it('matches the committed contract/openapi.json (run `pnpm contract` if this fails)', () => {
     const committed = readFileSync(new URL('../../contract/openapi.json', import.meta.url), 'utf8');
     expect(committed).toBe(`${JSON.stringify(doc, null, 2)}\n`);
