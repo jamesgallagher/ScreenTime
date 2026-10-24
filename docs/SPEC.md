@@ -297,7 +297,7 @@ Notes:
 - Reset at midnight is automatic: a new `D` has no grants and no segments (Q21). A segment that crosses midnight is split by clipping.
 - Bedtime always locks (Q8). A parent can still unlock after bedtime by granting time (a curfew grant) or by parent mode.
 - Parent mode is outside the engine: while a parent-mode session is active the device is unlocked and records no segments.
-- "Lock now" in the parent app is just a negative grant of the current remaining minutes, rounded up to a whole minute.
+- "Lock now" in the parent app is just a negative grant of the current remaining minutes, rounded up to a whole minute. The server works it out (`POST /v1/kids/{kidId}/lock-now`), so both parents' apps agree; a pool that is already locked answers 409.
 
 ### 7.4 Test vector format
 
@@ -417,8 +417,9 @@ Two kinds of caller: **parent** (Bearer access token from OTP login) and **devic
 | GET / PATCH / DELETE | `/v1/kids/{kidId}` | read, edit, archive |
 | GET / PUT | `/v1/kids/{kidId}/schedule` | PUT writes a new version |
 | GET / PUT | `/v1/kids/{kidId}/contacts` | whole list replaced on PUT |
-| GET | `/v1/kids/{kidId}/grants?day=YYYY-MM-DD` | today by default |
-| POST | `/v1/kids/{kidId}/grants` | `{ id, pool, minutes, note? }` minutes is a non-zero multiple of 15 from the roller, except "lock now" |
+| GET | `/v1/kids/{kidId}/grants?day=YYYY-MM-DD` | both pools, oldest first, each `{ id, pool, minutes, day, createdAt, byName, note, requestId }`; today by default |
+| POST | `/v1/kids/{kidId}/grants` | `{ id, pool, minutes, note? }` → 201 grant. `minutes` is a non-zero multiple of 15 from the roller, −1440 to 1440; `note` 1 to 160 characters. Counts for the family's today. The same `id` again → 200 with the stored grant; an `id` used for another kid → 409 |
+| POST | `/v1/kids/{kidId}/lock-now` | `{ id, pool }` → 201 grant of minus the pool's remaining minutes, rounded up, note "Lock now" (section 7.3). Already locked → 409. Same `id` again → 200 |
 | POST | `/v1/kids/{kidId}/enrolment-codes` | `{ form }` → `{ code, qrPayload, expiresAt }` |
 | GET | `/v1/devices` | all devices in family |
 | PATCH / DELETE | `/v1/devices/{id}` | rename, change pool; DELETE revokes the token |
@@ -642,7 +643,7 @@ Parent notifications go to the Android parent app by FCM. The web app shows the 
 | `overspend` | Offline overspend detected | No |
 | `device.offline` | Not seen for 6 h during allowed hours | No |
 | `device.enrolled` | New device added | No |
-| `grant.by_other_parent` | The other parent changed time | No |
+| `grant.by_other_parent` | The other parent changed time (from the `grant.added` event every grant writes, payload `{ grantId, pool, minutes, byName, lockNow }`) | No |
 
 Rule (James, 22 Oct 2026): approval requests and SOS are essential; every informational kind can be switched off per parent. Sign-in code emails are always sent. Tamper and parent-mode-used are informational (confirmed). Muting only stops the push: **every** kind is always written to `events` and always shown in the event history (Inbox) in the parent app and web app.
 
