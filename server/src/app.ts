@@ -10,6 +10,7 @@ import { registerFamilyRoutes } from './family/routes.js';
 import { registerKidRoutes } from './kids/routes.js';
 import type { Mailer } from './mailer.js';
 import { createRouter } from './router.js';
+import { registerSyncRoutes } from './sync/routes.js';
 
 /** What the routes need at request time. Tests pass their own. */
 export interface AppDeps {
@@ -67,6 +68,7 @@ export function createApp(deps: AppDeps) {
   registerFamilyRoutes(app, deps);
   registerKidRoutes(app, deps);
   registerDeviceRoutes(app, deps);
+  registerSyncRoutes(app, deps);
   registerAdminRoutes(app, deps);
 
   return app;

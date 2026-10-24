@@ -28,7 +28,7 @@ function toKid(row: typeof kids.$inferSelect): Kid {
   return { id: row.id, name: row.name, avatarColor: row.avatarColor as Kid['avatarColor'] };
 }
 
-function toSchedule(row: typeof scheduleVersions.$inferSelect): Schedule {
+export function toSchedule(row: typeof scheduleVersions.$inferSelect): Schedule {
   // jsonb does not keep key order, so each day is rebuilt in the order of the contract.
   const days = (row.days as ScheduleDay[]).map(({ weekday, screensMin, phoneMin, wake, bedtime }) => ({
     weekday,
