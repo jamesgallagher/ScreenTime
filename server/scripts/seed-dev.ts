@@ -6,15 +6,7 @@ import { createDb } from '../src/db/client.js';
 import { runMigrations } from '../src/db/migrate.js';
 import { families, kids, messagePresets, parents, scheduleVersions } from '../src/db/schema.js';
 import { DEFAULT_MESSAGE_PRESETS, newParentCodeSecret } from '../src/family/secret.js';
-
-/** ISO weekday 1 = Monday ... 7 = Sunday (docs/SPEC.md §6.1 schedule_versions). */
-function week() {
-  return [1, 2, 3, 4, 5, 6, 7].map((weekday) =>
-    weekday <= 5
-      ? { weekday, screensMin: 120, phoneMin: 90, wake: '07:00', bedtime: '20:30' }
-      : { weekday, screensMin: 180, phoneMin: 120, wake: '08:00', bedtime: '21:00' },
-  );
-}
+import { defaultWeek } from '../src/kids/schedule.js';
 
 const databaseUrl = process.env.DATABASE_URL;
 const email = process.argv[2]?.trim().toLowerCase();
@@ -50,7 +42,7 @@ try {
         ])
         .returning();
       await tx.insert(scheduleVersions).values(
-        kidRows.map((kid) => ({ familyId: family.id, kidId: kid.id, version: 1, days: week(), createdBy: parent.id })),
+        kidRows.map((kid) => ({ familyId: family.id, kidId: kid.id, version: 1, days: defaultWeek(), createdBy: parent.id })),
       );
       await tx
         .insert(messagePresets)
