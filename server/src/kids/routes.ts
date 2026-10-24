@@ -14,7 +14,7 @@ import type { AppDeps } from '../app.js';
 import { requireFamilyParent } from '../auth/guards.js';
 import { isUniqueViolation } from '../db/errors.js';
 import { type FamilyTx, withFamily } from '../db/family.js';
-import { devices, kidContacts, kids, scheduleVersions } from '../db/schema.js';
+import { kidContacts, kids, scheduleVersions } from '../db/schema.js';
 import { ApiError } from '../errors.js';
 import { bearer, errorResponses, jsonBody, jsonResponse } from '../openapi.js';
 import type { createRouter } from '../router.js';
@@ -43,7 +43,7 @@ function toSchedule(row: typeof scheduleVersions.$inferSelect): Schedule {
 const kidNotFound = () => new ApiError('not_found', 'No such kid in your family.');
 
 /** The kid, if it is in the caller's family and not archived. Row-level security hides other families. */
-export async function findKid(tx: FamilyTx, kidId: string) {
+async function findKid(tx: FamilyTx, kidId: string) {
   const [row] = await tx
     .select()
     .from(kids)
@@ -98,7 +98,7 @@ const archiveKidRoute = createRoute({
   path: '/v1/kids/{kidId}',
   tags: ['kids'],
   summary: 'Archive a kid',
-  description: 'The kid disappears from lists and their devices are revoked; their history stays.',
+  description: 'The kid disappears from lists; their history stays.',
   security: bearer,
   request: { params: KidParam },
   responses: { 204: { description: 'Archived.' }, ...errorResponses(401, 403, 404, 422) },
@@ -215,10 +215,6 @@ export function registerKidRoutes(app: Router, deps: AppDeps) {
         .where(and(eq(kids.id, kidId), isNull(kids.archivedAt)))
         .returning({ id: kids.id });
       if (!archived) throw kidNotFound();
-      await tx
-        .update(devices)
-        .set({ revokedAt: sql`now()`, fcmToken: null })
-        .where(and(eq(devices.kidId, kidId), isNull(devices.revokedAt)));
     });
     return c.body(null, 204);
   });

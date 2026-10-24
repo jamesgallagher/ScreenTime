@@ -5,7 +5,6 @@ import { registerAdminRoutes } from './admin/routes.js';
 import { registerAuthRoutes } from './auth/routes.js';
 import type { Config } from './config.js';
 import type { Db } from './db/client.js';
-import { registerDeviceRoutes } from './devices/routes.js';
 import { registerFamilyRoutes } from './family/routes.js';
 import { registerKidRoutes } from './kids/routes.js';
 import type { Mailer } from './mailer.js';
@@ -48,11 +47,6 @@ export function createApp(deps: AppDeps) {
     scheme: 'bearer',
     bearerFormat: 'JWT',
   });
-  app.openAPIRegistry.registerComponent('securitySchemes', 'deviceAuth', {
-    type: 'http',
-    scheme: 'bearer',
-    description: 'The opaque device token from POST /v1/enrol.',
-  });
 
   app.openapi(healthRoute, (c) => {
     const body = HealthResponse.parse({
@@ -66,7 +60,6 @@ export function createApp(deps: AppDeps) {
   registerAuthRoutes(app, deps);
   registerFamilyRoutes(app, deps);
   registerKidRoutes(app, deps);
-  registerDeviceRoutes(app, deps);
   registerAdminRoutes(app, deps);
 
   return app;

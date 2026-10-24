@@ -33,6 +33,3 @@ export function jsonResponse<T>(description: string, schema: T) {
 
 /** Routes that need an access token. */
 export const bearer = [{ bearerAuth: [] }];
-
-/** Routes for kid devices: the device token from enrolment. */
-export const deviceBearer = [{ deviceAuth: [] }];

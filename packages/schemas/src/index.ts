@@ -1,18 +1,6 @@
 export { AuthResponse, Me, OtpRequest, OtpVerifyRequest, RefreshRequest, Role } from './auth.js';
 export { ErrorCode, ErrorResponse } from './errors.js';
 export {
-  Device,
-  DeviceForm,
-  DeviceMe,
-  DevicePatch,
-  EnrolmentCode,
-  EnrolmentCodeCreate,
-  EnrolRequest,
-  EnrolResponse,
-  Platform,
-  Pool,
-} from './devices.js';
-export {
   AdminFamily,
   AdminFamilyCreate,
   AdminFamilyCreated,
