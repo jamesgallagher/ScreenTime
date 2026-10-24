@@ -25,6 +25,43 @@ describe('OpenAPI contract', () => {
     );
   });
 
+  it('describes the family and super admin routes, all behind bearer auth', () => {
+    const routes: Array<[string, 'get' | 'post' | 'patch' | 'put' | 'delete']> = [
+      ['/v1/family', 'get'],
+      ['/v1/family', 'patch'],
+      ['/v1/family/parents', 'get'],
+      ['/v1/family/parents', 'post'],
+      ['/v1/family/parents/{id}', 'patch'],
+      ['/v1/family/parents/{id}', 'delete'],
+      ['/v1/family/message-presets', 'get'],
+      ['/v1/family/message-presets', 'put'],
+      ['/v1/family/parent-code', 'get'],
+      ['/v1/family/parent-code/rotate', 'post'],
+      ['/v1/admin/families', 'get'],
+      ['/v1/admin/families', 'post'],
+      ['/v1/admin/families/{id}/parents', 'post'],
+      ['/v1/admin/families/{id}/disable', 'post'],
+    ];
+    for (const [path, method] of routes) {
+      expect(doc.paths?.[path]?.[method]?.security, `${method} ${path}`).toEqual([{ bearerAuth: [] }]);
+    }
+    expect(Object.keys(doc.components?.schemas ?? {})).toEqual(
+      expect.arrayContaining([
+        'AdminFamily',
+        'AdminFamilyCreate',
+        'AdminFamilyCreated',
+        'Family',
+        'FamilyPatch',
+        'MessagePreset',
+        'MessagePresetsPut',
+        'Parent',
+        'ParentCodeSecret',
+        'ParentCreate',
+        'ParentPatch',
+      ]),
+    );
+  });
+
   it('matches the committed contract/openapi.json (run `pnpm contract` if this fails)', () => {
     const committed = readFileSync(new URL('../../contract/openapi.json', import.meta.url), 'utf8');
     expect(committed).toBe(`${JSON.stringify(doc, null, 2)}\n`);

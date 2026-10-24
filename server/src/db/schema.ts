@@ -319,7 +319,8 @@ export const kidMessages = pgTable(
       .notNull()
       .references(() => devices.id),
     body: text('body').notNull(),
-    presetId: uuid('preset_id').references(() => messagePresets.id),
+    // Parents replace the preset list whenever they like; old messages keep their text and lose the link.
+    presetId: uuid('preset_id').references(() => messagePresets.id, { onDelete: 'set null' }),
     createdAt: createdAt(),
   },
   (t) => [check('kid_messages_body_length', sql`char_length(${t.body}) between 1 and 160`)],
