@@ -62,6 +62,36 @@ describe('OpenAPI contract', () => {
     );
   });
 
+  it('describes the kid routes, all behind bearer auth', () => {
+    const routes: Array<[string, 'get' | 'post' | 'patch' | 'put' | 'delete']> = [
+      ['/v1/kids', 'get'],
+      ['/v1/kids', 'post'],
+      ['/v1/kids/{kidId}', 'get'],
+      ['/v1/kids/{kidId}', 'patch'],
+      ['/v1/kids/{kidId}', 'delete'],
+      ['/v1/kids/{kidId}/schedule', 'get'],
+      ['/v1/kids/{kidId}/schedule', 'put'],
+      ['/v1/kids/{kidId}/contacts', 'get'],
+      ['/v1/kids/{kidId}/contacts', 'put'],
+    ];
+    for (const [path, method] of routes) {
+      expect(doc.paths?.[path]?.[method]?.security, `${method} ${path}`).toEqual([{ bearerAuth: [] }]);
+    }
+    expect(Object.keys(doc.components?.schemas ?? {})).toEqual(
+      expect.arrayContaining([
+        'AvatarColor',
+        'Kid',
+        'KidContact',
+        'KidContactsPut',
+        'KidCreate',
+        'KidPatch',
+        'Schedule',
+        'ScheduleDay',
+        'ScheduleInput',
+      ]),
+    );
+  });
+
   it('matches the committed contract/openapi.json (run `pnpm contract` if this fails)', () => {
     const committed = readFileSync(new URL('../../contract/openapi.json', import.meta.url), 'utf8');
     expect(committed).toBe(`${JSON.stringify(doc, null, 2)}\n`);
