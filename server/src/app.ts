@@ -20,7 +20,6 @@ import type { Pusher } from './push.js';
 import { registerRequestRoutes } from './requests/routes.js';
 import { createRouter } from './router.js';
 import { registerSyncRoutes } from './sync/routes.js';
-import { registerTamperRoutes } from './tamper/routes.js';
 
 /** What the routes need at request time. Tests pass their own. */
 export interface AppDeps {
@@ -92,7 +91,6 @@ export function createApp(appDeps: AppDeps) {
   registerRequestRoutes(app, deps);
   registerMessageRoutes(app, deps);
   registerParentModeRoutes(app, deps);
-  registerTamperRoutes(app, deps);
   registerNotifyRoutes(app, deps);
   registerAdminRoutes(app, deps);
   registerLiveRoutes(app, deps, upgradeWebSocket);
