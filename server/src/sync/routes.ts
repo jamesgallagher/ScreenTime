@@ -30,7 +30,7 @@ import {
 } from '../db/schema.js';
 import { requireDevice } from '../devices/auth.js';
 import { toSchedule } from '../kids/routes.js';
-import { notifyParents } from '../notify/dispatch.js';
+import { notifyParents, stateChanged } from '../notify/dispatch.js';
 import { bearer, deviceBearer, errorResponses, jsonBody, jsonResponse } from '../openapi.js';
 import type { createRouter } from '../router.js';
 import { activeParentModes, dayGrants, daySegments, familyDay, poolStatus } from './day.js';
@@ -245,9 +245,17 @@ export function registerSyncRoutes(app: Router, deps: AppDeps) {
         .returning({ id: usageSegments.id });
       const storedIds = new Set(rows.map((r) => r.id));
       const offline = segments.some((s) => s.recordedOffline && storedIds.has(s.id));
-      return { received: rows.length, overspendEventId: offline ? await recordOverspend(tx, kidId, deviceId) : null };
+      return {
+        received: rows.length,
+        pool: device.pool as Pool,
+        overspendEventId: offline ? await recordOverspend(tx, kidId, deviceId) : null,
+      };
     });
     if (stored.overspendEventId) await notifyParents(deps, familyId, [stored.overspendEventId]);
+    // The kid's other devices in this pool count these segments too. WebSocket only: this comes every minute.
+    if (stored.received > 0) {
+      await stateChanged(deps, familyId, { kidId, pool: stored.pool, exceptDeviceId: deviceId }, false);
+    }
     return c.json({ received: stored.received }, 200);
   });
 
