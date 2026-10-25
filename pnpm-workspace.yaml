@@ -4,3 +4,6 @@ packages:
 
 allowBuilds:
   esbuild: true
+  # firebase-admin dependencies. Their postinstall scripts are not needed on the server.
+  '@firebase/util': false
+  protobufjs: false
