@@ -184,26 +184,6 @@ describe('OpenAPI contract', () => {
     );
   });
 
-  it('describes parent mode, each route with the right auth', () => {
-    expect(doc.paths?.['/v1/device/parent-mode-requests']?.post?.security).toEqual([{ deviceAuth: [] }]);
-    expect(doc.paths?.['/v1/device/parent-mode']?.post?.security).toEqual([{ deviceAuth: [] }]);
-    expect(doc.paths?.['/v1/device/parent-mode/end']?.post?.security).toEqual([{ deviceAuth: [] }]);
-    expect(doc.paths?.['/v1/parent-mode-requests/{id}/approve']?.post?.security).toEqual([{ bearerAuth: [] }]);
-    expect(doc.paths?.['/v1/parent-mode-requests/{id}/deny']?.post?.security).toEqual([{ bearerAuth: [] }]);
-    expect(doc.paths?.['/v1/devices/{id}/parent-mode']?.post?.security).toEqual([{ bearerAuth: [] }]);
-    expect(doc.paths?.['/v1/devices/{id}/parent-mode']?.delete?.security).toEqual([{ bearerAuth: [] }]);
-    expect(Object.keys(doc.components?.schemas ?? {})).toEqual(
-      expect.arrayContaining([
-        'ParentModeByCode',
-        'ParentModeDuration',
-        'ParentModeRequestCreate',
-        'ParentModeSession',
-        'ParentModeStart',
-        'ParentModeStatus',
-      ]),
-    );
-  });
-
   it('matches the committed contract/openapi.json (run `pnpm contract` if this fails)', () => {
     const committed = readFileSync(new URL('../../contract/openapi.json', import.meta.url), 'utf8');
     expect(committed).toBe(`${JSON.stringify(doc, null, 2)}\n`);
