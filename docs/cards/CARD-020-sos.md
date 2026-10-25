@@ -9144,6 +9144,7 @@ Known traps, and what to do:
 - **`Module '"@screentime/schemas"' has no exported member 'SosStart'`** (or another new name): build the schemas package first (`pnpm --filter @screentime/schemas build`), or 5.2 is not copied exactly.
 - **`server/src/tamper/routes.ts` does not exist**, or `registerTamperRoutes` is not found: CARD-019b is not on your `main` yet. Stop and ask James; do not copy 5.6 without it.
 - **`pnpm contract` changes `contract/openapi.json`**, or the openapi drift test fails: one of the files in section 5 is not the card's version. Find it with `git diff`; do not commit a contract that differs from 5.9.
+- **You see `Â±` or `â†'` in this card**: you are reading it with the wrong text encoding. This card is UTF-8 and has the real characters `±` and `→`; open it as UTF-8. Do not report them as card errors (CARD-019b's handback did, and the card was right).
 - **The email test fails on `±` or shows `Â±`**: the file was not saved as UTF-8. Save it as UTF-8 (without changing anything else) and run it again.
 - **The "two parents ending at once" test fails or hangs**: check Docker is running and `TEST_DATABASE_URL` is set; run the tests again once. If it fails twice, report it with its first error lines. Do not change the test.
 - **`409` instead of `active Alex 54` on the real stack**: you ran the check twice. Run `docker compose ... down -v` and start the real-stack check again from the top.

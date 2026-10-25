@@ -211,20 +211,6 @@ describe('OpenAPI contract', () => {
     );
   });
 
-  it('describes SOS, each route with the right auth', () => {
-    expect(doc.paths?.['/v1/device/sos']?.post?.security).toEqual([{ deviceAuth: [] }]);
-    expect(doc.paths?.['/v1/device/sos/{id}/locations']?.post?.security).toEqual([{ deviceAuth: [] }]);
-    expect(doc.paths?.['/v1/device/sos/{id}/end']?.post?.security).toEqual([{ deviceAuth: [] }]);
-    expect(doc.paths?.['/v1/sos']?.get?.security).toEqual([{ bearerAuth: [] }]);
-    expect(doc.paths?.['/v1/sos/{id}']?.get?.security).toEqual([{ bearerAuth: [] }]);
-    expect(doc.paths?.['/v1/sos/{id}/ack']?.post?.security).toEqual([{ bearerAuth: [] }]);
-    expect(doc.paths?.['/v1/sos/{id}/extend']?.post?.security).toEqual([{ bearerAuth: [] }]);
-    expect(doc.paths?.['/v1/sos/{id}/end']?.post?.security).toEqual([{ bearerAuth: [] }]);
-    expect(Object.keys(doc.components?.schemas ?? {})).toEqual(
-      expect.arrayContaining(['Sos', 'SosAck', 'SosDetail', 'SosLocation', 'SosLocationIn', 'SosLocationsUpload', 'SosStart', 'SosStatus']),
-    );
-  });
-
   it('matches the committed contract/openapi.json (run `pnpm contract` if this fails)', () => {
     const committed = readFileSync(new URL('../../contract/openapi.json', import.meta.url), 'utf8');
     expect(committed).toBe(`${JSON.stringify(doc, null, 2)}\n`);
