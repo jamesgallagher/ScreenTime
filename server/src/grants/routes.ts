@@ -7,7 +7,7 @@ import { type FamilyTx, withFamily } from '../db/family.js';
 import { events, families, grants, parents, scheduleVersions, usageSegments } from '../db/schema.js';
 import { ApiError } from '../errors.js';
 import { findKid, toSchedule } from '../kids/routes.js';
-import { notifyParents, sendToDevices } from '../notify/dispatch.js';
+import { notifyParents, pushToKid } from '../notify/dispatch.js';
 import { bearer, errorResponses, jsonBody, jsonResponse } from '../openapi.js';
 import type { createRouter } from '../router.js';
 import { dayGrants, daySegments, type FamilyDay, familyDay, poolStatus } from '../sync/day.js';
@@ -155,10 +155,11 @@ export function registerGrantRoutes(app: Router, deps: AppDeps) {
     await notifyParents(deps, familyId, [pushes.eventId]);
     // The grant only counts today, so the push is worth nothing after midnight.
     const ttlSec = Math.max(60, Math.floor((pushes.dayEnd.getTime() - pushes.now.getTime()) / 1000));
-    await sendToDevices(
+    await pushToKid(
       deps,
       familyId,
-      { kidId, pool: grant.pool },
+      kidId,
+      grant.pool,
       {
         v: 1,
         type: 'grant_added',
@@ -168,7 +169,7 @@ export function registerGrantRoutes(app: Router, deps: AppDeps) {
           byName: grant.byName,
         },
       },
-      { high: true, ttlSec },
+      ttlSec,
     );
   }
 

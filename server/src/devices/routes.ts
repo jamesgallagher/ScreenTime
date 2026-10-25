@@ -18,7 +18,7 @@ import { withFamily } from '../db/family.js';
 import { devices, enrolmentCodes, events, families, kids } from '../db/schema.js';
 import { ApiError } from '../errors.js';
 import { findKid } from '../kids/routes.js';
-import { disconnectDevices, notifyParents, stateChanged } from '../notify/dispatch.js';
+import { notifyParents } from '../notify/dispatch.js';
 import { bearer, deviceBearer, errorResponses, jsonBody, jsonResponse } from '../openapi.js';
 import type { createRouter } from '../router.js';
 import { requireDevice } from './auth.js';
@@ -183,8 +183,6 @@ export function registerDeviceRoutes(app: Router, deps: AppDeps) {
         : tx.update(devices).set(patch).where(where).returning();
     });
     if (!row) throw deviceNotFound();
-    // A new name or pool changes what the device shows and counts.
-    if (Object.keys(patch).length > 0) await stateChanged(deps, familyId, { deviceId: id });
     return c.json(toDevice(row), 200);
   });
 
@@ -199,7 +197,6 @@ export function registerDeviceRoutes(app: Router, deps: AppDeps) {
         .returning({ id: devices.id }),
     );
     if (!revoked) throw deviceNotFound();
-    disconnectDevices(deps, [revoked.id]);
     return c.body(null, 204);
   });
 
@@ -208,7 +205,6 @@ export function registerDeviceRoutes(app: Router, deps: AppDeps) {
     const body = c.req.valid('json');
     const wrongCode = () => new ApiError('unauthorized', 'That code is wrong or has expired. Ask a parent for a new one.');
     const deviceToken = newDeviceToken();
-    let replaced: { id: string }[] = [];
     const result = await db.transaction(async (tx) => {
       // Lock the code so two devices cannot use it at the same moment.
       const [found] = await tx
@@ -235,7 +231,7 @@ export function registerDeviceRoutes(app: Router, deps: AppDeps) {
 
       if (body.platform === 'windows') {
         // Installing again on the same PC account replaces the old device row.
-        replaced = await tx
+        await tx
           .update(devices)
           .set({ revokedAt: sql`now()`, fcmToken: null })
           .where(
@@ -245,8 +241,7 @@ export function registerDeviceRoutes(app: Router, deps: AppDeps) {
               eq(devices.windowsUserSid, body.windowsUserSid ?? ''),
               isNull(devices.revokedAt),
             ),
-          )
-          .returning({ id: devices.id });
+          );
       }
       const name = (body.platform === 'windows' ? `${body.windowsUserName} on ${body.model}` : body.model).slice(0, 40);
       const [device] = await tx
@@ -298,10 +293,6 @@ export function registerDeviceRoutes(app: Router, deps: AppDeps) {
         },
       };
     });
-    disconnectDevices(
-      deps,
-      replaced.map((d) => d.id),
-    );
     await notifyParents(deps, result.familyId, [result.eventId]);
     return c.json(result.response, 201);
   });

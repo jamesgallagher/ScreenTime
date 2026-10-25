@@ -26,8 +26,6 @@ const app = createApp({
   pusher: createPusher(config.firebaseServiceAccountJson),
 });
 
-const server = serve({ fetch: app.fetch, port: config.port }, (info) => {
+serve({ fetch: app.fetch, port: config.port }, (info) => {
   console.log(`screentime-server listening on http://localhost:${info.port}`);
 });
-// Lets GET /v1/device/ws upgrade to a WebSocket (docs/SPEC.md §8.3).
-app.injectWebSocket(server);

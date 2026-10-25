@@ -1,5 +1,4 @@
 import { createRoute } from '@hono/zod-openapi';
-import { createNodeWebSocket } from '@hono/node-ws';
 import { logger } from 'hono/logger';
 import { ErrorResponse, HealthResponse } from '@screentime/schemas';
 import { registerAdminRoutes } from './admin/routes.js';
@@ -10,8 +9,6 @@ import { registerDeviceRoutes } from './devices/routes.js';
 import { registerFamilyRoutes } from './family/routes.js';
 import { registerGrantRoutes } from './grants/routes.js';
 import { registerKidRoutes } from './kids/routes.js';
-import { LiveHub } from './live/hub.js';
-import { registerLiveRoutes } from './live/routes.js';
 import type { Mailer } from './mailer.js';
 import { registerNotifyRoutes } from './notify/routes.js';
 import type { Pusher } from './push.js';
@@ -25,8 +22,6 @@ export interface AppDeps {
   mailer: Mailer;
   /** Sends FCM pushes. Left out, nothing is sent (tests that do not check pushes). */
   pusher?: Pusher;
-  /** The connected kid devices. Left out, the app makes its own. */
-  hub?: LiveHub;
 }
 
 const healthRoute = createRoute({
@@ -46,14 +41,9 @@ const healthRoute = createRoute({
   },
 });
 
-/**
- * Builds the whole API. Each call has its own rate-limit counters and its own hub of connected devices.
- * `injectWebSocket` must be called with the HTTP server so that `/v1/device/ws` can upgrade.
- */
-export function createApp(appDeps: AppDeps) {
+/** Builds the whole API. Each call has its own rate-limit counters. */
+export function createApp(deps: AppDeps) {
   const app = createRouter();
-  const deps = { ...appDeps, hub: appDeps.hub ?? new LiveHub() };
-  const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app });
 
   if (process.env.NODE_ENV !== 'test') {
     app.use(logger());
@@ -87,9 +77,8 @@ export function createApp(appDeps: AppDeps) {
   registerGrantRoutes(app, deps);
   registerNotifyRoutes(app, deps);
   registerAdminRoutes(app, deps);
-  registerLiveRoutes(app, deps, upgradeWebSocket);
 
-  return Object.assign(app, { injectWebSocket, hub: deps.hub });
+  return app;
 }
 
 /** The OpenAPI 3.1 document for every route (written to contract/openapi.json). */
