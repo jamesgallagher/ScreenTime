@@ -1,0 +1,58 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/inter';
+
+/* Design tokens: docs/SPEC.md §16.1. Light and dark follow the operating system. */
+:root {
+  color-scheme: light dark;
+  --primary: #0f766e;
+  --on-primary: #ffffff;
+  --background: #f7f7f5;
+  --surface: #ffffff;
+  --surface-variant: #efefeb;
+  --on-surface: #1c1917;
+  --muted: #57534e;
+  --outline: #d6d3d1;
+  --warning: #d97706;
+  --critical: #ea580c;
+  --danger: #dc2626;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --primary: #2dd4bf;
+    --on-primary: #042f2e;
+    --background: #0c0a09;
+    --surface: #1c1917;
+    --surface-variant: #292524;
+    --on-surface: #f5f5f4;
+    --muted: #a8a29e;
+    --outline: #44403c;
+    --warning: #fbbf24;
+    --critical: #fb923c;
+    --danger: #f87171;
+  }
+}
+
+@theme inline {
+  --color-primary: var(--primary);
+  --color-on-primary: var(--on-primary);
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-variant: var(--surface-variant);
+  --color-on-surface: var(--on-surface);
+  --color-muted: var(--muted);
+  --color-outline: var(--outline);
+  --color-warning: var(--warning);
+  --color-critical: var(--critical);
+  --color-danger: var(--danger);
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  body {
+    background-color: var(--background);
+    color: var(--on-surface);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+}

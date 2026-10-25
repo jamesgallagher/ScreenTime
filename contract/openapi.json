@@ -113,7 +113,6 @@
         },
         "required": [
           "accessToken",
-          "refreshToken",
           "expiresIn",
           "me"
         ]
@@ -239,10 +238,7 @@
             "minLength": 1,
             "maxLength": 200
           }
-        },
-        "required": [
-          "refreshToken"
-        ]
+        }
       },
       "Family": {
         "type": "object",
@@ -2748,7 +2744,7 @@
           "auth"
         ],
         "summary": "Swap a refresh token for a new token pair",
-        "description": "The refresh token rotates: the old one stops working.",
+        "description": "The refresh token rotates: the old one stops working. The web app sends `{}` and its `st_refresh` cookie instead of the token.",
         "requestBody": {
           "required": true,
           "content": {
@@ -2799,6 +2795,7 @@
           "auth"
         ],
         "summary": "Sign out this session",
+        "description": "Also clears the `st_refresh` cookie of the web app.",
         "security": [
           {
             "bearerAuth": []

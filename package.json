@@ -11,6 +11,7 @@
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm build && pnpm -r test",
     "dev:server": "pnpm --filter @screentime/schemas build && pnpm --filter @screentime/server dev",
+    "dev:web": "pnpm --filter @screentime/schemas build && pnpm --filter @screentime/web dev",
     "contract": "pnpm --filter @screentime/schemas build && pnpm --filter @screentime/server contract"
   },
   "devDependencies": {

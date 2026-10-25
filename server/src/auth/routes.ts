@@ -1,5 +1,7 @@
 import { createRoute } from '@hono/zod-openapi';
 import { and, count, desc, eq, gt, isNull, sql } from 'drizzle-orm';
+import type { Context } from 'hono';
+import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import { AuthResponse, Me, OtpRequest, OtpVerifyRequest, RefreshRequest, type Role } from '@screentime/schemas';
 import type { AppDeps } from '../app.js';
 import type { Db } from '../db/client.js';
@@ -30,6 +32,11 @@ const MAX_ATTEMPTS = 5;
 const MAX_CODES_PER_HOUR = 5;
 /** Refresh tokens slide: a session unused for 90 days is dead. */
 const SESSION_IDLE_LIMIT = sql`now() - interval '90 days'`;
+/** Web sessions keep the refresh token in this cookie, out of reach of page scripts (docs/SPEC.md §11.1). */
+const REFRESH_COOKIE = 'st_refresh';
+const REFRESH_COOKIE_PATH = '/v1/auth';
+const REFRESH_COOKIE_MAX_AGE_SEC = 90 * 24 * 60 * 60;
+type Client = 'web' | 'android';
 
 const otpRequestRoute = createRoute({
   method: 'post',
@@ -58,7 +65,8 @@ const refreshRoute = createRoute({
   path: '/v1/auth/refresh',
   tags: ['auth'],
   summary: 'Swap a refresh token for a new token pair',
-  description: 'The refresh token rotates: the old one stops working.',
+  description:
+    'The refresh token rotates: the old one stops working. The web app sends `{}` and its `st_refresh` cookie instead of the token.',
   request: { body: jsonBody(RefreshRequest) },
   responses: {
     200: { description: 'New tokens.', content: { 'application/json': { schema: AuthResponse } } },
@@ -71,6 +79,7 @@ const logoutRoute = createRoute({
   path: '/v1/auth/logout',
   tags: ['auth'],
   summary: 'Sign out this session',
+  description: 'Also clears the `st_refresh` cookie of the web app.',
   security: bearer,
   responses: { 204: { description: 'Signed out.' }, ...errorResponses(401) },
 });
@@ -143,14 +152,19 @@ export function registerAuthRoutes(app: Router, deps: AppDeps) {
     return isSuperAdmin(email) ? superAdminOnly() : null;
   }
 
-  async function issueTokens(sessionId: string, refreshToken: string, user: SignInUser) {
+  /** Android gets the refresh token in the body; the web app gets it as an HttpOnly cookie and never sees it. */
+  async function issueTokens(c: Context, client: Client, sessionId: string, refreshToken: string, user: SignInUser) {
     const auth: ParentAuth = { sessionId, parentId: user.parentId, familyId: user.familyId, roles: user.roles };
-    return {
-      accessToken: await signAccessToken(config.jwtSecret, auth),
-      refreshToken,
-      expiresIn: ACCESS_TOKEN_TTL_SEC,
-      me: user.me,
-    };
+    const accessToken = await signAccessToken(config.jwtSecret, auth);
+    if (client === 'android') return { accessToken, refreshToken, expiresIn: ACCESS_TOKEN_TTL_SEC, me: user.me };
+    setCookie(c, REFRESH_COOKIE, refreshToken, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'Strict',
+      path: REFRESH_COOKIE_PATH,
+      maxAge: REFRESH_COOKIE_MAX_AGE_SEC,
+    });
+    return { accessToken, expiresIn: ACCESS_TOKEN_TTL_SEC, me: user.me };
   }
 
   app.openapi(otpRequestRoute, async (c) => {
@@ -214,11 +228,13 @@ export function registerAuthRoutes(app: Router, deps: AppDeps) {
       })
       .returning({ id: parentSessions.id });
     if (!session) throw new Error('session insert returned nothing');
-    return c.json(await issueTokens(session.id, refreshToken, user), 200);
+    return c.json(await issueTokens(c, body.client, session.id, refreshToken, user), 200);
   });
 
   app.openapi(refreshRoute, async (c) => {
-    const oldHash = hashRefreshToken(c.req.valid('json').refreshToken);
+    const token = c.req.valid('json').refreshToken ?? getCookie(c, REFRESH_COOKIE);
+    if (!token) throw signInAgain();
+    const oldHash = hashRefreshToken(token);
     const [session] = await db
       .select()
       .from(parentSessions)
@@ -249,7 +265,7 @@ export function registerAuthRoutes(app: Router, deps: AppDeps) {
       .where(and(eq(parentSessions.id, session.id), eq(parentSessions.refreshTokenHash, oldHash)))
       .returning({ id: parentSessions.id });
     if (rotated.length === 0) throw signInAgain();
-    return c.json(await issueTokens(session.id, refreshToken, user), 200);
+    return c.json(await issueTokens(c, session.client as Client, session.id, refreshToken, user), 200);
   });
 
   app.openapi(logoutRoute, async (c) => {
@@ -258,6 +274,7 @@ export function registerAuthRoutes(app: Router, deps: AppDeps) {
       .update(parentSessions)
       .set({ revokedAt: sql`now()` })
       .where(and(eq(parentSessions.id, auth.sessionId), isNull(parentSessions.revokedAt)));
+    deleteCookie(c, REFRESH_COOKIE, { path: REFRESH_COOKIE_PATH, secure: true });
     return c.body(null, 204);
   });
 

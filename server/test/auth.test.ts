@@ -191,6 +191,47 @@ describe.skipIf(!url)('parent sign-in', () => {
     expect((await post('/v1/auth/refresh', { refreshToken: second.refreshToken })).status).toBe(200);
   });
 
+  it('keeps the refresh token of a web session in an HttpOnly cookie, rotated on refresh and cleared on logout', async () => {
+    const refreshWith = (cookie: string | null) =>
+      app.request('/v1/auth/refresh', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...(cookie ? { cookie } : {}) },
+        body: '{}',
+      });
+    const cookieOf = (res: Response) => (res.headers.get('set-cookie') ?? '').split(';')[0] ?? '';
+
+    const code = await requestCode('mum@example.com');
+    const res = await post('/v1/auth/otp/verify', { email: 'mum@example.com', code, client: 'web', clientLabel: 'Browser' });
+    expect(res.status).toBe(200);
+    const auth = AuthResponse.parse(await res.json());
+    expect(auth.refreshToken).toBeUndefined();
+    expect(auth.me.parent?.email).toBe('mum@example.com');
+    expect(res.headers.get('set-cookie')).toMatch(
+      /^st_refresh=[A-Za-z0-9_-]{43}; Max-Age=7776000; Path=\/v1\/auth; HttpOnly; Secure; SameSite=Strict$/,
+    );
+    const first = cookieOf(res);
+
+    const again = await refreshWith(first);
+    expect(again.status).toBe(200);
+    const renewed = AuthResponse.parse(await again.json());
+    expect(renewed.refreshToken).toBeUndefined();
+    expect(renewed.me).toEqual(auth.me);
+    const second = cookieOf(again);
+    expect(second).toMatch(/^st_refresh=[A-Za-z0-9_-]{43}$/);
+    expect(second).not.toBe(first);
+
+    expect((await refreshWith(first)).status).toBe(401);
+    expect((await refreshWith(null)).status).toBe(401);
+
+    const out = await app.request('/v1/auth/logout', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${renewed.accessToken}` },
+    });
+    expect(out.status).toBe(204);
+    expect(out.headers.get('set-cookie')).toMatch(/^st_refresh=; Max-Age=0; Path=\/v1\/auth; Secure/);
+    expect((await refreshWith(second)).status).toBe(401);
+  });
+
   it('refuses a refresh token after 90 days without use', async () => {
     const auth = await signIn('mum@example.com');
     await db.execute(sql`update parent_sessions set last_used_at = now() - interval '91 days'`);
