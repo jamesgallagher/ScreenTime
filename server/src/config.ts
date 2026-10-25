@@ -16,8 +16,6 @@ export interface Config {
   superAdminEmail: string | null;
   /** Null when SMTP_USER, SMTP_PASS or SMTP_FROM is unset: sign-in codes are then logged, not emailed. */
   smtp: SmtpConfig | null;
-  /** The Firebase service account key (JSON). Null when FIREBASE_SERVICE_ACCOUNT_JSON is unset: no pushes are sent. */
-  firebaseServiceAccountJson: string | null;
 }
 
 /** Reads settings from environment variables. Throws if a required one is missing. Empty values count as unset. */
@@ -32,10 +30,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   }
   if (jwtSecret.length < 32) {
     throw new Error('JWT_SECRET must be at least 32 characters');
-  }
-  const firebase = env.FIREBASE_SERVICE_ACCOUNT_JSON?.trim() || null;
-  if (firebase && !isServiceAccount(firebase)) {
-    throw new Error('FIREBASE_SERVICE_ACCOUNT_JSON is not a Firebase service account key');
   }
   const { SMTP_USER: user, SMTP_PASS: pass, SMTP_FROM: from } = env;
   return {
@@ -54,16 +48,5 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
             fromName: env.SMTP_FROM_NAME || 'ScreenTime App',
           }
         : null,
-    firebaseServiceAccountJson: firebase,
   };
-}
-
-/** True for the JSON key file that Firebase downloads (Project settings, Service accounts). */
-function isServiceAccount(json: string) {
-  try {
-    const key = JSON.parse(json) as Record<string, unknown>;
-    return ['project_id', 'client_email', 'private_key'].every((field) => typeof key[field] === 'string');
-  } catch {
-    return false;
-  }
 }

@@ -30,11 +30,9 @@ import {
 } from '../db/schema.js';
 import { requireDevice } from '../devices/auth.js';
 import { toSchedule } from '../kids/routes.js';
-import { notifyParents } from '../notify/dispatch.js';
 import { bearer, deviceBearer, errorResponses, jsonBody, jsonResponse } from '../openapi.js';
 import type { createRouter } from '../router.js';
 import { activeParentModes, dayGrants, daySegments, familyDay, poolStatus } from './day.js';
-import { recordOverspend } from './overspend.js';
 
 type Router = ReturnType<typeof createRouter>;
 
@@ -214,7 +212,7 @@ export function registerSyncRoutes(app: Router, deps: AppDeps) {
     const stored = await withFamily(db, familyId, async (tx) => {
       const [device] = await tx.select({ pool: devices.pool }).from(devices).where(eq(devices.id, deviceId));
       if (!device) throw new Error('device vanished after requireDevice');
-      const rows = await tx
+      return tx
         .insert(usageSegments)
         .values(
           segments.map((s) => ({
@@ -243,12 +241,8 @@ export function registerSyncRoutes(app: Router, deps: AppDeps) {
           setWhere: sql`${usageSegments.deviceId} = excluded.device_id`,
         })
         .returning({ id: usageSegments.id });
-      const storedIds = new Set(rows.map((r) => r.id));
-      const offline = segments.some((s) => s.recordedOffline && storedIds.has(s.id));
-      return { received: rows.length, overspendEventId: offline ? await recordOverspend(tx, kidId, deviceId) : null };
     });
-    if (stored.overspendEventId) await notifyParents(deps, familyId, [stored.overspendEventId]);
-    return c.json({ received: stored.received }, 200);
+    return c.json({ received: stored.length }, 200);
   });
 
   app.openapi(todayRoute, async (c) => {

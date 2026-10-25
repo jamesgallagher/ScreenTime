@@ -7,7 +7,6 @@ import { type FamilyTx, withFamily } from '../db/family.js';
 import { events, families, grants, parents, scheduleVersions, usageSegments } from '../db/schema.js';
 import { ApiError } from '../errors.js';
 import { findKid, toSchedule } from '../kids/routes.js';
-import { notifyParents, pushToKid } from '../notify/dispatch.js';
 import { bearer, errorResponses, jsonBody, jsonResponse } from '../openapi.js';
 import type { createRouter } from '../router.js';
 import { dayGrants, daySegments, type FamilyDay, familyDay, poolStatus } from '../sync/day.js';
@@ -107,10 +106,7 @@ export function registerGrantRoutes(app: Router, deps: AppDeps) {
     return grant ?? null;
   }
 
-  /**
-   * Stores a new grant for today and records a `grant.added` event in the same transaction. `pushes` says
-   * what to send once the transaction has committed; null when nothing new was stored.
-   */
+  /** Stores a new grant for today and records a `grant.added` event in the same transaction. */
   async function insertGrant(
     tx: FamilyTx,
     familyId: string,
@@ -126,51 +122,18 @@ export function registerGrantRoutes(app: Router, deps: AppDeps) {
       .onConflictDoNothing({ target: grants.id })
       .returning({ id: grants.id });
     // Lost a race with the same id from another request: answer with what is stored.
-    if (inserted.length === 0) return { grant: await existing(tx, values.id, kidId), created: false, pushes: null };
+    if (inserted.length === 0) return { grant: await existing(tx, values.id, kidId), created: false };
     const [grant] = await selectGrants(tx, eq(grants.id, values.id));
     if (!grant) throw new Error('grant vanished after insert');
-    // Other parents hear about it as `grant.by_other_parent` (docs/SPEC.md §13).
-    const [event] = await tx
-      .insert(events)
-      .values({
-        familyId,
-        kidId,
-        kind: 'grant.added',
-        at: new Date(grant.createdAt),
-        payload: { grantId: grant.id, pool: grant.pool, minutes: grant.minutes, byName: grant.byName, lockNow },
-      })
-      .returning({ id: events.id });
-    if (!event) throw new Error('event insert returned nothing');
-    return { grant, created: true, pushes: { eventId: event.id, dayEnd: day.dayEnd, now: day.now } };
-  }
-
-  /** After commit: tell the other parents, and the kid's devices in that pool so they show "Dad added 15 minutes". */
-  async function sendPushes(
-    familyId: string,
-    kidId: string,
-    grant: Grant,
-    pushes: { eventId: string; dayEnd: Date; now: Date } | null,
-  ) {
-    if (!pushes) return;
-    await notifyParents(deps, familyId, [pushes.eventId]);
-    // The grant only counts today, so the push is worth nothing after midnight.
-    const ttlSec = Math.max(60, Math.floor((pushes.dayEnd.getTime() - pushes.now.getTime()) / 1000));
-    await pushToKid(
-      deps,
+    // CARD-016 turns this event into `grant.by_other_parent` notifications.
+    await tx.insert(events).values({
       familyId,
       kidId,
-      grant.pool,
-      {
-        v: 1,
-        type: 'grant_added',
-        at: grant.createdAt,
-        data: {
-          grant: { id: grant.id, minutes: grant.minutes, createdAt: grant.createdAt, byName: grant.byName },
-          byName: grant.byName,
-        },
-      },
-      ttlSec,
-    );
+      kind: 'grant.added',
+      at: new Date(grant.createdAt),
+      payload: { grantId: grant.id, pool: grant.pool, minutes: grant.minutes, byName: grant.byName, lockNow },
+    });
+    return { grant, created: true };
   }
 
   app.openapi(listGrantsRoute, async (c) => {
@@ -192,7 +155,7 @@ export function registerGrantRoutes(app: Router, deps: AppDeps) {
     const result = await withFamily(db, familyId, async (tx) => {
       await findKid(tx, kidId);
       const stored = await existing(tx, body.id, kidId);
-      if (stored) return { grant: stored, created: false, pushes: null };
+      if (stored) return { grant: stored, created: false };
       const { day } = await today(tx, familyId);
       return insertGrant(
         tx,
@@ -205,7 +168,6 @@ export function registerGrantRoutes(app: Router, deps: AppDeps) {
       );
     });
     if (!result.grant) throw new ApiError('conflict', 'That grant id is already used.');
-    await sendPushes(familyId, kidId, result.grant, result.pushes);
     return result.created ? c.json(result.grant, 201) : c.json(result.grant, 200);
   });
 
@@ -216,7 +178,7 @@ export function registerGrantRoutes(app: Router, deps: AppDeps) {
     const result = await withFamily(db, familyId, async (tx) => {
       await findKid(tx, kidId);
       const stored = await existing(tx, id, kidId);
-      if (stored) return { grant: stored, created: false, pushes: null };
+      if (stored) return { grant: stored, created: false };
       const { timezone, day } = await today(tx, familyId);
       const [scheduleRow] = await tx
         .select()
@@ -239,7 +201,6 @@ export function registerGrantRoutes(app: Router, deps: AppDeps) {
       return insertGrant(tx, familyId, parentId, kidId, day, { id, pool, minutes, note: 'Lock now' }, true);
     });
     if (!result.grant) throw new ApiError('conflict', 'That grant id is already used.');
-    await sendPushes(familyId, kidId, result.grant, result.pushes);
     return result.created ? c.json(result.grant, 201) : c.json(result.grant, 200);
   });
 }

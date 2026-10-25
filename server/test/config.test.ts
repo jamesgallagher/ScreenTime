@@ -12,7 +12,6 @@ describe('loadConfig', () => {
       jwtSecret: SECRET,
       superAdminEmail: null,
       smtp: null,
-      firebaseServiceAccountJson: null,
     });
   });
 
@@ -50,15 +49,5 @@ describe('loadConfig', () => {
       from: 'no-reply@example.com',
       fromName: 'ScreenTime App',
     });
-  });
-
-  it('reads FIREBASE_SERVICE_ACCOUNT_JSON and rejects anything that is not a service account key', () => {
-    const key = JSON.stringify({ type: 'service_account', project_id: 'p', client_email: 'a@p.iam.gserviceaccount.com', private_key: 'k' });
-    expect(loadConfig({ ...base, FIREBASE_SERVICE_ACCOUNT_JSON: key }).firebaseServiceAccountJson).toBe(key);
-    expect(loadConfig({ ...base, FIREBASE_SERVICE_ACCOUNT_JSON: '' }).firebaseServiceAccountJson).toBeNull();
-    expect(() => loadConfig({ ...base, FIREBASE_SERVICE_ACCOUNT_JSON: '{"project_id":"p"}' })).toThrow(
-      'FIREBASE_SERVICE_ACCOUNT_JSON is not a Firebase service account key',
-    );
-    expect(() => loadConfig({ ...base, FIREBASE_SERVICE_ACCOUNT_JSON: 'not json' })).toThrow('not a Firebase service account key');
   });
 });

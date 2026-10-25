@@ -18,7 +18,6 @@ import { withFamily } from '../db/family.js';
 import { devices, enrolmentCodes, events, families, kids } from '../db/schema.js';
 import { ApiError } from '../errors.js';
 import { findKid } from '../kids/routes.js';
-import { notifyParents } from '../notify/dispatch.js';
 import { bearer, deviceBearer, errorResponses, jsonBody, jsonResponse } from '../openapi.js';
 import type { createRouter } from '../router.js';
 import { requireDevice } from './auth.js';
@@ -269,32 +268,23 @@ export function registerDeviceRoutes(app: Router, deps: AppDeps) {
         .update(enrolmentCodes)
         .set({ consumedAt: sql`now()`, deviceId: device.id })
         .where(eq(enrolmentCodes.id, code.id));
-      // Every notification kind is written to events (docs/SPEC.md §13) and pushed once committed.
-      const [event] = await tx
-        .insert(events)
-        .values({
-          familyId: family.id,
-          kidId: kid.id,
-          deviceId: device.id,
-          kind: 'device.enrolled',
-          at: sql`now()`,
-          payload: { name, form, platform: body.platform },
-        })
-        .returning({ id: events.id });
-      if (!event) throw new Error('event insert returned nothing');
-      return {
-        eventId: event.id,
+      // Every notification kind is written to events (docs/SPEC.md §13); the push comes with notifications.
+      await tx.insert(events).values({
         familyId: family.id,
-        response: {
-          deviceId: device.id,
-          deviceToken,
-          kid: { id: kid.id, name: kid.name },
-          family: { name: family.name, timezone: family.timezone },
-        },
+        kidId: kid.id,
+        deviceId: device.id,
+        kind: 'device.enrolled',
+        at: sql`now()`,
+        payload: { name, form, platform: body.platform },
+      });
+      return {
+        deviceId: device.id,
+        deviceToken,
+        kid: { id: kid.id, name: kid.name },
+        family: { name: family.name, timezone: family.timezone },
       };
     });
-    await notifyParents(deps, result.familyId, [result.eventId]);
-    return c.json(result.response, 201);
+    return c.json(result, 201);
   });
 
   app.openapi(deviceMeRoute, async (c) => {
