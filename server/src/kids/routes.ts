@@ -16,6 +16,7 @@ import { isUniqueViolation } from '../db/errors.js';
 import { type FamilyTx, withFamily } from '../db/family.js';
 import { devices, kidContacts, kids, scheduleVersions } from '../db/schema.js';
 import { ApiError } from '../errors.js';
+import { disconnectDevices, stateChanged } from '../notify/dispatch.js';
 import { bearer, errorResponses, jsonBody, jsonResponse } from '../openapi.js';
 import type { createRouter } from '../router.js';
 import { DEFAULT_WARN1_MIN, DEFAULT_WARN2_MIN, defaultWeek } from './schedule.js';
@@ -202,24 +203,30 @@ export function registerKidRoutes(app: Router, deps: AppDeps) {
       if (!kid) throw kidNotFound();
       return kid;
     });
+    if (Object.keys(patch).length > 0) await stateChanged(deps, familyId, { kidId });
     return c.json(toKid(row), 200);
   });
 
   app.openapi(archiveKidRoute, async (c) => {
     const { familyId } = await caller(c);
     const { kidId } = c.req.valid('param');
-    await withFamily(db, familyId, async (tx) => {
+    const revoked = await withFamily(db, familyId, async (tx) => {
       const [archived] = await tx
         .update(kids)
         .set({ archivedAt: sql`now()` })
         .where(and(eq(kids.id, kidId), isNull(kids.archivedAt)))
         .returning({ id: kids.id });
       if (!archived) throw kidNotFound();
-      await tx
+      return tx
         .update(devices)
         .set({ revokedAt: sql`now()`, fcmToken: null })
-        .where(and(eq(devices.kidId, kidId), isNull(devices.revokedAt)));
+        .where(and(eq(devices.kidId, kidId), isNull(devices.revokedAt)))
+        .returning({ id: devices.id });
     });
+    disconnectDevices(
+      deps,
+      revoked.map((d) => d.id),
+    );
     return c.body(null, 204);
   });
 
@@ -258,6 +265,7 @@ export function registerKidRoutes(app: Router, deps: AppDeps) {
         if (!saved) throw new Error('schedule insert returned nothing');
         return saved;
       });
+      await stateChanged(deps, familyId, { kidId });
       return c.json(toSchedule(row), 200);
     } catch (err) {
       // Two parents saved at the same moment and both took the same version number.
@@ -294,6 +302,7 @@ export function registerKidRoutes(app: Router, deps: AppDeps) {
         .returning();
     });
     rows.sort((a, b) => a.sort - b.sort);
+    await stateChanged(deps, familyId, { kidId });
     return c.json(rows.map(({ id, label, phoneE164 }) => ({ id, label, phoneE164 })), 200);
   });
 }

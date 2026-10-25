@@ -16,6 +16,7 @@ import { isUniqueViolation } from '../db/errors.js';
 import { withFamily } from '../db/family.js';
 import { families, messagePresets, parentSessions, parents } from '../db/schema.js';
 import { ApiError } from '../errors.js';
+import { stateChanged } from '../notify/dispatch.js';
 import { bearer, errorResponses, jsonBody, jsonResponse } from '../openapi.js';
 import type { createRouter } from '../router.js';
 import { newParentCodeSecret } from './secret.js';
@@ -165,6 +166,8 @@ export function registerFamilyRoutes(app: Router, deps: AppDeps) {
         : tx.update(families).set(patch).where(eq(families.id, familyId)).returning(),
     );
     if (!row) throw new ApiError('unauthorized', 'Sign in again.');
+    // Devices hold the time zone and emergency number (docs/SPEC.md §8.2).
+    if (Object.keys(patch).length > 0) await stateChanged(deps, familyId, {});
     return c.json(toFamily(row), 200);
   });
 
@@ -192,6 +195,8 @@ export function registerFamilyRoutes(app: Router, deps: AppDeps) {
           .returning(),
       );
       if (!row) throw new Error('parent insert returned nothing');
+      // Devices list the parents to call.
+      await stateChanged(deps, familyId, {});
       return c.json(toParent(row), 201);
     } catch (err) {
       // Emails are unique across all families, so this can also be a parent of another family.
@@ -211,6 +216,7 @@ export function registerFamilyRoutes(app: Router, deps: AppDeps) {
         : tx.update(parents).set(patch).where(where).returning();
     });
     if (!row) throw parentNotFound();
+    if (Object.keys(patch).length > 0) await stateChanged(deps, familyId, {});
     return c.json(toParent(row), 200);
   });
 
@@ -230,6 +236,7 @@ export function registerFamilyRoutes(app: Router, deps: AppDeps) {
         .set({ revokedAt: sql`now()` })
         .where(and(eq(parentSessions.parentId, id), isNull(parentSessions.revokedAt)));
     });
+    await stateChanged(deps, familyId, {});
     return c.body(null, 204);
   });
 
@@ -254,6 +261,7 @@ export function registerFamilyRoutes(app: Router, deps: AppDeps) {
         .returning();
     });
     rows.sort((a, b) => a.sort - b.sort);
+    await stateChanged(deps, familyId, {});
     return c.json(rows.map(({ id, text }) => ({ id, text })), 200);
   });
 
@@ -268,6 +276,8 @@ export function registerFamilyRoutes(app: Router, deps: AppDeps) {
       tx.update(families).set({ parentCodeSecret: newParentCodeSecret() }).where(eq(families.id, familyId)).returning(),
     );
     if (!row) throw new ApiError('unauthorized', 'Sign in again.');
+    // Devices check offline parent-mode codes against this secret.
+    await stateChanged(deps, familyId, {});
     return c.json({ secret: row.parentCodeSecret }, 200);
   });
 }
