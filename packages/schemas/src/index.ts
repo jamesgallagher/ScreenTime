@@ -83,3 +83,15 @@ export {
   ParentModeStart,
   ParentModeStatus,
 } from './parentmode.js';
+export { DeviceEventIn, DeviceEventKind, DeviceEventUpload } from './tamper.js';
+export {
+  Sos,
+  SosAck,
+  SosDetail,
+  SosLocation,
+  SosLocationIn,
+  SosLocationsUpload,
+  SosMessage,
+  SosStart,
+  SosStatus,
+} from './sos.js';
