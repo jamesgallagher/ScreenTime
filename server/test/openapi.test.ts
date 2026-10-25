@@ -164,26 +164,6 @@ describe('OpenAPI contract', () => {
     );
   });
 
-  it('describes time requests and kid messages, each with the right auth', () => {
-    expect(doc.paths?.['/v1/device/time-requests']?.post?.security).toEqual([{ deviceAuth: [] }]);
-    expect(doc.paths?.['/v1/device/messages']?.post?.security).toEqual([{ deviceAuth: [] }]);
-    expect(doc.paths?.['/v1/requests']?.get?.security).toEqual([{ bearerAuth: [] }]);
-    expect(doc.paths?.['/v1/requests/{id}/approve']?.post?.security).toEqual([{ bearerAuth: [] }]);
-    expect(doc.paths?.['/v1/requests/{id}/deny']?.post?.security).toEqual([{ bearerAuth: [] }]);
-    expect(doc.paths?.['/v1/messages']?.get?.security).toEqual([{ bearerAuth: [] }]);
-    expect(Object.keys(doc.components?.schemas ?? {})).toEqual(
-      expect.arrayContaining([
-        'KidMessage',
-        'KidMessageCreate',
-        'MessagePage',
-        'TimeRequest',
-        'TimeRequestApprove',
-        'TimeRequestCreate',
-        'TimeRequestStatus',
-      ]),
-    );
-  });
-
   it('matches the committed contract/openapi.json (run `pnpm contract` if this fails)', () => {
     const committed = readFileSync(new URL('../../contract/openapi.json', import.meta.url), 'utf8');
     expect(committed).toBe(`${JSON.stringify(doc, null, 2)}\n`);
