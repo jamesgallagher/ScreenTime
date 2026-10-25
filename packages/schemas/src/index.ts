@@ -74,3 +74,12 @@ export {
   TimeRequestCreate,
   TimeRequestStatus,
 } from './requests.js';
+export {
+  ParentModeByCode,
+  ParentModeDuration,
+  ParentModeMessage,
+  ParentModeRequestCreate,
+  ParentModeSession,
+  ParentModeStart,
+  ParentModeStatus,
+} from './parentmode.js';
