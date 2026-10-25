@@ -47,7 +47,7 @@ Spikes come early on purpose: Device Owner + Lock Task on the real phones, and a
 | 019 | Parent mode: requests, approve/deny, remote start/end, parent code secret, `parent_mode.used` | 016 | M | | 12.3 |
 | 019b | Device events: `POST /v1/device/events` for `tamper.*` (section 14), stored and pushed to parents | 016 | S | | 14 |
 | 020 | SOS endpoints, locations, acks, extend, end, email backup | 019b | M | | 15 |
-| 021 | Background jobs (pg-boss): device offline, request expiry at midnight, SOS auto stop | 016 | M | | 8.4, 14 |
+| 021 | Background sweep (in process, once a minute): device offline, SOS auto stop. Time and parent-mode requests already expire when read (018, 019) | 020 | S | | 8.4, 14, 15 |
 
 ## Phase 2: parent web app
 
