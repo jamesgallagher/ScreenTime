@@ -470,7 +470,7 @@ Rules for the kid routes:
 | POST | `/v1/device/sos` | `{ id, startedAt, location? }` |
 | POST | `/v1/device/sos/{id}/locations` | `{ locations: [{ at, lat, lng, accuracyM, batteryPct, via }] }` |
 | POST | `/v1/device/sos/{id}/end` | kid pressed "I'm safe" |
-| GET | `/v1/device/ws` | WebSocket upgrade, `Authorization: Bearer <deviceToken>` |
+| GET | `/v1/device/ws` | WebSocket upgrade, `Authorization: Bearer <deviceToken>`. A wrong or revoked token gets 401 and no socket; a request that is not an upgrade gets 422. Details in section 10 |
 
 Device state snapshot:
 
@@ -510,7 +510,7 @@ To kid devices:
 
 | type | data | Device shows |
 |---|---|---|
-| `state_changed` | `{ stateVersion }` | nothing, re-syncs |
+| `state_changed` | `{}` | nothing, re-syncs (with `If-None-Match`, so an unchanged snapshot costs a 304) |
 | `grant_added` | `{ grant, byName }` | "Dad added 15 minutes" (or "Dad removed 15 minutes") |
 | `request_resolved` | `{ requestId, approved, minutes, byName }` | "Dad said yes: +15 min" / "Dad said not this time" |
 | `parent_mode` | `{ active, endsAt, byName }` | parent mode banner |
@@ -523,7 +523,20 @@ To parent apps: `type` is the notification kind of section 13 and `data` is the 
 
 Delivery (CARD-016): pushes are sent after the database transaction commits. A failed push is logged and dropped (the event is in the history anyway, and devices also sync). Tokens that FCM reports as unregistered or invalid are cleared. `grant_added` to kid devices goes to the kid's Android devices in the grant's pool, with an FCM time to live that ends at local midnight. Without `FIREBASE_SERVICE_ACCOUNT_JSON` nothing is sent.
 
-WebSocket extras: client sends `{ "type": "ping" }` every 30 s, server answers `pong`. Usage uploads stay on REST.
+When the server sends to kid devices (CARD-017). Every message goes by WebSocket to each connected device it is for; "and FCM" means Android devices with a push token get it by FCM too:
+
+| Change | Message | To | FCM |
+|---|---|---|---|
+| A grant or lock now | `grant_added` | the kid's devices in the grant's pool | high priority, time to live until local midnight |
+| Schedule, contacts or kid name changed | `state_changed` | the kid's devices | normal priority, time to live 24 h |
+| Family settings, parents (added, edited, removed), message presets, parent-code secret | `state_changed` | every device of the family | normal, 24 h |
+| Device renamed or moved to another pool | `state_changed` | that device | normal, 24 h |
+| Usage uploaded | `state_changed` | the kid's other devices in that pool | none (uploads come every minute; Android counts the others' use at its next sync) |
+| Device revoked, kid archived, or a PC account enrolled again | the socket is closed with code 4401 | those devices | none |
+
+Messages are sent after the change commits; a failure is logged and dropped.
+
+WebSocket details: the device sends `{ "type": "ping" }` every 30 s and the server answers with the envelope `{ "v": 1, "type": "pong", "at": <server time>, "data": {} }`. Any message from the device counts as a sign of life; a socket silent for 75 s is closed with code 4408, and the device reconnects (section 8.3). Other messages from the device are ignored: usage uploads and everything else stay on REST. The server keeps the connected sockets in memory (one server process); a device may briefly have two while it reconnects.
 
 ## 11. Authentication and security
 

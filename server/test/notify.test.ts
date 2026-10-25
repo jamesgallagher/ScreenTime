@@ -251,7 +251,7 @@ describe.skipIf(!url)('notifications', () => {
       const sos = await api.get(`/v1/events?kidId=${kidId}&kind=sos`, mum);
       expect(sos.body.events.map((e: { kind: string }) => e.kind)).toEqual(['sos.ended', 'sos.started']);
       expect(sos.body.nextBefore).toBeNull();
-      const overspend = await api.get(`/v1/events?kind=overspend`, mum);
+      const overspend = await api.get('/v1/events?kind=overspend', mum);
       expect(overspend.body.events).toHaveLength(2);
       expect((await api.get('/v1/events?kind=overspend', bea)).body.events).toHaveLength(1);
 
