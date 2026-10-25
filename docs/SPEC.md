@@ -552,6 +552,7 @@ WebSocket details: the device sends `{ "type": "ping" }` every 30 s and the serv
    Details (CARD-011): a code row is stored for every requested email, known or not, so the per-email limit does not reveal which emails exist; only emails of enabled parents in enabled families, and `SUPER_ADMIN_EMAIL`, are actually sent a code. Only the newest unexpired code for an email works, and a successful sign-in uses up all of that email's codes. Codes are stored as HMAC-SHA256 keyed with `JWT_SECRET`. Per IP (Cloudflare's `CF-Connecting-IP`): 20 code requests per hour and 30 verify attempts per 15 minutes, in memory.
 3. Android parent app stores tokens in app storage encrypted with an Android Keystore key, and requires `BiometricPrompt` (strong biometric **or** device PIN/pattern) every time the app is opened after 5 minutes in the background.
 4. The web app keeps the refresh token in an `HttpOnly; Secure; SameSite=Strict` cookie and the access token in memory.
+   Details (CARD-022): for `client: "web"` the server sets `st_refresh` (`Path=/v1/auth`, 90 days) and leaves `refreshToken` out of the JSON body; the web app refreshes with `{}` and the cookie, and logout deletes it. The session's stored `client` decides body or cookie. Android is unchanged.
 
 Email is sent over SMTP with nodemailer using env vars, so the provider can be swapped by config alone. Provider (decided 22 Oct 2026): **Brevo SMTP relay**, reusing James's existing Brevo account (the one the Stremio AI Recommender uses):
 
@@ -841,6 +842,8 @@ Unlock: biometric prompt on open (section 11.1). App lock screen shows the app i
 ### 16.5 Parent web app
 
 Same functions as the parent app except SOS alarms (the web shows a red banner at the top of every page while an SOS is active, with the map link) and parent code (also shown in Settings).
+
+Development (CARD-022): `pnpm dev:web` serves the app on http://localhost:5173 and passes `/v1/*` and `/health` to the API on :8080, so the browser sees one origin (in production the server serves the build, CARD-027). Routes are defined in code (TanStack Router, no generator); components are shadcn/ui-style files in `web/src/components/ui` with our tokens, not the shadcn defaults.
 
 Layout: left sidebar 240 px on ≥ 1024 px (Today, Inbox, Kids, Settings, and Admin for the super admin), top bar with a menu sheet below 1024 px. Content max width 1100 px. shadcn/ui components themed with the tokens in 16.1; light and dark follow the OS.
 
