@@ -54,3 +54,13 @@ export {
   UsageUpload,
 } from './sync.js';
 export { Grant, GrantCreate, LocalDate, LockNow } from './grants.js';
+export {
+  ESSENTIAL_KINDS,
+  Envelope,
+  EventItem,
+  EventPage,
+  NotificationKind,
+  NotificationPref,
+  NotificationPrefsPut,
+  PushTokenPut,
+} from './notify.js';

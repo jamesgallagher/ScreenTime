@@ -1561,6 +1561,154 @@
           "pool"
         ]
       },
+      "PushTokenPut": {
+        "type": "object",
+        "properties": {
+          "fcmToken": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 4096
+          }
+        },
+        "required": [
+          "fcmToken"
+        ]
+      },
+      "NotificationPref": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/NotificationKind"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "essential": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "kind",
+          "enabled",
+          "essential"
+        ]
+      },
+      "NotificationKind": {
+        "type": "string",
+        "enum": [
+          "sos",
+          "tamper",
+          "parent_mode.request",
+          "parent_mode.used",
+          "time_request",
+          "kid_message",
+          "overspend",
+          "device.offline",
+          "device.enrolled",
+          "grant.by_other_parent"
+        ]
+      },
+      "NotificationPrefsPut": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "$ref": "#/components/schemas/NotificationKind"
+            },
+            "enabled": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "kind",
+            "enabled"
+          ]
+        },
+        "minItems": 1,
+        "maxItems": 10
+      },
+      "EventPage": {
+        "type": "object",
+        "properties": {
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EventItem"
+            }
+          },
+          "nextBefore": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "events",
+          "nextBefore"
+        ]
+      },
+      "EventItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "kidId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "kidName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "deviceId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "deviceName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "payload": {
+            "type": "object",
+            "additionalProperties": {}
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "at",
+          "kidId",
+          "kidName",
+          "deviceId",
+          "deviceName",
+          "payload"
+        ]
+      },
       "AdminFamily": {
         "type": "object",
         "properties": {
@@ -3997,6 +4145,327 @@
           },
           "409": {
             "description": "Conflicts with existing data.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/me/push-token": {
+      "put": {
+        "tags": [
+          "notifications"
+        ],
+        "summary": "Set this parent app's push token",
+        "description": "For the session of the access token. null stops pushes to this app. Signing out also stops them.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PushTokenPut"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Saved."
+          },
+          "401": {
+            "description": "Not signed in, or the code or token is wrong or expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Signed in, but not allowed to do this.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/me/notification-prefs": {
+      "get": {
+        "tags": [
+          "notifications"
+        ],
+        "summary": "Which notifications this parent gets",
+        "description": "Every kind, in a fixed order. Essential kinds are always on.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The settings.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/NotificationPref"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the code or token is wrong or expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Signed in, but not allowed to do this.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "notifications"
+        ],
+        "summary": "Turn notification kinds on or off",
+        "description": "Kinds left out keep their setting. Turning off an essential kind is refused (422). Muting only stops the push: the history still shows every event.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotificationPrefsPut"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Every kind after the change.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/NotificationPref"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the code or token is wrong or expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Signed in, but not allowed to do this.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/device/push-token": {
+      "put": {
+        "tags": [
+          "device"
+        ],
+        "summary": "Set this kid device's push token",
+        "description": "Android only. null stops pushes to this device.",
+        "security": [
+          {
+            "deviceAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PushTokenPut"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Saved."
+          },
+          "401": {
+            "description": "Not signed in, or the code or token is wrong or expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/events": {
+      "get": {
+        "tags": [
+          "notifications"
+        ],
+        "summary": "The event history",
+        "description": "Newest first, every kind (muted ones too), archived kids included. `limit` defaults to 50. For the next page pass `nextBefore` as `before`.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": false,
+            "name": "kidId",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z_]+(\\.[a-z_]+)*$"
+            },
+            "required": false,
+            "name": "kind",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": false,
+            "name": "before",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of events.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the code or token is wrong or expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Signed in, but not allowed to do this.",
             "content": {
               "application/json": {
                 "schema": {
