@@ -63,7 +63,7 @@ const lockNowRoute = createRoute({
 });
 
 /** Grants with the name of the parent who made them, oldest first. */
-async function selectGrants(tx: FamilyTx, where: SQL | undefined) {
+export async function selectGrants(tx: FamilyTx, where: SQL | undefined) {
   const rows = await tx
     .select({ grant: grants, byName: parents.displayName })
     .from(grants)
@@ -84,6 +84,71 @@ async function selectGrants(tx: FamilyTx, where: SQL | undefined) {
   );
 }
 
+/** The family's time zone and local today. */
+export async function familyToday(tx: FamilyTx, familyId: string): Promise<{ timezone: string; day: FamilyDay }> {
+  const [family] = await tx.select({ timezone: families.timezone }).from(families).where(eq(families.id, familyId));
+  if (!family) throw new Error('family vanished after requireFamilyParent');
+  return { timezone: family.timezone, day: await familyDay(tx, family.timezone) };
+}
+
+/** The grant already stored with this id, if it is this kid's. Another kid's (or family's) id is a conflict. */
+async function existing(tx: FamilyTx, id: string, kidId: string) {
+  const [row] = await tx.select({ kidId: grants.kidId }).from(grants).where(eq(grants.id, id));
+  if (!row) return null;
+  if (row.kidId !== kidId) throw new ApiError('conflict', 'That grant id is already used.');
+  const [grant] = await selectGrants(tx, eq(grants.id, id));
+  return grant ?? null;
+}
+
+/** What to push once the transaction that stored a grant has committed. */
+export interface GrantPushes {
+  eventId: string;
+  dayEnd: Date;
+  now: Date;
+}
+
+/**
+ * Stores a new grant for today and records a `grant.added` event in the same transaction. `pushes` says
+ * what to send once the transaction has committed; null when nothing new was stored.
+ */
+export async function insertGrant(
+  tx: FamilyTx,
+  familyId: string,
+  parentId: string,
+  kidId: string,
+  day: FamilyDay,
+  values: { id: string; pool: Pool; minutes: number; note: string | null; requestId?: string },
+  lockNow: boolean,
+): Promise<{ grant: Grant | null; created: boolean; pushes: GrantPushes | null }> {
+  const inserted = await tx
+    .insert(grants)
+    .values({ ...values, familyId, kidId, day: day.date, createdBy: parentId })
+    .onConflictDoNothing({ target: grants.id })
+    .returning({ id: grants.id });
+  // Lost a race with the same id from another request: answer with what is stored.
+  if (inserted.length === 0) return { grant: await existing(tx, values.id, kidId), created: false, pushes: null };
+  const [grant] = await selectGrants(tx, eq(grants.id, values.id));
+  if (!grant) throw new Error('grant vanished after insert');
+  // Other parents hear about it as `grant.by_other_parent` (docs/SPEC.md §13).
+  const [event] = await tx
+    .insert(events)
+    .values({
+      familyId,
+      kidId,
+      kind: 'grant.added',
+      at: new Date(grant.createdAt),
+      payload: { grantId: grant.id, pool: grant.pool, minutes: grant.minutes, byName: grant.byName, lockNow },
+    })
+    .returning({ id: events.id });
+  if (!event) throw new Error('event insert returned nothing');
+  return { grant, created: true, pushes: { eventId: event.id, dayEnd: day.dayEnd, now: day.now } };
+}
+
+/** Seconds until local midnight, at least a minute: a push about today's time is worth nothing after it. */
+export function secondsToMidnight(dayEnd: Date, now: Date) {
+  return Math.max(60, Math.floor((dayEnd.getTime() - now.getTime()) / 1000));
+}
+
 /**
  * Parent time adjustments: add, remove and lock now (docs/SPEC.md §7.3, §9.2, Q8).
  * A grant always counts for the family's local today. Devices pick it up on their next sync.
@@ -92,69 +157,16 @@ export function registerGrantRoutes(app: Router, deps: AppDeps) {
   const { db, config } = deps;
   const caller = (c: Parameters<typeof requireFamilyParent>[0]) => requireFamilyParent(c, db, config.jwtSecret);
 
-  async function today(tx: FamilyTx, familyId: string): Promise<{ timezone: string; day: FamilyDay }> {
-    const [family] = await tx.select({ timezone: families.timezone }).from(families).where(eq(families.id, familyId));
-    if (!family) throw new Error('family vanished after requireFamilyParent');
-    return { timezone: family.timezone, day: await familyDay(tx, family.timezone) };
-  }
-
-  /** The grant already stored with this id, if it is this kid's. Another kid's (or family's) id is a conflict. */
-  async function existing(tx: FamilyTx, id: string, kidId: string) {
-    const [row] = await tx.select({ kidId: grants.kidId }).from(grants).where(eq(grants.id, id));
-    if (!row) return null;
-    if (row.kidId !== kidId) throw new ApiError('conflict', 'That grant id is already used.');
-    const [grant] = await selectGrants(tx, eq(grants.id, id));
-    return grant ?? null;
-  }
-
-  /**
-   * Stores a new grant for today and records a `grant.added` event in the same transaction. `pushes` says
-   * what to send once the transaction has committed; null when nothing new was stored.
-   */
-  async function insertGrant(
-    tx: FamilyTx,
-    familyId: string,
-    parentId: string,
-    kidId: string,
-    day: FamilyDay,
-    values: { id: string; pool: Pool; minutes: number; note: string | null },
-    lockNow: boolean,
-  ) {
-    const inserted = await tx
-      .insert(grants)
-      .values({ ...values, familyId, kidId, day: day.date, createdBy: parentId })
-      .onConflictDoNothing({ target: grants.id })
-      .returning({ id: grants.id });
-    // Lost a race with the same id from another request: answer with what is stored.
-    if (inserted.length === 0) return { grant: await existing(tx, values.id, kidId), created: false, pushes: null };
-    const [grant] = await selectGrants(tx, eq(grants.id, values.id));
-    if (!grant) throw new Error('grant vanished after insert');
-    // Other parents hear about it as `grant.by_other_parent` (docs/SPEC.md §13).
-    const [event] = await tx
-      .insert(events)
-      .values({
-        familyId,
-        kidId,
-        kind: 'grant.added',
-        at: new Date(grant.createdAt),
-        payload: { grantId: grant.id, pool: grant.pool, minutes: grant.minutes, byName: grant.byName, lockNow },
-      })
-      .returning({ id: events.id });
-    if (!event) throw new Error('event insert returned nothing');
-    return { grant, created: true, pushes: { eventId: event.id, dayEnd: day.dayEnd, now: day.now } };
-  }
-
   /** After commit: tell the other parents, and the kid's devices in that pool so they show "Dad added 15 minutes". */
   async function sendPushes(
     familyId: string,
     kidId: string,
     grant: Grant,
-    pushes: { eventId: string; dayEnd: Date; now: Date } | null,
+    pushes: GrantPushes | null,
   ) {
     if (!pushes) return;
     await notifyParents(deps, familyId, [pushes.eventId]);
-    // The grant only counts today, so the push is worth nothing after midnight.
-    const ttlSec = Math.max(60, Math.floor((pushes.dayEnd.getTime() - pushes.now.getTime()) / 1000));
+    const ttlSec = secondsToMidnight(pushes.dayEnd, pushes.now);
     await sendToDevices(
       deps,
       familyId,
@@ -178,7 +190,7 @@ export function registerGrantRoutes(app: Router, deps: AppDeps) {
     const query = c.req.valid('query');
     const rows = await withFamily(db, familyId, async (tx) => {
       await findKid(tx, kidId);
-      const date = query.day ?? (await today(tx, familyId)).day.date;
+      const date = query.day ?? (await familyToday(tx, familyId)).day.date;
       return selectGrants(tx, and(eq(grants.kidId, kidId), eq(grants.day, date)));
     });
     return c.json(rows, 200);
@@ -192,7 +204,7 @@ export function registerGrantRoutes(app: Router, deps: AppDeps) {
       await findKid(tx, kidId);
       const stored = await existing(tx, body.id, kidId);
       if (stored) return { grant: stored, created: false, pushes: null };
-      const { day } = await today(tx, familyId);
+      const { day } = await familyToday(tx, familyId);
       return insertGrant(
         tx,
         familyId,
@@ -216,7 +228,7 @@ export function registerGrantRoutes(app: Router, deps: AppDeps) {
       await findKid(tx, kidId);
       const stored = await existing(tx, id, kidId);
       if (stored) return { grant: stored, created: false, pushes: null };
-      const { timezone, day } = await today(tx, familyId);
+      const { timezone, day } = await familyToday(tx, familyId);
       const [scheduleRow] = await tx
         .select()
         .from(scheduleVersions)
