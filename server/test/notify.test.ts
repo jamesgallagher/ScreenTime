@@ -355,7 +355,7 @@ describe.skipIf(!url)('notifications', () => {
       const firstSec = (first?.payload as { overspendSec: number }).overspendSec;
       expect(firstSec).toBeGreaterThanOrEqual(600);
       expect(firstSec).toBeLessThan(610);
-      expect(sentTo('fcm-mum')).toMatchObject([{ msg: { type: 'overspend', data: { payload: { overspendSec: firstSec } } } });
+      expect(sentTo('fcm-mum')).toMatchObject([{ msg: { type: 'overspend', data: { payload: { overspendSec: firstSec } } } }]);
 
       // The same segment again: nothing new.
       sent.length = 0;
