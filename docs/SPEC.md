@@ -79,7 +79,7 @@ These are James's answers from the requirements interview (22 Oct 2026). Section
 | Q14 | Parent auth by email + one-time code. The parent phone app is unlocked with biometrics or PIN. A super admin is set by a Docker environment variable. Families contain parents and kids. Multi-tenant. | 6, 11 |
 | Q15 | "Parent mode" on a kid device: the parent approves by push and picks 2 min, 5 min, 15 min, 1 h or indefinite, and the device is unlocked and not counting. If the kid device is offline, a rotating code from the parent app works instead. All parents are notified. | 12.3 |
 | Q16 | Multi-family: v1 serves only James's family, but is multi-tenant from day one with strict per-family isolation (Postgres row-level security), so other families can be added later. Self sign-up and the 20-device sideload limit are later concerns. | 6, 11.4, 18 |
-| Q17 | Each parent can opt out of non-essential notifications. Essential ones are always on. | 13 |
+| Q17 | Each parent can opt out of non-essential notifications. Essential ones are always on: SOS, parent mode requests and "ask for more time" (James, 25 Oct 2026). | 13 |
 | Q18 | Reporting in v1: time used and time remaining today, per kid per pool. | 16.4 |
 | Q19 | Counting: a phone or tablet counts while the screen is on **and** unlocked. A PC counts while the kid is signed in **and** the session is unlocked. There is no idle pause. | 12 |
 | Q20 | Tamper attempts show a cheesy "caught you" screen (kids are 11 and 13) and notify parents. | 14 |
@@ -366,7 +366,7 @@ Expected grant latency: PC about 1 s, Android 1 to 5 s, worst case about 10 s.
 
 ### 8.4 Offline and overspend (Q27)
 
-A device that cannot reach the server keeps enforcing with what it knows. Segments recorded without server contact are flagged `recorded_offline`. When they arrive, the server recomputes the pool; if `overspendSec > 0` it raises an `overspend` event for parents (added with notifications, CARD-016) ("Screens went 12 min over: tablet was offline"). Overspend is never carried to the next day. If an upload makes another online device's pool empty, that device gets the normal warnings, then locks.
+A device that cannot reach the server keeps enforcing with what it knows. Segments recorded without server contact are flagged `recorded_offline`. When they arrive, the server recomputes the uploading device's pool for today; if `overspendSec` is at least 60 it writes an `overspend` event (payload `{ pool, overspendSec, day, deviceName }`) and notifies parents ("Screens went 12 min over: tablet was offline"). A later upload only writes another one when the overspend has grown by at least 60 s over the largest already reported for that kid, pool and day, so re-sent segments never repeat it. Uploads with only online segments never write one. Overspend is never carried to the next day. If an upload makes another online device's pool empty, that device gets the normal warnings, then locks.
 
 ### 8.5 Trusted time
 
@@ -404,8 +404,8 @@ Two kinds of caller: **parent** (Bearer access token from OTP login) and **devic
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/v1/me` | parent, family, roles |
-| PUT | `/v1/me/push-token` | `{ fcmToken }` for this session |
-| GET / PUT | `/v1/me/notification-prefs` | list of `{ kind, enabled }` |
+| PUT | `/v1/me/push-token` | `{ fcmToken \| null }` for the session of the access token → 204. The same token is taken off the parent's other sessions. A revoked session → 401 |
+| GET / PUT | `/v1/me/notification-prefs` | GET: every kind of section 13 in a fixed order, each `{ kind, enabled, essential }`. PUT: list of `{ kind, enabled }`, each kind at most once; kinds left out keep their setting; turning off an essential kind → 422. Answers the full list |
 | GET / PATCH | `/v1/family` | name, timezone, emergency number |
 | GET / POST | `/v1/family/parents` | list, add parent (`email`, `displayName`, `phoneE164`) |
 | PATCH / DELETE | `/v1/family/parents/{id}` | edit, disable |
@@ -430,7 +430,7 @@ Two kinds of caller: **parent** (Bearer access token from OTP login) and **devic
 | POST | `/v1/parent-mode-requests/{id}/approve` | `{ durationMin \| null }` |
 | POST | `/v1/parent-mode-requests/{id}/deny` | |
 | GET | `/v1/messages?kidId=` | newest first, paged |
-| GET | `/v1/events?kidId=&kind=` | newest first, paged |
+| GET | `/v1/events?kidId=&kind=&before=&limit=` | `{ events, nextBefore }`, newest first, every kind (muted ones too), archived kids included. Each event `{ id, kind, at, kidId, kidName, deviceId, deviceName, payload }`. `kind` matches the event kind or its start (`sos` matches `sos.started`). `limit` 1 to 100, default 50. Next page: `before` = `nextBefore` (null on the last page) |
 | GET | `/v1/sos?active=true` | |
 | GET | `/v1/sos/{id}` | incident + locations + acks |
 | POST | `/v1/sos/{id}/ack` | "I'm on it" |
@@ -462,7 +462,7 @@ Rules for the kid routes:
 | GET | `/v1/device/state` | snapshot, ETag (below) |
 | POST | `/v1/device/usage` | `{ segments: [{ id, startedAt, endedAt \| null, recordedOffline }] }` 1 to 500 per call → `{ received }`. Upsert by id (6.1): `startedAt` never moves, the latest `endedAt` wins and a closed segment never reopens, `recordedOffline` once true stays true. Repeats of one id in a call are joined first. An id that belongs to another device is ignored (not counted in `received`). A new segment takes the device's current pool |
 | POST | `/v1/device/events` | `{ events: [{ id, kind, at, payload }] }` tamper, parent mode by code, etc. |
-| PUT | `/v1/device/push-token` | `{ fcmToken }` (Android) |
+| PUT | `/v1/device/push-token` | `{ fcmToken \| null }` (Android) → 204. The same token is taken off any other device |
 | POST | `/v1/device/time-requests` | `{ id, minutes, reason? }` |
 | POST | `/v1/device/messages` | `{ id, body, presetId? }` |
 | POST | `/v1/device/parent-mode-requests` | `{ id }` |
@@ -519,7 +519,9 @@ To kid devices:
 
 Every Android push that changes time produces a visible notification, which keeps FCM high priority from being downgraded.
 
-To parent apps: one message per notification kind in section 13, `data` holds what the notification needs (kid name, pool, minutes, ids). SOS uses FCM `priority: high` and the critical channel.
+To parent apps: `type` is the notification kind of section 13 and `data` is the event exactly as `/v1/events` lists it, so the app shows the same text in the notification and the inbox. Essential kinds use FCM `priority: high` (SOS also uses the critical channel); the rest use normal priority.
+
+Delivery (CARD-016): pushes are sent after the database transaction commits. A failed push is logged and dropped (the event is in the history anyway, and devices also sync). Tokens that FCM reports as unregistered or invalid are cleared. `grant_added` to kid devices goes to the kid's Android devices in the grant's pool, with an FCM time to live that ends at local midnight. Without `FIREBASE_SERVICE_ACCOUNT_JSON` nothing is sent.
 
 WebSocket extras: client sends `{ "type": "ping" }` every 30 s, server answers `pong`. Usage uploads stay on REST.
 
@@ -638,14 +640,16 @@ Parent notifications go to the Android parent app by FCM. The web app shows the 
 | `tamper.*` | Section 14 | No |
 | `parent_mode.request` | Kid asks for parent mode | Yes |
 | `parent_mode.used` | Parent mode started on any device | No |
-| `time_request` | Kid asks for more time | No |
+| `time_request` | Kid asks for more time | Yes (James, 25 Oct 2026) |
 | `kid_message` | Kid sends a message | No |
 | `overspend` | Offline overspend detected | No |
 | `device.offline` | Not seen for 6 h during allowed hours | No |
 | `device.enrolled` | New device added | No |
 | `grant.by_other_parent` | The other parent changed time (from the `grant.added` event every grant writes, payload `{ grantId, pool, minutes, byName, lockNow }`) | No |
 
-Rule (James, 22 Oct 2026): approval requests and SOS are essential; every informational kind can be switched off per parent. Sign-in code emails are always sent. Tamper and parent-mode-used are informational (confirmed). Muting only stops the push: **every** kind is always written to `events` and always shown in the event history (Inbox) in the parent app and web app.
+Rule (James, 22 Oct 2026, confirmed 25 Oct for "ask for more time"): SOS and every request that waits for a parent's answer (`parent_mode.request`, `time_request`) are essential; every informational kind can be switched off per parent. Sign-in code emails are always sent. Tamper and parent-mode-used are informational (confirmed). Muting only stops the push: **every** kind is always written to `events` and always shown in the event history (Inbox) in the parent app and web app.
+
+Who gets a push: every signed-in parent app (an unrevoked parent session with a push token) of an enabled parent in the family, unless that parent turned the kind off. `sos` covers every `sos.*` event and `tamper` every `tamper.*` event. `grant.by_other_parent` is not sent to the parent who made the grant. Event kinds without a notification kind (none yet) are history only.
 
 Android parent app channels: `critical` (SOS: high importance, bypass Do Not Disturb, full-screen intent, alarm sound on the alarm stream looping until acknowledged), `alerts` (tamper, parent mode: high importance), `requests` (time requests, messages: default importance), `info` (the rest: low). First-run setup asks the parent to allow notifications, Do Not Disturb access and full-screen intents.
 

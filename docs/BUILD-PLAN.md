@@ -46,7 +46,7 @@ Spikes come early on purpose: Device Owner + Lock Task on the real phones, and a
 | 018 | Time requests and kid messages (device + parent endpoints) | 016 | M | | 9 |
 | 019 | Parent mode: requests, approve/deny, remote start/end, parent code secret, `parent_mode.used` | 016 | M | | 12.3 |
 | 020 | SOS endpoints, locations, acks, extend, end, email backup | 016 | M | | 15 |
-| 021 | Background jobs (pg-boss): device offline, request expiry at midnight, SOS auto stop, overspend events | 016 | M | | 8.4, 14 |
+| 021 | Background jobs (pg-boss): device offline, request expiry at midnight, SOS auto stop | 016 | M | | 8.4, 14 |
 
 ## Phase 2: parent web app
 
