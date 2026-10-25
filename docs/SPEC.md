@@ -431,11 +431,11 @@ Two kinds of caller: **parent** (Bearer access token from OTP login) and **devic
 | POST | `/v1/parent-mode-requests/{id}/deny` | → 200 session, status `denied`. Already answered or expired → 409 |
 | GET | `/v1/messages?kidId=&before=&limit=` | `{ messages, nextBefore }`, newest first, archived kids included. Each `{ id, kidId, kidName, deviceId, deviceName, body, presetId, createdAt }`. Paged like `/v1/events` |
 | GET | `/v1/events?kidId=&kind=&before=&limit=` | `{ events, nextBefore }`, newest first, every kind (muted ones too), archived kids included. Each event `{ id, kind, at, kidId, kidName, deviceId, deviceName, payload }`. `kind` matches the event kind or its start (`sos` matches `sos.started`). `limit` 1 to 100, default 50. Next page: `before` = `nextBefore` (null on the last page) |
-| GET | `/v1/sos?active=true` | |
-| GET | `/v1/sos/{id}` | incident + locations + acks |
-| POST | `/v1/sos/{id}/ack` | "I'm on it" |
-| POST | `/v1/sos/{id}/extend` | +2 h |
-| POST | `/v1/sos/{id}/end` | |
+| GET | `/v1/sos?active=&kidId=&limit=` | SOS alerts, newest first, archived kids included. Each `{ id, kidId, kidName, deviceId, deviceName, status, startedAt, autoStopAt, endedAt, endedBy, endedByName, lastLocation, acks }`. `status` `active` or `ended`; `endedBy` `kid`, `parent` or `auto` (ran out: `endedAt` = `autoStopAt`). `acks` `[{ parentId, byName, at }]` oldest first. `active` `true` or `false`; `limit` 1 to 100, default 50 |
+| GET | `/v1/sos/{id}` | the SOS plus `locations` (every position, oldest first). The parent app reads it every 30 s while the SOS screen is open: positions are not pushed |
+| POST | `/v1/sos/{id}/ack` | "I'm on it" → 200 SOS. Writes `sos.acked`, tells the phone (`sos_ack`). Again by the same parent → 200, nothing sent. Ended → 409 |
+| POST | `/v1/sos/{id}/extend` | `autoStopAt` + 2 h → 200 SOS. Writes `sos.extended`, tells the phone (`sos_extended`). Ended → 409 |
+| POST | `/v1/sos/{id}/end` | → 200 SOS. Writes `sos.ended`, tells the phone (`sos_ended`). Already ended → 409 (also when two parents end it at once) |
 
 Super admin: `GET/POST /v1/admin/families`, `POST /v1/admin/families/{id}/parents`, `POST /v1/admin/families/{id}/disable`.
 
@@ -468,9 +468,9 @@ Rules for the kid routes:
 | POST | `/v1/device/parent-mode-requests` | `{ id }` → 201 session, status `pending`. Waits 10 min for a parent; a newer request from the same device expires older ones. Parent mode already on → 409. Same `id` again → 200 |
 | POST | `/v1/device/parent-mode` | `{ id, durationMin, startedAt }`: parent mode the device started after a correct parent code (maybe offline) → 201 session, method `code`. A `startedAt` in the future counts as now. Ends any other parent mode on the device. Same `id` again → 200 |
 | POST | `/v1/device/parent-mode/end` | kid device "End now" button → 204 (nothing on is fine) |
-| POST | `/v1/device/sos` | `{ id, startedAt, location? }` |
-| POST | `/v1/device/sos/{id}/locations` | `{ locations: [{ at, lat, lng, accuracyM, batteryPct, via }] }` |
-| POST | `/v1/device/sos/{id}/end` | kid pressed "I'm safe" |
+| POST | `/v1/device/sos` | `{ id, startedAt, location? }` → 201 SOS (shape of `/v1/sos`). Phones only (else 409). Stored from `least(startedAt, now())`, auto stop 2 h later. While the kid has an active SOS → 409. Same `id` again → 200. Writes `sos.started` (critical push) and emails every enabled parent |
+| POST | `/v1/device/sos/{id}/locations` | `{ locations: [{ at, lat, lng, accuracyM?, batteryPct?, via }] }` 1 to 100 → 204. Also after the end (queued positions). A position with the same `at` as a stored one is skipped. Another device's SOS → 404 |
+| POST | `/v1/device/sos/{id}/end` | kid held "I'm safe" → 204, writes `sos.ended`. Already ended is fine |
 | GET | `/v1/device/ws` | WebSocket upgrade, `Authorization: Bearer <deviceToken>`. A wrong or revoked token gets 401 and no socket; a request that is not an upgrade gets 422. Details in section 10 |
 
 Device state snapshot:
@@ -516,6 +516,7 @@ To kid devices:
 | `request_resolved` | `{ requestId, approved, minutes, byName, grant }` (`minutes` 0 and `grant` null for a no) | "Dad said yes: +15 min" / "Dad said not this time", then re-syncs |
 | `parent_mode` | `{ active, endsAt, byName, requestId }` (`requestId` set when it answers the device's request; `active: false` with a `requestId` is a no) | parent mode banner, or closes the "Hand to a parent" screen |
 | `sos_ack` | `{ sosId, byName }` | "Dad has seen your SOS" |
+| `sos_extended` | `{ sosId, byName, autoStopAt }` | keeps sharing its location until the new `autoStopAt` |
 | `sos_ended` | `{ sosId, byName }` | SOS screen closes |
 
 Every Android push that changes time produces a visible notification, which keeps FCM high priority from being downgraded.
@@ -653,7 +654,7 @@ Parent notifications go to the Android parent app by FCM. The web app shows the 
 
 | Kind | When | Essential (cannot be turned off) |
 |---|---|---|
-| `sos.started`, `sos.update`, `sos.ended` | Section 15 | Yes, critical alert |
+| `sos.started`, `sos.acked`, `sos.extended`, `sos.ended` | Section 15 | Yes, critical alert |
 | `tamper.*` | Section 14 | No |
 | `parent_mode.request` | Kid asks for parent mode | Yes |
 | `parent_mode.used` | Parent mode started on any device | No |
@@ -666,7 +667,7 @@ Parent notifications go to the Android parent app by FCM. The web app shows the 
 
 Rule (James, 22 Oct 2026, confirmed 25 Oct for "ask for more time"): SOS and every request that waits for a parent's answer (`parent_mode.request`, `time_request`) are essential; every informational kind can be switched off per parent. Sign-in code emails are always sent. Tamper and parent-mode-used are informational (confirmed). Muting only stops the push: **every** kind is always written to `events` and always shown in the event history (Inbox) in the parent app and web app.
 
-Who gets a push: every signed-in parent app (an unrevoked parent session with a push token) of an enabled parent in the family, unless that parent turned the kind off. `sos` covers every `sos.*` event and `tamper` every `tamper.*` event. `grant.by_other_parent` is not sent to the parent who made the grant. Event kinds without a notification kind are history only: `time_request.resolved` (payload `{ requestId, approved, minutes, byName }`, written when a parent answers; a yes also writes `grant.added`, so the other parent hears about it as `grant.by_other_parent`). Payloads (CARD-018): `time_request` `{ requestId, pool, minutes, reason }`, `kid_message` `{ messageId, body }`. Parent mode (CARD-019): `parent_mode.request` `{ requestId }`; `parent_mode.used` `{ sessionId, method, durationMin, endsAt, byName }` (every start, `byName` null for the code; all parents get it, the one who started it too); history only: `parent_mode.denied` and `parent_mode.ended` `{ sessionId, byName }` (`byName` null when the device ended it). Tamper (CARD-019b), suggested payloads from the device: `tamper.clock` `{ deviceTime, trustedTime, skewSec }`, `tamper.timezone` `{ from, to }`, `tamper.tray_killed` `{ exits }`, `tamper.policy` `{ policy }`, `tamper.call_blocked` `{ number }`.
+Who gets a push: every signed-in parent app (an unrevoked parent session with a push token) of an enabled parent in the family, unless that parent turned the kind off. `sos` covers every `sos.*` event and `tamper` every `tamper.*` event. `grant.by_other_parent` is not sent to the parent who made the grant. Event kinds without a notification kind are history only: `time_request.resolved` (payload `{ requestId, approved, minutes, byName }`, written when a parent answers; a yes also writes `grant.added`, so the other parent hears about it as `grant.by_other_parent`). Payloads (CARD-018): `time_request` `{ requestId, pool, minutes, reason }`, `kid_message` `{ messageId, body }`. Parent mode (CARD-019): `parent_mode.request` `{ requestId }`; `parent_mode.used` `{ sessionId, method, durationMin, endsAt, byName }` (every start, `byName` null for the code; all parents get it, the one who started it too); history only: `parent_mode.denied` and `parent_mode.ended` `{ sessionId, byName }` (`byName` null when the device ended it). SOS (CARD-020): `sos.started` `{ sosId, startedAt, location }` (`location` as in `/v1/sos`, or null), `sos.acked` `{ sosId, byName }`, `sos.extended` `{ sosId, autoStopAt, byName }`, `sos.ended` `{ sosId, endedBy, byName }` (`endedBy` `kid` with `byName` null, or `parent`); every parent gets each, the one who acted too, and the parent app only rings the alarm for `sos.started`. Tamper (CARD-019b), suggested payloads from the device: `tamper.clock` `{ deviceTime, trustedTime, skewSec }`, `tamper.timezone` `{ from, to }`, `tamper.tray_killed` `{ exits }`, `tamper.policy` `{ policy }`, `tamper.call_blocked` `{ number }`.
 
 Android parent app channels: `critical` (SOS: high importance, bypass Do Not Disturb, full-screen intent, alarm sound on the alarm stream looping until acknowledged), `alerts` (tamper, parent mode: high importance), `requests` (time requests, messages: default importance), `info` (the rest: low). First-run setup asks the parent to allow notifications, Do Not Disturb access and full-screen intents.
 
@@ -700,7 +701,7 @@ Phones with cellular only.
 
 1. **Trigger:** a red SOS button on the block screen and in the kid app's main screen. Press and hold for 2 seconds (a ring fills), then a 5-second countdown with a large **Cancel** button.
 2. **SMS at once:** `SmsManager` sends to every parent with a phone number (no prompt, Device Owner grants SMS): "SOS from Alex. Location: https://maps.google.com/?q=-33.8,151.2 (±20 m). Battery 54%." Works without data.
-3. **Server:** `POST /v1/device/sos` → `sos.started` critical push to every parent app and an email to every parent.
+3. **Server:** `POST /v1/device/sos` → `sos.started` critical push to every parent app and an email to every enabled parent (subject "SOS from Alex", the local time, the map link and battery, CARD-020).
 4. **Live location:** fused location every 30 s over data (`/locations`), or one SMS every 5 min if there is no data. Auto stop after 2 h; a parent can extend by 2 h.
 5. **Parent app:** full-screen red alert with the kid's name, time, last location (lat/lng, accuracy, age), battery, **Open in Maps** (geo intent), **Call Alex**, **I'm on it** (ack) and **End SOS**.
 6. **Acknowledge:** the kid sees "Dad has seen your SOS" and big call buttons for each parent, plus a separate emergency number button.
