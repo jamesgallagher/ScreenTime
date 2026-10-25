@@ -1976,6 +1976,73 @@
           "durationMin"
         ]
       },
+      "DeviceEventUpload": {
+        "type": "object",
+        "properties": {
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeviceEventIn"
+            },
+            "minItems": 1,
+            "maxItems": 50
+          }
+        },
+        "required": [
+          "events"
+        ]
+      },
+      "DeviceEventIn": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/DeviceEventKind"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "payload": {
+            "type": "object",
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "at"
+        ]
+      },
+      "DeviceEventKind": {
+        "type": "string",
+        "enum": [
+          "tamper.clock",
+          "tamper.timezone",
+          "tamper.tray_killed",
+          "tamper.policy",
+          "tamper.call_blocked"
+        ]
+      },
       "PushTokenPut": {
         "type": "object",
         "properties": {
@@ -5592,6 +5659,55 @@
           },
           "404": {
             "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/device/events": {
+      "post": {
+        "tags": [
+          "device"
+        ],
+        "summary": "Report tamper attempts",
+        "description": "Every event is stored in the history. Parents get one push per kind per upload, for the latest one. An `id` that is already stored is skipped, so sending a queue again is safe.",
+        "security": [
+          {
+            "deviceAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceEventUpload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Stored."
+          },
+          "401": {
+            "description": "Not signed in, or the code or token is wrong or expired.",
             "content": {
               "application/json": {
                 "schema": {
