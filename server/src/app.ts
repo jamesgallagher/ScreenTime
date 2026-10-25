@@ -10,6 +10,8 @@ import { registerFamilyRoutes } from './family/routes.js';
 import { registerGrantRoutes } from './grants/routes.js';
 import { registerKidRoutes } from './kids/routes.js';
 import type { Mailer } from './mailer.js';
+import { registerNotifyRoutes } from './notify/routes.js';
+import type { Pusher } from './push.js';
 import { createRouter } from './router.js';
 import { registerSyncRoutes } from './sync/routes.js';
 
@@ -18,6 +20,8 @@ export interface AppDeps {
   db: Db;
   config: Config;
   mailer: Mailer;
+  /** Sends FCM pushes. Left out, nothing is sent (tests that do not check pushes). */
+  pusher?: Pusher;
 }
 
 const healthRoute = createRoute({
@@ -71,6 +75,7 @@ export function createApp(deps: AppDeps) {
   registerDeviceRoutes(app, deps);
   registerSyncRoutes(app, deps);
   registerGrantRoutes(app, deps);
+  registerNotifyRoutes(app, deps);
   registerAdminRoutes(app, deps);
 
   return app;
@@ -78,7 +83,7 @@ export function createApp(deps: AppDeps) {
 
 /** The OpenAPI 3.1 document for every route (written to contract/openapi.json). */
 export function openApiDocument(): ReturnType<ReturnType<typeof createApp>['getOpenAPI31Document']> {
-  // Building the document never runs a handler, so the routes need no real database, settings or mailer.
+  // Building the document never runs a handler, so the routes need no real database, settings, mailer or pusher.
   const app = createApp({} as AppDeps);
   return app.getOpenAPI31Document({
     openapi: '3.1.0',
