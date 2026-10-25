@@ -124,7 +124,7 @@ Also decided in research (22 Oct 2026): the tech stack in section 4, the sync de
 | Android shared code | Plain Kotlin modules: Ktor client, kotlinx.serialization, kotlinx-datetime | Shared by both apps, and KMP-ready for a future iOS parent app. |
 | Windows enforcer | C# on .NET 10 (LTS), Worker Service as a Windows service, Native AOT | First-class Windows service support, small native exe, session lock/unlock events. |
 | Windows tray | C# WinUI 3 (Windows App SDK) + H.NotifyIcon | Native Windows 11 look (Mica, Fluent) and shares code with the service. |
-| Server | TypeScript on Node 24 LTS, Hono, Zod (schemas → OpenAPI), firebase-admin, pg-boss | Small and fast, same language as the web app, reference FCM SDK, native WebSockets. |
+| Server | TypeScript on Node 24 LTS, Hono, Zod (schemas → OpenAPI), firebase-admin; background work is an in-process sweep once a minute (CARD-021, no job queue: one server process) | Small and fast, same language as the web app, reference FCM SDK, native WebSockets. |
 | Database | PostgreSQL 18, Drizzle ORM | Row-level security per family, typed queries, migrations. |
 | Web | TypeScript, React 19, Vite SPA, TanStack Router + Query, Tailwind CSS v4, shadcn/ui | Modern, typed, static build served by the API container. |
 | Contract | Zod schemas → `contract/openapi.json` (committed). Kotlin and C# clients generated from it. CI fails on drift. | One API definition for three languages. |
@@ -374,7 +374,7 @@ A device that cannot reach the server keeps enforcing with what it knows. Segmen
 - After a reboot while offline the monotonic clock resets; fall back to wall clock, but never earlier than the last saved trusted time.
 - If the wall clock differs from `trustedNow` by more than 2 minutes, keep using `trustedNow` and raise a `tamper.clock` event.
 - Local dates, wake and bedtime always use the **family** time zone from the snapshot, never the device's time zone.
-- A device not seen for 6 hours during allowed hours raises `device.offline` for parents.
+- A device not seen for 6 hours during allowed hours raises `device.offline` for parents: the server's sweep (once a minute) reports a device whose `last_seen_at` is more than 6 hours ago when all of those 6 hours fall in today's allowed hours of its kid (`wake` to `bedtime`, family time zone), so a device that was off overnight is not reported in the morning. One event per absence, payload `{ lastSeenAt, deviceName }`; seen again and then silent again is a new absence (CARD-021).
 
 ## 9. API surface
 
@@ -707,6 +707,7 @@ Phones with cellular only.
 6. **Acknowledge:** the kid sees "Dad has seen your SOS" and big call buttons for each parent, plus a separate emergency number button.
 7. **End:** the kid holds **I'm safe** for 2 s, or a parent taps **End SOS**. Every parent gets "SOS ended" by push and SMS with the last location. History is kept.
 8. SOS usage is not counted and SOS works in any state (locked, unlocked, parent mode, offline).
+9. **Auto stop:** the API shows an SOS past `autoStopAt` as ended by `auto` at once; the server's sweep (once a minute) then stores it (`ended_at = auto_stop_at`, `ended_by_kind = auto`) and writes `sos.ended` `{ sosId, endedBy: 'auto', byName: null }`, which every parent gets. Nothing is sent to the phone: it stops sharing by itself (CARD-021).
 
 ## 16. UX and visual direction
 
