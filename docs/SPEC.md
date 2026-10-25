@@ -423,12 +423,12 @@ Two kinds of caller: **parent** (Bearer access token from OTP login) and **devic
 | POST | `/v1/kids/{kidId}/enrolment-codes` | `{ form }` → `{ code, qrPayload, expiresAt }` |
 | GET | `/v1/devices` | all devices in family |
 | PATCH / DELETE | `/v1/devices/{id}` | rename, change pool; DELETE revokes the token |
-| POST / DELETE | `/v1/devices/{id}/parent-mode` | start remotely `{ durationMin \| null }`, or end |
+| POST / DELETE | `/v1/devices/{id}/parent-mode` | POST `{ durationMin }` (2, 5, 15, 60 or null = until ended) → 201 session, method `remote`; ends any other parent mode on the device first. DELETE ends it → 204 (nothing on is fine). Revoked device → 404 |
 | GET | `/v1/requests?status=&kidId=&limit=` | time requests, newest first, archived kids left out. Each `{ id, kidId, kidName, deviceId, deviceName, pool, minutes, reason, status, createdAt, resolvedAt, resolvedByName, grantId, grantedMinutes }`. `limit` 1 to 100, default 50 |
 | POST | `/v1/requests/{id}/approve` | `{ minutes? }` (a multiple of 15 from 15 to 1440; defaults to what was asked) → 200 request. Creates a grant for today in the request's pool, note "Asked for more time". Already answered or expired → 409 |
 | POST | `/v1/requests/{id}/deny` | → 200 request. Already answered or expired → 409 |
-| POST | `/v1/parent-mode-requests/{id}/approve` | `{ durationMin \| null }` |
-| POST | `/v1/parent-mode-requests/{id}/deny` | |
+| POST | `/v1/parent-mode-requests/{id}/approve` | `{ durationMin }` → 200 session, parent mode on. Already answered or expired → 409 |
+| POST | `/v1/parent-mode-requests/{id}/deny` | → 200 session, status `denied`. Already answered or expired → 409 |
 | GET | `/v1/messages?kidId=&before=&limit=` | `{ messages, nextBefore }`, newest first, archived kids included. Each `{ id, kidId, kidName, deviceId, deviceName, body, presetId, createdAt }`. Paged like `/v1/events` |
 | GET | `/v1/events?kidId=&kind=&before=&limit=` | `{ events, nextBefore }`, newest first, every kind (muted ones too), archived kids included. Each event `{ id, kind, at, kidId, kidName, deviceId, deviceName, payload }`. `kind` matches the event kind or its start (`sos` matches `sos.started`). `limit` 1 to 100, default 50. Next page: `before` = `nextBefore` (null on the last page) |
 | GET | `/v1/sos?active=true` | |
@@ -461,12 +461,13 @@ Rules for the kid routes:
 | GET | `/v1/device/me` | `{ device, kid, family }`; a 401 means the device was revoked and must enrol again |
 | GET | `/v1/device/state` | snapshot, ETag (below) |
 | POST | `/v1/device/usage` | `{ segments: [{ id, startedAt, endedAt \| null, recordedOffline }] }` 1 to 500 per call → `{ received }`. Upsert by id (6.1): `startedAt` never moves, the latest `endedAt` wins and a closed segment never reopens, `recordedOffline` once true stays true. Repeats of one id in a call are joined first. An id that belongs to another device is ignored (not counted in `received`). A new segment takes the device's current pool |
-| POST | `/v1/device/events` | `{ events: [{ id, kind, at, payload }] }` tamper, parent mode by code, etc. |
+| POST | `/v1/device/events` | `{ events: [{ id, kind, at, payload }] }` tamper events (CARD-019b) |
 | PUT | `/v1/device/push-token` | `{ fcmToken \| null }` (Android) → 204. The same token is taken off any other device |
 | POST | `/v1/device/time-requests` | `{ id, minutes, reason? }` → 201 request (shape of `/v1/requests`). `minutes` 15, 30 or 60, `reason` 1 to 160 characters. For the device's pool. While the kid has a pending request for that pool → 409. Same `id` again → 200 |
 | POST | `/v1/device/messages` | `{ id, body, presetId? }` → 201 message (shape of `/v1/messages`). `body` 1 to 160 characters. A `presetId` that no longer exists is stored as null. Same `id` again → 200 |
-| POST | `/v1/device/parent-mode-requests` | `{ id }` |
-| POST | `/v1/device/parent-mode/end` | kid device "End parent mode" button |
+| POST | `/v1/device/parent-mode-requests` | `{ id }` → 201 session, status `pending`. Waits 10 min for a parent; a newer request from the same device expires older ones. Parent mode already on → 409. Same `id` again → 200 |
+| POST | `/v1/device/parent-mode` | `{ id, durationMin, startedAt }`: parent mode the device started after a correct parent code (maybe offline) → 201 session, method `code`. A `startedAt` in the future counts as now. Ends any other parent mode on the device. Same `id` again → 200 |
+| POST | `/v1/device/parent-mode/end` | kid device "End now" button → 204 (nothing on is fine) |
 | POST | `/v1/device/sos` | `{ id, startedAt, location? }` |
 | POST | `/v1/device/sos/{id}/locations` | `{ locations: [{ at, lat, lng, accuracyM, batteryPct, via }] }` |
 | POST | `/v1/device/sos/{id}/end` | kid pressed "I'm safe" |
@@ -513,7 +514,7 @@ To kid devices:
 | `state_changed` | `{}` | nothing, re-syncs (with `If-None-Match`, so an unchanged snapshot costs a 304) |
 | `grant_added` | `{ grant, byName }` | "Dad added 15 minutes" (or "Dad removed 15 minutes") |
 | `request_resolved` | `{ requestId, approved, minutes, byName, grant }` (`minutes` 0 and `grant` null for a no) | "Dad said yes: +15 min" / "Dad said not this time", then re-syncs |
-| `parent_mode` | `{ active, endsAt, byName }` | parent mode banner |
+| `parent_mode` | `{ active, endsAt, byName, requestId }` (`requestId` set when it answers the device's request; `active: false` with a `requestId` is a no) | parent mode banner, or closes the "Hand to a parent" screen |
 | `sos_ack` | `{ sosId, byName }` | "Dad has seen your SOS" |
 | `sos_ended` | `{ sosId, byName }` | SOS screen closes |
 
@@ -533,6 +534,7 @@ When the server sends to kid devices (CARD-017). Every message goes by WebSocket
 | Device renamed or moved to another pool | `state_changed` | that device | normal, 24 h |
 | A kid asks for more time (CARD-018) | `state_changed` | the kid's other devices in that pool | normal, 24 h |
 | A parent answers a time request (CARD-018) | `request_resolved` | the kid's devices in the request's pool | high priority, time to live until local midnight |
+| A parent approves or denies parent mode, or starts or ends it from the app (CARD-019) | `parent_mode` | that device | high priority; time to live until it ends (24 h for "until ended", 1 h for an end or a no) |
 | Usage uploaded | `state_changed` | the kid's other devices in that pool | none (uploads come every minute; Android counts the others' use at its next sync) |
 | Device revoked, kid archived, or a PC account enrolled again | the socket is closed with code 4401 | those devices | none |
 
@@ -638,8 +640,8 @@ Messages and requests are sent through the server. If the phone has no data, the
 Parent mode makes one kid device unlocked and not counting for a chosen time. It is the only pause.
 
 1. On the kid device the parent taps **I'm the parent**.
-2. Device sends `POST /v1/device/parent-mode-requests`. Every parent gets a `parent_mode_request` push with actions. A parent opens it (biometric unlock), picks **2 min, 5 min, 15 min, 1 h or Until I end it**, and approves. The device gets a `parent_mode` push and unlocks.
-3. If the device is offline, or no one answers, the same screen offers **Enter parent code**: a 6-digit TOTP (RFC 6238, SHA-1, 30 s step, accept ±1 step) shown in the parent app, computed from the family `parent_code_secret`. After a correct code the device asks the duration and starts locally. It raises a `parent_mode.used` event when it next syncs.
+2. Device sends `POST /v1/device/parent-mode-requests`. Every parent gets a `parent_mode.request` push with actions. A parent opens it (biometric unlock), picks **2 min, 5 min, 15 min, 1 h or Until I end it**, and approves. The device gets a `parent_mode` push and unlocks.
+3. If the device is offline, or no one answers, the same screen offers **Enter parent code**: a 6-digit TOTP (RFC 6238, SHA-1, 30 s step, accept ±1 step) shown in the parent app, computed from the family `parent_code_secret`. After a correct code the device asks the duration and starts locally, then reports it with `POST /v1/device/parent-mode` (sent again until the server has it), which raises a `parent_mode.used` event.
 4. A parent can also start parent mode remotely from the parent app's device screen (needed for a locked Windows PC).
 5. While active: no segments are recorded, Lock Task is off, and a banner/notification says "Parent mode · ends 4:15 pm" with **End now**.
 6. "Until I end it" lasts until a parent ends it on the device or in the parent app.
@@ -664,7 +666,7 @@ Parent notifications go to the Android parent app by FCM. The web app shows the 
 
 Rule (James, 22 Oct 2026, confirmed 25 Oct for "ask for more time"): SOS and every request that waits for a parent's answer (`parent_mode.request`, `time_request`) are essential; every informational kind can be switched off per parent. Sign-in code emails are always sent. Tamper and parent-mode-used are informational (confirmed). Muting only stops the push: **every** kind is always written to `events` and always shown in the event history (Inbox) in the parent app and web app.
 
-Who gets a push: every signed-in parent app (an unrevoked parent session with a push token) of an enabled parent in the family, unless that parent turned the kind off. `sos` covers every `sos.*` event and `tamper` every `tamper.*` event. `grant.by_other_parent` is not sent to the parent who made the grant. Event kinds without a notification kind are history only: `time_request.resolved` (payload `{ requestId, approved, minutes, byName }`, written when a parent answers; a yes also writes `grant.added`, so the other parent hears about it as `grant.by_other_parent`). Payloads (CARD-018): `time_request` `{ requestId, pool, minutes, reason }`, `kid_message` `{ messageId, body }`.
+Who gets a push: every signed-in parent app (an unrevoked parent session with a push token) of an enabled parent in the family, unless that parent turned the kind off. `sos` covers every `sos.*` event and `tamper` every `tamper.*` event. `grant.by_other_parent` is not sent to the parent who made the grant. Event kinds without a notification kind are history only: `time_request.resolved` (payload `{ requestId, approved, minutes, byName }`, written when a parent answers; a yes also writes `grant.added`, so the other parent hears about it as `grant.by_other_parent`). Payloads (CARD-018): `time_request` `{ requestId, pool, minutes, reason }`, `kid_message` `{ messageId, body }`. Parent mode (CARD-019): `parent_mode.request` `{ requestId }`; `parent_mode.used` `{ sessionId, method, durationMin, endsAt, byName }` (every start, `byName` null for the code; all parents get it, the one who started it too); history only: `parent_mode.denied` and `parent_mode.ended` `{ sessionId, byName }` (`byName` null when the device ended it).
 
 Android parent app channels: `critical` (SOS: high importance, bypass Do Not Disturb, full-screen intent, alarm sound on the alarm stream looping until acknowledged), `alerts` (tamper, parent mode: high importance), `requests` (time requests, messages: default importance), `info` (the rest: low). First-run setup asks the parent to allow notifications, Do Not Disturb access and full-screen intents.
 

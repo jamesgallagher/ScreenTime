@@ -331,6 +331,7 @@ describe.skipIf(!url)('time requests', () => {
       const id = await ask(30);
       expect((await api.post(`/v1/requests/${id}/approve`, bea, {})).status).toBe(404);
       expect((await api.post(`/v1/requests/${randomUUID()}/approve`, mum, {})).status).toBe(404);
+
       const samId = await addKid(familyA, 'Sam');
       const samPhone = await addDevice(familyA, samId, 'phone', 'Sam phone', 'fcm-sam');
       const samAsk = randomUUID();
