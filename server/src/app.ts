@@ -13,8 +13,10 @@ import { registerKidRoutes } from './kids/routes.js';
 import { LiveHub } from './live/hub.js';
 import { registerLiveRoutes } from './live/routes.js';
 import type { Mailer } from './mailer.js';
+import { registerMessageRoutes } from './messages/routes.js';
 import { registerNotifyRoutes } from './notify/routes.js';
 import type { Pusher } from './push.js';
+import { registerRequestRoutes } from './requests/routes.js';
 import { createRouter } from './router.js';
 import { registerSyncRoutes } from './sync/routes.js';
 
@@ -85,6 +87,8 @@ export function createApp(appDeps: AppDeps) {
   registerDeviceRoutes(app, deps);
   registerSyncRoutes(app, deps);
   registerGrantRoutes(app, deps);
+  registerRequestRoutes(app, deps);
+  registerMessageRoutes(app, deps);
   registerNotifyRoutes(app, deps);
   registerAdminRoutes(app, deps);
   registerLiveRoutes(app, deps, upgradeWebSocket);
