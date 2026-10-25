@@ -15,6 +15,7 @@ import { registerLiveRoutes } from './live/routes.js';
 import type { Mailer } from './mailer.js';
 import { registerMessageRoutes } from './messages/routes.js';
 import { registerNotifyRoutes } from './notify/routes.js';
+import { registerParentModeRoutes } from './parentmode/routes.js';
 import type { Pusher } from './push.js';
 import { registerRequestRoutes } from './requests/routes.js';
 import { createRouter } from './router.js';
@@ -89,6 +90,7 @@ export function createApp(appDeps: AppDeps) {
   registerGrantRoutes(app, deps);
   registerRequestRoutes(app, deps);
   registerMessageRoutes(app, deps);
+  registerParentModeRoutes(app, deps);
   registerNotifyRoutes(app, deps);
   registerAdminRoutes(app, deps);
   registerLiveRoutes(app, deps, upgradeWebSocket);
