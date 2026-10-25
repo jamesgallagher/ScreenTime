@@ -26,10 +26,10 @@ export const OtpVerifyRequest = z
 
 export type OtpVerifyRequest = z.infer<typeof OtpVerifyRequest>;
 
-/** Body of POST /v1/auth/refresh. */
+/** Body of POST /v1/auth/refresh. The web app sends `{}`: its refresh token is in the `st_refresh` cookie. */
 export const RefreshRequest = z
   .object({
-    refreshToken: z.string().min(1).max(200),
+    refreshToken: z.string().min(1).max(200).optional(),
   })
   .meta({ id: 'RefreshRequest' });
 
@@ -64,7 +64,8 @@ export type Me = z.infer<typeof Me>;
 export const AuthResponse = z
   .object({
     accessToken: z.string(),
-    refreshToken: z.string(),
+    /** Android only. A web session gets it in the `st_refresh` cookie instead (HttpOnly, docs/SPEC.md §11.1). */
+    refreshToken: z.string().optional(),
     /** Seconds until the access token expires. */
     expiresIn: z.number().int().positive(),
     me: Me,
