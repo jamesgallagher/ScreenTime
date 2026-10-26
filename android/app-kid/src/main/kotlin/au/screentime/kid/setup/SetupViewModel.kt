@@ -19,6 +19,7 @@ import au.screentime.kid.enrol.EnrolmentStore
 import au.screentime.kid.enrol.cleanCode
 import au.screentime.kid.enrol.deviceModel
 import au.screentime.kid.enrol.enrolErrorMessage
+import au.screentime.kid.enrol.parseEnrolLink
 import au.screentime.kid.enrol.serverUrl
 import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.CancellationException
@@ -39,6 +40,9 @@ sealed interface SetupState {
         val error: String? = null,
         val note: String? = null,
     ) : SetupState
+
+    /** The camera is looking for the enrolment QR code. Cancel goes back to [previous]. */
+    data class Scanning(val previous: EnterCode) : SetupState
 
     /** Enrolled; the kid checks the name before the phone is locked down. */
     data class Confirm(val kidName: String) : SetupState
@@ -105,6 +109,48 @@ class SetupViewModel(app: Application) : AndroidViewModel(app) {
     fun onConnect() {
         val s = state as? SetupState.EnterCode ?: return
         if (s.busy || s.code.length != 6 || s.editingServer) return
+        connect(s)
+    }
+
+    /** "Scan QR code": the camera permission is granted first (the app is Device Owner on this screen). */
+    fun onScan() {
+        val s = state as? SetupState.EnterCode ?: return
+        if (s.busy) return
+        Policies.grantRuntimePermissions(getApplication())
+        state = SetupState.Scanning(s.copy(editingServer = false, error = null, note = null))
+    }
+
+    fun onScanCancel() {
+        val s = state as? SetupState.Scanning ?: return
+        state = s.previous
+    }
+
+    /** The camera could not be used: back to typing the code. */
+    fun onScanFailed() {
+        val s = state as? SetupState.Scanning ?: return
+        state = s.previous.copy(error = "The camera isn't working. Type the code instead.")
+    }
+
+    /**
+     * A QR code was scanned, or the app was opened with a `screentime://enrol` link (for example from the
+     * phone's own camera app, or `adb shell am start` on the emulator). A good link connects at once.
+     */
+    fun onLink(text: String) {
+        val s = when (val current = state) {
+            is SetupState.Scanning -> current.previous
+            is SetupState.EnterCode -> if (current.busy) return else current
+            else -> return
+        }
+        val link = parseEnrolLink(text, allowHttp = BuildConfig.DEBUG)
+        if (link == null) {
+            state = s.copy(editingServer = false, error = "That QR code isn't from Screen Time.")
+            return
+        }
+        connect(s.copy(code = link.code, server = link.server, editingServer = false))
+    }
+
+    /** Sends the code to [SetupState.EnterCode.server], then asks the kid to confirm the name. */
+    private fun connect(s: SetupState.EnterCode) {
         state = s.copy(busy = true, error = null, note = null)
         viewModelScope.launch {
             state = try {

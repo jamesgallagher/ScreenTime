@@ -60,12 +60,14 @@ fun SetupScreen(vm: SetupViewModel) {
         SetupState.NotOwner -> NotOwnerScreen(onCheckAgain = vm::refresh)
         is SetupState.EnterCode -> EnterCodeScreen(
             state = s,
+            onScan = vm::onScan,
             onCodeChange = vm::onCodeChange,
             onConnect = vm::onConnect,
             onEditServer = vm::onEditServer,
             onServerTextChange = vm::onServerTextChange,
             onServerDone = vm::onServerDone,
         )
+        is SetupState.Scanning -> QrScanScreen(onCode = vm::onLink, onCancel = vm::onScanCancel, onFailed = vm::onScanFailed)
         is SetupState.Confirm -> ConfirmScreen(s.kidName, vm.deviceWord, onYes = vm::onConfirm, onNo = vm::onReject)
         is SetupState.Done -> DoneScreen(s.kidName, vm.deviceWord)
     }
@@ -113,6 +115,20 @@ private fun Body(text: String) {
         color = ScreenTimeTheme.colors.muted,
         textAlign = TextAlign.Center,
     )
+}
+
+/** Secondary pill button: same size as [BigButton], neutral grey. */
+@Composable
+private fun TonalButton(text: String, onClick: () -> Unit, enabled: Boolean = true) {
+    FilledTonalButton(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(56.dp),
+    ) {
+        Text(text, style = MaterialTheme.typography.titleMedium)
+    }
 }
 
 /** Primary pill button, 56 dp high and full width (docs/SPEC.md §16.1, kid buttons). */
@@ -182,20 +198,14 @@ private fun NotOwnerScreen(onCheckAgain: () -> Unit) {
             textAlign = TextAlign.Center,
         )
         Spacer(Modifier.height(32.dp))
-        FilledTonalButton(
-            onClick = onCheckAgain,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp),
-        ) {
-            Text("Check again", style = MaterialTheme.typography.titleMedium)
-        }
+        TonalButton(text = "Check again", onClick = onCheckAgain)
     }
 }
 
 @Composable
 private fun EnterCodeScreen(
     state: SetupState.EnterCode,
+    onScan: () -> Unit,
     onCodeChange: (String) -> Unit,
     onConnect: () -> Unit,
     onEditServer: () -> Unit,
@@ -207,8 +217,16 @@ private fun EnterCodeScreen(
         Spacer(Modifier.height(24.dp))
         Title("Connect to your family")
         Spacer(Modifier.height(12.dp))
-        Body("On Mum or Dad's phone, open Screen Time, choose your name and tap Add device. Then type the code here.")
+        Body("On Mum or Dad's phone, open Screen Time, choose your name and tap Add device. Then scan the QR code, or type the code.")
         Spacer(Modifier.height(32.dp))
+        TonalButton(text = "Scan QR code", onClick = onScan, enabled = !state.busy)
+        Spacer(Modifier.height(24.dp))
+        Text(
+            text = "or type the code",
+            style = MaterialTheme.typography.bodyMedium,
+            color = ScreenTimeTheme.colors.muted,
+        )
+        Spacer(Modifier.height(12.dp))
         CodeBoxes(code = state.code, enabled = !state.busy && !state.editingServer, onChange = onCodeChange, onDone = onConnect)
         Spacer(Modifier.height(16.dp))
         val message = state.error ?: state.note

@@ -50,6 +50,11 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.activity.compose)
     implementation(libs.ktor.client.okhttp)
+    // QR scanning: CameraX with ML Kit's bundled barcode model (no Play services download, docs/SPEC.md §11.3).
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.view)
+    implementation(libs.androidx.camera.mlkit.vision)
+    implementation(libs.mlkit.barcode.scanning)
 
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)

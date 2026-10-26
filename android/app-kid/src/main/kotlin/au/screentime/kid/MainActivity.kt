@@ -1,5 +1,6 @@
 package au.screentime.kid
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -20,6 +21,13 @@ class MainActivity : ComponentActivity() {
                 SetupScreen(setup)
             }
         }
+        // Opened from an enrolment link. Not again after a rotation, which would send the same code twice.
+        if (savedInstanceState == null) intent?.dataString?.let(setup::onLink)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        intent.dataString?.let(setup::onLink)
     }
 
     override fun onResume() {

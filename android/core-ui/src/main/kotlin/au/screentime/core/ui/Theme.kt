@@ -53,6 +53,9 @@ private fun colorSchemeOf(c: ScreenTimeColors, dark: Boolean): ColorScheme {
         onSurface = c.onSurface,
         surfaceVariant = c.surfaceVariant,
         onSurfaceVariant = c.muted,
+        // Tonal buttons ("Check again", "Scan QR code") use these: our neutral chip grey, not Material's lavender.
+        secondaryContainer = c.surfaceVariant,
+        onSecondaryContainer = c.onSurface,
         outline = c.outline,
         error = c.danger,
     )
