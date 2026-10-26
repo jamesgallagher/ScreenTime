@@ -39,5 +39,5 @@ pnpm typecheck     # type-check every package
 pnpm test          # build, then run all tests
 pnpm dev:server    # run the API on http://localhost:8080 (needs DATABASE_URL, see deploy/README.md)
 pnpm dev:web       # run the parent web app on http://localhost:5173 (passes /v1 to the API on :8080)
-pnpm contract      # regenerate contract/openapi.json after changing routes or schemas
+pnpm contract      # regenerate contract/openapi.json and the Kotlin client after changing routes or schemas
 ```

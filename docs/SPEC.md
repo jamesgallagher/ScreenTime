@@ -121,7 +121,7 @@ Also decided in research (22 Oct 2026): the tech stack in section 4, the sync de
 | Piece | Choice | Why |
 |---|---|---|
 | Android kid app + parent app | Kotlin, Jetpack Compose, Material 3 | Device Owner, Lock Task, telephony and SMS are native APIs. No extra runtime, lowest battery. One Gradle project, two APKs. |
-| Android shared code | Plain Kotlin modules: Ktor client, kotlinx.serialization, kotlinx-datetime | Shared by both apps, and KMP-ready for a future iOS parent app. |
+| Android shared code | Plain Kotlin modules: Ktor client, kotlinx.serialization, java.time | Shared by both apps, and KMP-ready for a future iOS parent app. |
 | Windows enforcer | C# on .NET 10 (LTS), Worker Service as a Windows service, Native AOT | First-class Windows service support, small native exe, session lock/unlock events. |
 | Windows tray | C# WinUI 3 (Windows App SDK) + H.NotifyIcon | Native Windows 11 look (Mica, Fluent) and shares code with the service. |
 | Server | TypeScript on Node 24 LTS, Hono, Zod (schemas → OpenAPI), firebase-admin; background work is an in-process sweep once a minute (CARD-021, no job queue: one server process) | Small and fast, same language as the web app, reference FCM SDK, native WebSockets. |
@@ -129,6 +129,12 @@ Also decided in research (22 Oct 2026): the tech stack in section 4, the sync de
 | Web | TypeScript, React 19, Vite SPA, TanStack Router + Query, Tailwind CSS v4, shadcn/ui | Modern, typed, static build served by the API container. |
 | Contract | Zod schemas → `contract/openapi.json` (committed). Kotlin and C# clients generated from it. CI fails on drift. | One API definition for three languages. |
 | Shared maths | `test-vectors/` JSON cases run by the TS, Kotlin and C# engines | All three must compute the same remaining time. |
+
+**Kotlin client (CARD-029).** `pnpm contract` also runs `server/scripts/kotlin-client.ts`, which turns `contract/openapi.json` into `ApiModels.kt` and `ApiClient.kt` in `android/core-model/src/main/kotlin/au/screentime/core/model/api/` (committed; `server/test/kotlin-client.test.ts` fails on drift). It is a small generator of our own (`server/scripts/kotlin-gen.ts`), not openapi-generator: no Java tool in the TypeScript build, the output is short and readable, and it throws on any schema shape it does not know. The hand-written half is `ApiSupport.kt`: `ApiClientBase` (Ktor, bearer token, `ApiException` on an error), `ApiJson` (unknown fields ignored), `Opt` and `Conditional`. Rules:
+- A required field is `T`; required and nullable is `T?`; optional is `T? = null` (left out of the JSON when null); optional and nullable is `Opt<T> = Opt.Absent`, and `Opt.Value(null)` sends `null` (for example `ParentPatch.phoneE164`, where null removes the number).
+- Ids, dates and times stay `String` in the models; the apps parse them with `java.time` where they need to. Enums are Kotlin enums with the API text in `wire`. Inline objects and enums are named after their owner and field (`DeviceStateParentsItem`, `SosEndedBy`).
+- One function per operation, named by the method and the path, with `ById` when the path ends in an id: `getKids`, `getKidsById`, `postDeviceSos`. Path parameters, then `body`, then query parameters. `GET /v1/device/state` takes `ifNoneMatch` and returns `Conditional<DeviceState>` (`value` is null on 304).
+- The client takes a Ktor engine, so each app picks its own and the tests use `MockEngine`. The token function gives the parent's access token or the device token.
 
 ### 4.2 Hosting
 
