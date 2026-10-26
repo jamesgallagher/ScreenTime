@@ -21,6 +21,7 @@ import au.screentime.kid.enrol.deviceModel
 import au.screentime.kid.enrol.enrolErrorMessage
 import au.screentime.kid.enrol.parseEnrolLink
 import au.screentime.kid.enrol.serverUrl
+import au.screentime.kid.service.KidService
 import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -77,7 +78,10 @@ class SetupViewModel(app: Application) : AndroidViewModel(app) {
     /** Looks again, for example after a parent ran the adb command while this screen was open. */
     fun refresh() {
         if (state is SetupState.NotOwner) state = initialState()
-        if (state is SetupState.Done) Policies.apply(getApplication())
+        if (state is SetupState.Done) {
+            Policies.apply(getApplication())
+            KidService.start(getApplication())
+        }
     }
 
     fun onCodeChange(text: String) {
@@ -173,6 +177,7 @@ class SetupViewModel(app: Application) : AndroidViewModel(app) {
         val enrolment = store.load() ?: return
         store.save(enrolment.copy(confirmed = true))
         Policies.apply(getApplication())
+        KidService.start(getApplication())
         state = SetupState.Done(enrolment.kidName)
     }
 
