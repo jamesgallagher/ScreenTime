@@ -90,7 +90,7 @@ describe('kidChips', () => {
   });
 
   it('says nothing about a device seen lately, never seen, or a short overspend', () => {
-    const recent = device({ lastSeenAt: '2026-10-26T00:30:30Z' });
+    const recent = device({ lastSeenAt: '2026-10-26T00:30:00Z' });
     const never = device({ id: 'n', lastSeenAt: null });
     expect(kidChips(kid([pool({ devices: [recent, never], overspendSec: 59 })]), NOW)).toEqual([]);
   });
