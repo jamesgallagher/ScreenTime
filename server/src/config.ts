@@ -18,6 +18,8 @@ export interface Config {
   smtp: SmtpConfig | null;
   /** The Firebase service account key (JSON). Null when FIREBASE_SERVICE_ACCOUNT_JSON is unset: no pushes are sent. */
   firebaseServiceAccountJson: string | null;
+  /** The folder with the built web app (`web/dist`). Null when WEB_DIR is unset: the server is the API only. */
+  webDir: string | null;
 }
 
 /** Reads settings from environment variables. Throws if a required one is missing. Empty values count as unset. */
@@ -55,6 +57,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
           }
         : null,
     firebaseServiceAccountJson: firebase,
+    webDir: env.WEB_DIR?.trim() || null,
   };
 }
 
