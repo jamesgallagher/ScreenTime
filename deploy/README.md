@@ -77,3 +77,9 @@ pnpm --filter @screentime/server exec tsx scripts/seed-dev.ts you@example.com
 ```
 
 Never run it against the production database.
+
+For a kid device, print an enrolment code without signing in (same `DATABASE_URL`; the form is `phone`, `tablet` or `pc`; valid for 10 minutes):
+
+```powershell
+pnpm --filter @screentime/server exec tsx scripts/dev-enrol-code.ts Alex phone
+```

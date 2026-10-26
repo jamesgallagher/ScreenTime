@@ -67,7 +67,8 @@ Spikes come early on purpose: Device Owner + Lock Task on the real phones, and a
 |---|---|---|---|---|---|
 | 028 | `core-time`: Kotlin engine passing all test vectors | 003, 004 | M | | 7 |
 | 029 | `core-model`: generated Kotlin client from `contract/openapi.json` | 009, 004 | S | | 4.1 |
-| 030 | Device Owner policies + setup and enrolment screen (QR + code) | 005, 013, 029 | M | Phone, ADB | 12.1, 16.2 |
+| 030 | Device Owner policies + setup and enrolment screen (code entry), tested on the emulator | 013, 029 | M | Emulator, ADB | 12.1, 16.2 |
+| 030b | QR scan on the setup screen (CameraX + ML Kit, bundled model) | 030 | S | Emulator | 11.3, 16.2 |
 | 031 | Usage tracking, Room outbox, upload, state sync, trusted time | 014, 028, 030 | M | | 8, 12.1 |
 | 032 | Enforcement service: alarms, warnings, persistent notification, main screen | 031 | M | | 12.1, 16.2 |
 | 033 | Block screen in Lock Task | 032 | M | | 12.1, 16.2 |
