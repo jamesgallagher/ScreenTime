@@ -13,7 +13,13 @@ describe('loadConfig', () => {
       superAdminEmail: null,
       smtp: null,
       firebaseServiceAccountJson: null,
+      webDir: null,
     });
+  });
+
+  it('reads WEB_DIR', () => {
+    expect(loadConfig({ ...base, WEB_DIR: ' /app/public ' }).webDir).toBe('/app/public');
+    expect(loadConfig({ ...base, WEB_DIR: '' }).webDir).toBeNull();
   });
 
   it('reads PORT', () => {

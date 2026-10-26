@@ -10,7 +10,7 @@ import { runMigrations } from '../src/db/migrate.js';
 export const TEST_SECRET = 'test-secret-that-is-at-least-32-chars';
 
 export function testConfig(databaseUrl: string, superAdminEmail: string | null = null): Config {
-  return { port: 0, databaseUrl, jwtSecret: TEST_SECRET, superAdminEmail, smtp: null, firebaseServiceAccountJson: null };
+  return { port: 0, databaseUrl, jwtSecret: TEST_SECRET, superAdminEmail, smtp: null, firebaseServiceAccountJson: null, webDir: null };
 }
 
 /** Empties the test database and applies every migration. Only for TEST_DATABASE_URL. */
