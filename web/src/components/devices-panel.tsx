@@ -37,7 +37,7 @@ import { useToday } from '@/pages/today';
 
 const ICONS = { phone: Smartphone, tablet: Tablet, pc: Monitor };
 
-const DURATIONS: { value: ParentModeDuration; label: string }[] = [
+export const DURATIONS: { value: ParentModeDuration; label: string }[] = [
   { value: 2, label: '2 min' },
   { value: 5, label: '5 min' },
   { value: 15, label: '15 min' },
