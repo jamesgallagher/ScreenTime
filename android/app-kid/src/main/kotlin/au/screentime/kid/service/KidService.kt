@@ -1,9 +1,6 @@
 package au.screentime.kid.service
 
 import android.app.KeyguardManager
-import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
 import android.app.Service
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -19,12 +16,15 @@ import android.provider.Settings
 import android.util.Log
 import au.screentime.core.model.api.ApiClient
 import au.screentime.core.time.evaluate
-import au.screentime.kid.R
 import au.screentime.kid.data.FileStateStore
 import au.screentime.kid.data.KidDatabase
 import au.screentime.kid.data.PrefsClockStore
 import au.screentime.kid.data.RoomSegmentStore
 import au.screentime.kid.enrol.EnrolmentStore
+import au.screentime.kid.status.StatusHub
+import au.screentime.kid.status.WarningTracker
+import au.screentime.kid.status.kidStatus
+import au.screentime.kid.status.nextCheckAtMs
 import au.screentime.kid.sync.Syncer
 import au.screentime.kid.sync.TrustedClock
 import au.screentime.kid.usage.Recorder
@@ -37,15 +37,16 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * The always-on part of the kid app (docs/SPEC.md §12.1, "Foreground service"): records usage segments from the
- * screen and unlock broadcasts, and syncs with the server (§8.3). Everything runs one at a time on [scope], so the
- * database sees one change after another. Alarms, warnings, the real notification text and locking come in later
- * cards; for now every sync writes what the engine says to the log.
+ * screen and unlock broadcasts, syncs with the server (§8.3), and keeps the notification, the warnings and the main
+ * screen up to date (§16.2). Everything runs one at a time on [scope], so the database sees one change after another.
+ * Locking comes in CARD-033; for now a locked device only says so.
  */
 class KidService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO.limitedParallelism(1))
@@ -55,6 +56,7 @@ class KidService : Service() {
     private lateinit var segments: RoomSegmentStore
     private lateinit var states: FileStateStore
     private lateinit var syncer: Syncer
+    private lateinit var notifier: Notifier
     private var engine: HttpClientEngine? = null
     private var api: ApiClient? = null
     private var started = false
@@ -62,6 +64,14 @@ class KidService : Service() {
     /** [SystemClock.elapsedRealtime] of the last sync, for "every 5 minutes" and "if the last sync is older than 2 minutes". */
     private var lastSyncElapsed = 0L
     private var lastSyncOk = true
+
+    private val warnings = WarningTracker()
+
+    /** Trusted time of the next warning, lock or new period, so the loop wakes up for it (at least once a minute). */
+    private var nextCheckAt = 0L
+
+    /** Wakes the loop early, when an unlock or a sync has moved [nextCheckAt]. */
+    private val wake = Channel<Unit>(Channel.CONFLATED)
 
     private val screen = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -85,7 +95,8 @@ class KidService : Service() {
     override fun onCreate() {
         super.onCreate()
         // A service started with startForegroundService must call startForeground first, even if it stops at once.
-        startForeground(NOTIFICATION_ID, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_SYSTEM_EXEMPTED)
+        notifier = Notifier(this)
+        startForeground(Notifier.STATUS_ID, notifier.starting(), ServiceInfo.FOREGROUND_SERVICE_TYPE_SYSTEM_EXEMPTED)
         val enrolment = EnrolmentStore(this).load()
         if (enrolment?.confirmed != true) {
             stopSelf()
@@ -122,10 +133,13 @@ class KidService : Service() {
             if (inUse()) recorder.start(clock.nowMs())
             sync()
             while (isActive) {
-                delay(MINUTE)
+                // While in use, until the next warning, lock or period (at least once a minute); otherwise a minute.
+                val wait = if (inUse()) (nextCheckAt - clock.nowMs()).coerceIn(SECOND, MINUTE) else MINUTE
+                // Woken early: only work out the wait again.
+                if (withTimeoutOrNull(wait) { wake.receive() } != null) continue
                 if (!inUse()) continue
                 recorder.tick(clock.nowMs())
-                if (SystemClock.elapsedRealtime() - lastSyncElapsed >= 5 * MINUTE) sync()
+                if (SystemClock.elapsedRealtime() - lastSyncElapsed >= 5 * MINUTE) sync() else report()
             }
         }
     }
@@ -169,36 +183,37 @@ class KidService : Service() {
         report()
     }
 
-    /** What the engine says now, in the log (`adb logcat -s KidService`). The main screen shows it in CARD-032. */
+    /**
+     * Runs the engine and shows what it says: the notification, a warning when one is due (only while in use), the
+     * main screen through [StatusHub], and the log (`adb logcat -s KidService`).
+     */
     private suspend fun report() {
-        val cached = states.load() ?: return
         val now = clock.nowMs()
+        nextCheckAt = now + MINUTE
+        val cached = states.load() ?: return
         val own = segments.since(dayStartMs(cached.state, now))
         val result = evaluate(todayInput(cached.state, own, now))
+        val status = kidStatus(cached.state, result, now, lastSyncOk, SystemClock.elapsedRealtime())
+
+        StatusHub.status.value = status
+        notifier.showStatus(status, now)
+        if (status.locked) {
+            notifier.cancelWarning()
+        } else if (inUse()) {
+            warnings.check(status)?.let { notifier.showWarning(status, it) }
+        }
+        nextCheckAt = nextCheckAtMs(status, now)
+        wake.trySend(Unit)
         Log.i(
             TAG,
             "pool=${cached.state.device.pool.wire} used=${result.usedSec}s remaining=${result.remainingSec}s " +
-                "locked=${result.locked} online=$lastSyncOk segments=${own.size}",
+                "left=${status.leftSec}s locked=${result.locked} online=$lastSyncOk segments=${own.size}",
         )
-    }
-
-    private fun notification(): Notification {
-        val manager = getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(
-            NotificationChannel(CHANNEL, "Screen Time", NotificationManager.IMPORTANCE_LOW),
-        )
-        return Notification.Builder(this, CHANNEL)
-            .setSmallIcon(R.drawable.ic_status)
-            .setContentTitle("Screen Time")
-            .setContentText("Screen Time is on")
-            .setOngoing(true)
-            .build()
     }
 
     companion object {
         private const val TAG = "KidService"
-        private const val CHANNEL = "status"
-        private const val NOTIFICATION_ID = 1
+        private const val SECOND = 1_000L
         private const val MINUTE = 60_000L
 
         /** Sent segments are kept this long, then forgotten (docs/SPEC.md §8.3, offline buffer). */

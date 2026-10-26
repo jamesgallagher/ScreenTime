@@ -11,6 +11,8 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- The short buzz at the second warning on a phone (docs/SPEC.md §16.2). -->
+    <uses-permission android:name="android.permission.VIBRATE" />
 
     <!--
         No backup and no device-to-device transfer: the device token must never leave this device
