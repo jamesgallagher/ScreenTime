@@ -43,6 +43,17 @@
             </intent-filter>
         </activity>
 
+        <!--
+            The block screen (docs/SPEC.md §12.1): its own task, kept out of Recents, pinned with Lock Task while
+            the device is locked. Only the app itself opens it.
+        -->
+        <activity
+            android:name=".block.BlockActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:taskAffinity="au.screentime.kid.block" />
+
         <service
             android:name=".service.KidService"
             android:exported="false"

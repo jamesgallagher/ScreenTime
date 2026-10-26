@@ -44,6 +44,13 @@ object Policies {
         }
         dpm.setAutoTimeEnabled(admin, true)
         dpm.setAutoTimeZoneEnabled(admin, true)
+        // The block screen runs in Lock Task (docs/SPEC.md §12.1): no Home, Recents or notification shade, but the
+        // power menu and the phone's own lock screen (with its emergency call button) still work.
+        dpm.setLockTaskPackages(admin, arrayOf(context.packageName))
+        dpm.setLockTaskFeatures(
+            admin,
+            DevicePolicyManager.LOCK_TASK_FEATURE_GLOBAL_ACTIONS or DevicePolicyManager.LOCK_TASK_FEATURE_KEYGUARD,
+        )
         grantRuntimePermissions(context)
     }
 
