@@ -606,7 +606,7 @@ Each kid device gets an opaque 32-byte token at enrolment, stored hashed on the 
 4. The app then applies restrictions, and USB debugging is turned off by `DISALLOW_DEBUGGING_FEATURES`.
 5. Also turn on Android's own Emergency SOS with the parents as emergency contacts.
 
-**Device Owner policies applied at startup:**
+**Device Owner policies applied at startup** (once enrolment is confirmed, then on every start; CARD-030 applies the restrictions, auto time and permission grants; FRP and Lock Task packages come in later cards; a **debug** build is test-only, keeps USB debugging on and does not block uninstalling, so a developer can always undo it with `adb shell dpm remove-active-admin`):
 
 - `setUninstallBlocked(self)`, user restrictions `DISALLOW_APPS_CONTROL`, `DISALLOW_SAFE_BOOT`, `DISALLOW_FACTORY_RESET`, `DISALLOW_CONFIG_DATE_TIME`, `DISALLOW_DEBUGGING_FEATURES`, `DISALLOW_ADD_USER`, `DISALLOW_AIRPLANE_MODE`. Auto time and auto time zone forced on.
 - Factory Reset Protection (`setFactoryResetProtectionPolicy`) set to **James's Google account** (decided 22 Oct 2026). The account's numeric Google ID is entered during provisioning and stored as a server family setting, never committed to the repo.
@@ -793,6 +793,8 @@ Tablet or landscape (window width ≥ 600 dp): ring on the left half, buttons in
 **SOS screens:** countdown: red full screen, huge number 5…1, **Cancel** button white pill. Active: red background, "SOS sent", list of parents with a tick when they have seen it, call buttons, emergency button, **I'm safe** (hold 2 s).
 
 **Setup screen** (first run): if not Device Owner, show "Ask a parent to finish setup on a computer" with the guide URL. If Device Owner but not enrolled: **Scan QR code** (camera) or **Enter code** (6 boxes), then "This phone belongs to Alex. Correct?" **Yes**.
+
+As built (CARD-030, code entry; QR scanning is CARD-030b): not Device Owner → "Ask a parent to finish setup", the guide path and **Check again**. Device Owner, not enrolled → "Connect to your family", 6 code boxes, **Connect**, and under it "Server: screentime.gallagherhome.au **Change**" (debug builds start at `http://10.0.2.2:8080`, the PC as seen from the emulator, and also accept `http://`). Errors are short sentences, never codes (401 wrong or expired code, 409 a PC code, 429 too many tries, no connection). After `POST /v1/enrol` the token is stored at once and the kid sees "This phone belongs to Alex. Correct?" **Yes** / **No, that's not me**. **No** forgets the token (the device stays listed until a parent removes it). **Yes** applies the Device Owner policies and shows "All set, Alex"; the main screen replaces that in CARD-032.
 
 ### 16.3 Windows tray
 
