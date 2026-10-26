@@ -44,8 +44,17 @@ object Policies {
         }
         dpm.setAutoTimeEnabled(admin, true)
         dpm.setAutoTimeZoneEnabled(admin, true)
+        grantRuntimePermissions(context)
+    }
 
-        // Every runtime permission the manifest asks for, so the kid never sees a permission prompt.
+    /**
+     * Grants every runtime permission the manifest asks for, so the kid never sees a permission prompt.
+     * Does nothing unless the app is Device Owner. The setup screen calls it before scanning, for the camera.
+     */
+    fun grantRuntimePermissions(context: Context) {
+        if (!isDeviceOwner(context)) return
+        val dpm = context.getSystemService(DevicePolicyManager::class.java)
+        val admin = KidDeviceAdminReceiver.component(context)
         for (permission in runtimePermissions(context)) {
             val granted = dpm.setPermissionGrantState(
                 admin,
