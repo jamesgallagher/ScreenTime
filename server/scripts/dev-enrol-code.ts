@@ -41,6 +41,10 @@ try {
     createdBy: parent.id,
   });
   console.log(`Enrolment code for ${kid.name} (${form}): ${code}, valid for 10 minutes.`);
+  if (form !== 'pc') {
+    // What the QR code would hold, for the emulator's server address (docs/guides/android-provisioning.md).
+    console.log(`Emulator link: screentime://enrol?host=${encodeURIComponent('10.0.2.2:8080')}&code=${code}`);
+  }
 } finally {
   await pool.end();
 }
