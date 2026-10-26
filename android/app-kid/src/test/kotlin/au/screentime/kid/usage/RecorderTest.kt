@@ -80,6 +80,19 @@ class RecorderTest {
     }
 
     @Test
+    fun anUnlockDuringASlowFailedSyncStillMarksTheSegmentThatEnded() = runBlocking {
+        // Screen off: the segment ends and its sync starts, but the server does not answer for a while.
+        recorder.start(1_000)
+        recorder.stop(61_000)
+        // The kid unlocks again before the sync has failed.
+        recorder.start(70_000)
+
+        recorder.markOffline()
+
+        assertEquals(listOf(true, true), store.all().map { it.recordedOffline })
+    }
+
+    @Test
     fun aFailedSyncLeavesSegmentsTheServerHasAlone() = runBlocking {
         recorder.start(1_000)
         recorder.stop(61_000)
