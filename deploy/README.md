@@ -83,3 +83,5 @@ For a kid device, print an enrolment code without signing in (same `DATABASE_URL
 ```powershell
 pnpm --filter @screentime/server exec tsx scripts/dev-enrol-code.ts Alex phone
 ```
+
+For a phone or tablet it also prints the link the QR code would hold, with the emulator's address for the server (`screentime://enrol?host=10.0.2.2%3A8080&code=...`). docs/guides/android-provisioning.md shows how to open it on the emulator.

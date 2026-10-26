@@ -55,11 +55,20 @@ If it says `Not allowed to set the device owner because there are already some a
 
 ## 4. Pair it with the family
 
-1. In the parent web app: Kids › the kid › **Add device** › Phone or Tablet. A 6-digit code shows for 10 minutes.
-   On a development database you can skip signing in: `pnpm --filter @screentime/server exec tsx scripts/dev-enrol-code.ts Alex phone` prints a code (deploy/README.md, Dev data).
+1. In the parent web app: Kids › the kid › **Add device** › Phone or Tablet. A QR code and a 6-digit code show for 10 minutes.
+   On a development database you can skip signing in: `pnpm --filter @screentime/server exec tsx scripts/dev-enrol-code.ts Alex phone` prints a code and an emulator link (deploy/README.md, Dev data).
 2. Open **Screen Time** on the device. It shows **Connect to your family**.
-3. Check the server under the code boxes. For the emulator with the server on the PC it is `http://10.0.2.2:8080`. For a real device on the home Wi-Fi, tap **Change** and type the PC's address, for example `http://192.168.1.20:8080` (debug builds only). For the real server it is `screentime.gallagherhome.au`.
-4. Type the code and tap **Connect**.
+3. **Scan QR code** and point the camera at the QR code. The QR code holds the server too, so the device connects straight away; go on at step 5. Or type the code, as below.
+
+   On the emulator the camera does not see your screen. Open the emulator link from `dev-enrol-code.ts` instead; it does the same as scanning (use your code instead of `123456`; the inner single quotes keep the `&`):
+
+   ```powershell
+   & $adb shell "am start -W -a android.intent.action.VIEW -d 'screentime://enrol?host=10.0.2.2%3A8080&code=123456' au.screentime.kid"
+   ```
+
+   (A QR code made by a web app on `localhost` holds `localhost`, which the emulator cannot reach, so use the emulator link.)
+4. To type the code instead: check the server under the code boxes. For the emulator with the server on the PC it is `http://10.0.2.2:8080`. For a real device on the home Wi-Fi, tap **Change** and type the PC's address, for example `http://192.168.1.20:8080` (debug builds only). For the real server it is `screentime.gallagherhome.au`.
+   Type the code and tap **Connect**.
 5. The device asks "This phone belongs to *name*. Correct?" Tap **Yes**. The policies are applied now (auto time on, no date and time changes, no safe mode, no factory reset, no new users, no airplane mode; release builds also turn off USB debugging and block uninstalling).
 
 The new device appears in the parent web app under Devices.
