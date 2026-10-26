@@ -26,7 +26,8 @@ export function SignInPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const codeInput = useRef<HTMLInputElement>(null);
 
-  if (auth.status === 'signedIn') return <Navigate to="/" />;
+  // A super admin with no family has only the Admin page.
+  if (auth.status === 'signedIn') return <Navigate to={auth.me.family ? '/' : '/admin'} />;
 
   async function sendCode(e?: FormEvent) {
     e?.preventDefault();
