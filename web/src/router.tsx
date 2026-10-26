@@ -12,6 +12,7 @@ import { useAuth } from '@/lib/auth';
 import { ComingSoon } from '@/pages/coming-soon';
 import { NotFoundPage } from '@/pages/not-found';
 import { SignInPage } from '@/pages/sign-in';
+import { TodayPage } from '@/pages/today';
 
 function FullScreenSpinner() {
   return (
@@ -47,11 +48,7 @@ const signInRoute = createRoute({ getParentRoute: () => rootRoute, path: '/sign-
 
 const appRoute = createRoute({ getParentRoute: () => rootRoute, id: 'app', component: SignedInLayout });
 
-const todayRoute = createRoute({
-  getParentRoute: () => appRoute,
-  path: '/',
-  component: () => <ComingSoon title="Today" description="Time used and left for each kid." />,
-});
+const todayRoute = createRoute({ getParentRoute: () => appRoute, path: '/', component: TodayPage });
 const inboxRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '/inbox',
