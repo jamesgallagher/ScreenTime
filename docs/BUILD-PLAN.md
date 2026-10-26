@@ -55,7 +55,7 @@ Spikes come early on purpose: Device Owner + Lock Task on the real phones, and a
 |---|---|---|---|---|---|
 | 022 | Web skeleton: Vite, React 19, TanStack Router/Query, Tailwind v4, shadcn/ui, tokens, layout shell, sign-in; web refresh token in an HttpOnly cookie | 021 | M | | 11.1, 16.1, 16.5 |
 | 023 | Today page and adjust dialog (web: − and + buttons and quick amounts instead of the wheel) | 015, 022 | M | | 16.4, 16.5 |
-| 024 | Kid detail: schedule editor, contacts, devices, add device (QR) | 013, 022 | M | | 16.5 |
+| 024 | Kids list and kid detail: schedule editor, contacts, devices, add device (QR, `qrcode.react`) | 013, 023 | M | | 16.4, 16.5 |
 | 025 | Inbox, settings (prefs, presets, parents, parent code), SOS banner | 018, 019, 020, 022 | M | | 16.5 |
 | 026 | Super admin pages | 022 | S | | 6.2 |
 | 027 | Server serves the web build; production image | 008, 022 | S | | 4.2 |
