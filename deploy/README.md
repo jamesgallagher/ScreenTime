@@ -24,6 +24,8 @@ docker compose -f deploy/docker-compose.yml --env-file deploy/.env down
 
 The API applies database migrations every time it starts (log line `database migrations applied`). `down` keeps the data; `down -v` deletes it.
 
+The same container serves the parent web app: open http://localhost:8080 and sign in. The image builds `web/` and the server serves it from `WEB_DIR` (`/app/public` in the image). API paths (`/v1/...`, `/health`) always win; any other path without a file extension, like `/kids`, gets the app's `index.html`. For web development use `pnpm dev:web` (http://localhost:5173) instead, which reloads on every change.
+
 ## Develop against the database
 
 Start only the database, then run the server from source:
