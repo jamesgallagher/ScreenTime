@@ -22,6 +22,7 @@ import { createRouter } from './router.js';
 import { registerSosRoutes } from './sos/routes.js';
 import { registerSyncRoutes } from './sync/routes.js';
 import { registerTamperRoutes } from './tamper/routes.js';
+import { registerWeb } from './web.js';
 
 /** What the routes need at request time. Tests pass their own. */
 export interface AppDeps {
@@ -98,6 +99,10 @@ export function createApp(appDeps: AppDeps) {
   registerNotifyRoutes(app, deps);
   registerAdminRoutes(app, deps);
   registerLiveRoutes(app, deps, upgradeWebSocket);
+  // Last, so that every API path wins. `config` is missing only when building the OpenAPI document or in some tests.
+  if (deps.config?.webDir) {
+    registerWeb(app, deps.config.webDir);
+  }
 
   return Object.assign(app, { injectWebSocket, hub: deps.hub });
 }
