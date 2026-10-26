@@ -133,6 +133,7 @@ Also decided in research (22 Oct 2026): the tech stack in section 4, the sync de
 ### 4.2 Hosting
 
 - Two containers on Unraid: `api` (also serves the built web app) and `postgres`. Docker Compose file in `deploy/`.
+  Details (CARD-027): the `api` image builds `web/` and serves `web/dist` from `WEB_DIR` (`/app/public`) after every API route. A file that exists is sent (files under `/assets/` cached for a year, the rest `no-cache`); any other GET path without a file extension gets `index.html`; `/v1/...`, `/health` and missing files get the JSON 404. Web responses carry a strict Content-Security-Policy (own origin only, inline styles allowed, no framing), `nosniff`, `no-referrer` and `X-Frame-Options: DENY`. Without `WEB_DIR` (development, tests) the server is the API only.
 - One public hostname through the Cloudflare Tunnel: **`screentime.gallagherhome.au`** (decided 22 Oct 2026; DNS and tunnel route are set up in the deploy card). Set as `PUBLIC_HOSTNAME`.
 - Web app at `/`, API at `/v1/*`, health at `/health`, device WebSocket at `/v1/device/ws`.
 - Cloudflare Access must **not** be put in front of `/v1/*`, because devices authenticate with their own tokens.
@@ -583,7 +584,7 @@ Each kid device gets an opaque 32-byte token at enrolment, stored hashed on the 
 
 - Postgres RLS by `family_id` (section 6). The super admin role is used only in `/v1/admin/*`.
 - Rate limits per IP and per email on auth and enrolment.
-- `JWT_SECRET`, `DATABASE_URL`, `SUPER_ADMIN_EMAIL`, `PUBLIC_HOSTNAME`, SMTP vars (11.1) and `FIREBASE_SERVICE_ACCOUNT_JSON` come from env. Never commit secrets; `deploy/.env.example` lists them.
+- `JWT_SECRET`, `DATABASE_URL`, `SUPER_ADMIN_EMAIL`, `PUBLIC_HOSTNAME`, SMTP vars (11.1), `FIREBASE_SERVICE_ACCOUNT_JSON` and `WEB_DIR` (set by the image) come from env. Never commit secrets; `deploy/.env.example` lists them.
 
 ## 12. Enforcement per platform
 
