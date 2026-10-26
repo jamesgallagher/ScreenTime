@@ -10,7 +10,7 @@ import { Loader2 } from 'lucide-react';
 import { AppShell } from '@/components/app-shell';
 import { SosBanner } from '@/components/sos-banner';
 import { useAuth } from '@/lib/auth';
-import { ComingSoon } from '@/pages/coming-soon';
+import { AdminPage } from '@/pages/admin';
 import { InboxPage } from '@/pages/inbox';
 import { KidPage } from '@/pages/kid';
 import { KidsPage } from '@/pages/kids';
@@ -45,7 +45,7 @@ function SignedInLayout() {
 function AdminOnly() {
   const auth = useAuth();
   if (auth.status !== 'signedIn' || !auth.me.roles.includes('superadmin')) return <Navigate to="/" />;
-  return <ComingSoon title="Admin" description="Families on this server." />;
+  return <AdminPage />;
 }
 
 const rootRoute = createRootRoute({ component: Outlet, notFoundComponent: NotFoundPage });
