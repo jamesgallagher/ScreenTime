@@ -10,6 +10,8 @@ import { Loader2 } from 'lucide-react';
 import { AppShell } from '@/components/app-shell';
 import { useAuth } from '@/lib/auth';
 import { ComingSoon } from '@/pages/coming-soon';
+import { KidPage } from '@/pages/kid';
+import { KidsPage } from '@/pages/kids';
 import { NotFoundPage } from '@/pages/not-found';
 import { SignInPage } from '@/pages/sign-in';
 import { TodayPage } from '@/pages/today';
@@ -54,10 +56,15 @@ const inboxRoute = createRoute({
   path: '/inbox',
   component: () => <ComingSoon title="Inbox" description="Requests, messages and events." />,
 });
-const kidsRoute = createRoute({
+const kidsRoute = createRoute({ getParentRoute: () => appRoute, path: '/kids', component: KidsPage });
+const kidRoute = createRoute({
   getParentRoute: () => appRoute,
-  path: '/kids',
-  component: () => <ComingSoon title="Kids" description="Schedules, devices and contacts." />,
+  path: '/kids/$kidId',
+  component: function KidRoute() {
+    const { kidId } = kidRoute.useParams();
+    // Keyed by kid, so unsaved edits never carry over to another kid's page.
+    return <KidPage key={kidId} kidId={kidId} />;
+  },
 });
 const settingsRoute = createRoute({
   getParentRoute: () => appRoute,
@@ -68,7 +75,7 @@ const adminRoute = createRoute({ getParentRoute: () => appRoute, path: '/admin',
 
 const routeTree = rootRoute.addChildren([
   signInRoute,
-  appRoute.addChildren([todayRoute, inboxRoute, kidsRoute, settingsRoute, adminRoute]),
+  appRoute.addChildren([todayRoute, inboxRoute, kidsRoute, kidRoute, settingsRoute, adminRoute]),
 ]);
 
 export const router = createRouter({ routeTree, defaultPreload: 'intent' });
