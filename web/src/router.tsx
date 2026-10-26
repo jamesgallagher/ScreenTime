@@ -8,8 +8,10 @@ import {
 } from '@tanstack/react-router';
 import { Loader2 } from 'lucide-react';
 import { AppShell } from '@/components/app-shell';
+import { SosBanner } from '@/components/sos-banner';
 import { useAuth } from '@/lib/auth';
 import { ComingSoon } from '@/pages/coming-soon';
+import { InboxPage } from '@/pages/inbox';
 import { KidPage } from '@/pages/kid';
 import { KidsPage } from '@/pages/kids';
 import { NotFoundPage } from '@/pages/not-found';
@@ -24,7 +26,7 @@ function FullScreenSpinner() {
   );
 }
 
-/** Every page but sign-in: signed-out visitors go to /sign-in; a super admin with no family only has /admin. */
+/** Every page but sign-in: signed-out visitors go to /sign-in; a super admin with no family only has /admin. An active SOS shows on top of every page. */
 function SignedInLayout() {
   const auth = useAuth();
   const path = useRouterState({ select: (s) => s.location.pathname });
@@ -33,6 +35,7 @@ function SignedInLayout() {
   if (!auth.me.family && path !== '/admin') return <Navigate to="/admin" />;
   return (
     <AppShell me={auth.me}>
+      <SosBanner />
       <Outlet />
     </AppShell>
   );
@@ -51,11 +54,7 @@ const signInRoute = createRoute({ getParentRoute: () => rootRoute, path: '/sign-
 const appRoute = createRoute({ getParentRoute: () => rootRoute, id: 'app', component: SignedInLayout });
 
 const todayRoute = createRoute({ getParentRoute: () => appRoute, path: '/', component: TodayPage });
-const inboxRoute = createRoute({
-  getParentRoute: () => appRoute,
-  path: '/inbox',
-  component: () => <ComingSoon title="Inbox" description="Requests, messages and events." />,
-});
+const inboxRoute = createRoute({ getParentRoute: () => appRoute, path: '/inbox', component: InboxPage });
 const kidsRoute = createRoute({ getParentRoute: () => appRoute, path: '/kids', component: KidsPage });
 const kidRoute = createRoute({
   getParentRoute: () => appRoute,
