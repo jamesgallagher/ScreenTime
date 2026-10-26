@@ -38,7 +38,7 @@ function longDate(date: string): string {
   );
 }
 
-function PoolRow({ kid, pool, onAdjust }: { kid: TodayKid; pool: TodayPool; onAdjust: () => void }) {
+export function PoolRow({ kid, pool, onAdjust }: { kid: TodayKid; pool: TodayPool; onAdjust: () => void }) {
   const view = poolView(pool);
   const name = POOL_NAMES[pool.pool];
   return (
@@ -67,6 +67,20 @@ function PoolRow({ kid, pool, onAdjust }: { kid: TodayKid; pool: TodayPool; onAd
   );
 }
 
+/** The status chips under a kid (docs/SPEC.md §16.4); nothing when there are none. */
+export function ChipList({ chips }: { chips: Chip[] }) {
+  if (chips.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-2">
+      {chips.map((chip) => (
+        <span key={chip.text} className={cn('rounded-full px-3 py-1 text-xs font-medium', CHIP[chip.tone])}>
+          {chip.text}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function KidCard({ kid, now, onAdjust }: { kid: TodayKid; now: Date; onAdjust: (pool: Pool) => void }) {
   const chips = kidChips(kid, now);
   return (
@@ -74,20 +88,16 @@ function KidCard({ kid, now, onAdjust }: { kid: TodayKid; now: Date; onAdjust: (
       <CardContent className="flex flex-col gap-5">
         <div className="flex items-center gap-3">
           <KidAvatar name={kid.name} color={kid.avatarColor} />
-          <h2 className="text-lg font-semibold">{kid.name}</h2>
+          <h2 className="text-lg font-semibold">
+            <Link to="/kids/$kidId" params={{ kidId: kid.id }} className="underline-offset-4 hover:underline">
+              {kid.name}
+            </Link>
+          </h2>
         </div>
         {kid.pools.map((pool) => (
           <PoolRow key={pool.pool} kid={kid} pool={pool} onAdjust={() => onAdjust(pool.pool)} />
         ))}
-        {chips.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {chips.map((chip) => (
-              <span key={chip.text} className={cn('rounded-full px-3 py-1 text-xs font-medium', CHIP[chip.tone])}>
-                {chip.text}
-              </span>
-            ))}
-          </div>
-        )}
+        <ChipList chips={chips} />
       </CardContent>
     </Card>
   );
