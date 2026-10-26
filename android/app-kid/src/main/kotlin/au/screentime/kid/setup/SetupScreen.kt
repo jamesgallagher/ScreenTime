@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import au.screentime.core.ui.ScreenTimeTheme
 import au.screentime.kid.enrol.serverLabel
+import au.screentime.kid.home.HomeScreen
 
 /** Guide for the computer part of setup (docs/SPEC.md §12.1). */
 private const val GUIDE = "github.com/jamesgallagher/ScreenTime › docs/guides/android-provisioning.md"
@@ -69,7 +70,7 @@ fun SetupScreen(vm: SetupViewModel) {
         )
         is SetupState.Scanning -> QrScanScreen(onCode = vm::onLink, onCancel = vm::onScanCancel, onFailed = vm::onScanFailed)
         is SetupState.Confirm -> ConfirmScreen(s.kidName, vm.deviceWord, onYes = vm::onConfirm, onNo = vm::onReject)
-        is SetupState.Done -> DoneScreen(s.kidName, vm.deviceWord)
+        is SetupState.Done -> HomeScreen()
     }
 }
 
@@ -355,16 +356,5 @@ private fun ConfirmScreen(kidName: String, deviceWord: String, onYes: () -> Unit
         ) {
             Text("No, that's not me", style = MaterialTheme.typography.titleMedium)
         }
-    }
-}
-
-@Composable
-private fun DoneScreen(kidName: String, deviceWord: String) {
-    SetupPage {
-        KidInitial(kidName)
-        Spacer(Modifier.height(24.dp))
-        Title("All set, $kidName")
-        Spacer(Modifier.height(12.dp))
-        Body("Screen Time is looking after this $deviceWord now.")
     }
 }

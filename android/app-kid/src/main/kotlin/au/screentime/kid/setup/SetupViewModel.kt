@@ -48,7 +48,7 @@ sealed interface SetupState {
     /** Enrolled; the kid checks the name before the phone is locked down. */
     data class Confirm(val kidName: String) : SetupState
 
-    /** Enrolled and confirmed. The main screen comes in a later card. */
+    /** Enrolled and confirmed: the main screen. */
     data class Done(val kidName: String) : SetupState
 }
 
