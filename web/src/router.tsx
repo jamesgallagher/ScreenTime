@@ -15,6 +15,7 @@ import { InboxPage } from '@/pages/inbox';
 import { KidPage } from '@/pages/kid';
 import { KidsPage } from '@/pages/kids';
 import { NotFoundPage } from '@/pages/not-found';
+import { SettingsPage } from '@/pages/settings';
 import { SignInPage } from '@/pages/sign-in';
 import { TodayPage } from '@/pages/today';
 
@@ -65,11 +66,7 @@ const kidRoute = createRoute({
     return <KidPage key={kidId} kidId={kidId} />;
   },
 });
-const settingsRoute = createRoute({
-  getParentRoute: () => appRoute,
-  path: '/settings',
-  component: () => <ComingSoon title="Settings" description="Notifications, presets, parents and the parent code." />,
-});
+const settingsRoute = createRoute({ getParentRoute: () => appRoute, path: '/settings', component: SettingsPage });
 const adminRoute = createRoute({ getParentRoute: () => appRoute, path: '/admin', component: AdminOnly });
 
 const routeTree = rootRoute.addChildren([
