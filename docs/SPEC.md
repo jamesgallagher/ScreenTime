@@ -241,6 +241,8 @@ The super admin is not a table row. The Docker env var `SUPER_ADMIN_EMAIL` names
 
 The same pure function is implemented three times: `packages/engine` (TypeScript, used by server and web), `android/core-time` (Kotlin) and `windows/src/ScreenTime.Core` (C#). All three must pass every case in `test-vectors/engine/`.
 
+Kotlin (CARD-028): `au.screentime.core.time.evaluate(EngineInput): EngineResult` in `android/core-time`, on `java.time` only, following `engine.ts` step for step in epoch milliseconds. `EngineVectorsTest` runs every vector file as its own JUnit test; it reads JSON with `kotlinx-serialization-json` as a test-only dependency.
+
 ### 7.1 Inputs
 
 For one kid, one pool, one local date `D`:
