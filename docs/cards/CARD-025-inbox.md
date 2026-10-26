@@ -1417,7 +1417,7 @@ Never put a real password, JWT secret, SMTP key, Firebase key, FCM token or devi
 2. Commit in small logical commits (steps 2 and 3). Message format: `CARD-025: <what changed>`.
 3. Before pushing, run every acceptance command again and make sure all pass.
 4. Push: `git push -u origin bob/card-025-inbox`
-5. Open a PR into `main` titled `CARD-025: Inbox and SOS banner`. Write the body to `$env:TEMP\pr-body.md` (outside the repo) and run `gh pr create --base main --head bob/card-025-inbox --title "CARD-025: Inbox and SOS banner" --body-file $env:TEMP\pr-body.md`. Body:
+5. Open a PR into `main` titled `CARD-025: Inbox and SOS banner`. Write the body to `C:\Users\james\OpenCode\Testing\temp\pr-body.md` (the shared temp folder outside the repo; create it first with `New-Item -ItemType Directory -Force C:\Users\james\OpenCode\Testing\temp | Out-Null`) and run `gh pr create --base main --head bob/card-025-inbox --title "CARD-025: Inbox and SOS banner" --body-file C:\Users\james\OpenCode\Testing\temp\pr-body.md`. Body:
    ```markdown
    ## Card
    docs/cards/CARD-025-inbox.md
