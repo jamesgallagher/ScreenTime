@@ -57,7 +57,7 @@ class Recorder(private val store: SegmentStore, private val newId: () -> String)
         if (atMs > open.lastSeenAtMs) store.touch(open.id, atMs)
     }
 
-    /** The screen went off: the open segment ends at [atMs] (never before it started). */
+    /** The screen went off (or the device locked): the open segment ends at [atMs]. */
     suspend fun stop(atMs: Long) {
         val open = store.open() ?: return
         val end = maxOf(atMs, open.startedAtMs)
