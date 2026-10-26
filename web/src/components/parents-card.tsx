@@ -138,7 +138,6 @@ function RemoveBody({ parent, onDone }: { parent: Parent; onDone: () => void }) 
       onDone();
     },
   });
-
   return (
     <>
       <DialogTitle>Remove {parent.displayName}?</DialogTitle>
