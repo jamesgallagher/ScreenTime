@@ -1,6 +1,9 @@
 package au.screentime.kid.status
 
 import au.screentime.core.model.api.DeviceState
+import au.screentime.core.model.api.DeviceStateMessagePresetsItem
+import au.screentime.core.model.api.DeviceStateParentsItem
+import au.screentime.core.model.api.DeviceStatePendingRequest
 import au.screentime.core.time.LockReason
 import au.screentime.core.time.evaluate
 import au.screentime.kid.usage.state
@@ -107,5 +110,34 @@ class KidStatusTest {
         assertEquals(at("10:45"), nextCheckAtMs(statusAt("10:00"), now))
         // 10:59:30: the lock at 11:00.
         assertEquals(at("11:00"), nextCheckAtMs(statusAt("10:00"), at("10:59:30")))
+    }
+
+    @Test
+    fun theParentsPresetsAndAWaitingRequestComeFromTheSnapshot() {
+        val family = state().copy(
+            parents = listOf(DeviceStateParentsItem("p1", "Mum", null), DeviceStateParentsItem("p2", "Dad", "+61400000000")),
+            messagePresets = listOf(DeviceStateMessagePresetsItem("m1", "Can you call me?")),
+            pendingRequest = DeviceStatePendingRequest("r1", 30, "2026-10-26T00:00:00Z"),
+        )
+
+        val s = statusAt("10:00", family)
+
+        assertEquals(listOf("Mum", "Dad"), s.parentNames)
+        assertEquals(listOf(Preset("m1", "Can you call me?")), s.presets)
+        assertEquals(30, s.pendingMinutes)
+        assertEquals("Mum or Dad", s.parentsOr)
+        assertEquals("Mum and Dad", s.parentsAnd)
+        assertNull(statusAt("10:00").pendingMinutes)
+    }
+
+    @Test
+    fun namesAndMinutesReadTheKidsWay() {
+        assertEquals("your parents", parentsText(emptyList(), "or"))
+        assertEquals("Dad", parentsText(listOf("Dad"), "or"))
+        assertEquals("Mum, Dad or Nan", parentsText(listOf("Mum", "Dad", "Nan"), "or"))
+        assertEquals("15 min", minutesText(15))
+        assertEquals("45 min", minutesText(45))
+        assertEquals("1h", minutesText(60))
+        assertEquals("1h 30m", minutesText(90))
     }
 }
