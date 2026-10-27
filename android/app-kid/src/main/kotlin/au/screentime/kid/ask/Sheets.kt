@@ -344,13 +344,13 @@ private fun MessageSheet(status: KidStatus, onDone: () -> Unit) {
 }
 
 @Composable
-private fun SheetTitle(text: String) {
+internal fun SheetTitle(text: String) {
     Text(text, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
 }
 
 /** A big rounded choice: teal when picked, grey otherwise. */
 @Composable
-private fun Choice(text: String, selected: Boolean, modifier: Modifier, align: TextAlign, onClick: () -> Unit) {
+internal fun Choice(text: String, selected: Boolean, modifier: Modifier, align: TextAlign, onClick: () -> Unit) {
     val colors = ScreenTimeTheme.colors
     Surface(
         onClick = onClick,
@@ -394,7 +394,7 @@ private fun TextBox(value: String, onValue: (String) -> Unit, label: String) {
 }
 
 @Composable
-private fun ErrorLine(text: String) {
+internal fun ErrorLine(text: String) {
     Spacer(Modifier.height(8.dp))
     Text(text, style = MaterialTheme.typography.bodyMedium, color = ScreenTimeTheme.colors.danger)
 }
@@ -417,12 +417,16 @@ private fun SendButton(sending: Boolean, enabled: Boolean, onClick: () -> Unit) 
 }
 
 /** Runs [block] with a [Sender] on this device's own token, then closes the connection. */
-private suspend fun sendWith(context: Context, block: suspend (Sender) -> SendResult): SendResult {
-    val enrolment = EnrolmentStore(context).load() ?: return SendResult.FAILED
+private suspend fun sendWith(context: Context, block: suspend (Sender) -> SendResult): SendResult =
+    withApi(context, SendResult.FAILED) { block(Sender(it)) }
+
+/** Runs [block] with an [ApiClient] on this device's own token, then closes it; [fallback] when not paired. */
+internal suspend fun <T> withApi(context: Context, fallback: T, block: suspend (ApiClient) -> T): T {
+    val enrolment = EnrolmentStore(context).load() ?: return fallback
     val engine = OkHttp.create()
     val api = ApiClient(enrolment.serverUrl, engine, token = { enrolment.deviceToken })
     return try {
-        block(Sender(api))
+        block(api)
     } finally {
         api.close()
         engine.close()

@@ -27,6 +27,11 @@ import au.screentime.kid.live.Answer
 import au.screentime.kid.live.LiveChannel
 import au.screentime.kid.live.answerOf
 import au.screentime.kid.live.liveUrl
+import au.screentime.kid.live.parentModeNewsOf
+import au.screentime.kid.parentmode.CodeSession
+import au.screentime.kid.parentmode.ParentModeApi
+import au.screentime.kid.parentmode.ParentModeStore
+import au.screentime.kid.parentmode.parentModeNow
 import au.screentime.kid.status.StatusHub
 import au.screentime.kid.status.WarningTracker
 import au.screentime.kid.status.kidStatus
@@ -38,6 +43,7 @@ import au.screentime.kid.usage.dayStartMs
 import au.screentime.kid.usage.todayInput
 import io.ktor.client.engine.HttpClientEngine
 import io.ktor.client.engine.okhttp.OkHttp
+import java.time.OffsetDateTime
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -55,9 +61,10 @@ import kotlinx.coroutines.withTimeoutOrNull
  * The always-on part of the kid app (docs/SPEC.md §12.1, "Foreground service"): records usage segments from the
  * screen and unlock broadcasts, syncs with the server (§8.3), and keeps the notification, the warnings and the main
  * screen up to date (§16.2), and shows the block screen while the engine says the device is locked (§12.1). While the
- * block screen can be seen, or the kid waits for an answer to "Ask for more time", it also keeps the live channel open
- * (§8.3), so a parent's grant or answer shows within seconds. Everything runs one at a time on [scope], so the
- * database sees one change after another.
+ * block screen can be seen, or the kid waits for an answer to "Ask for more time" or "I'm the parent", or parent mode is
+ * on, it also keeps the live channel open (§8.3), so a parent's grant or answer shows within seconds. While parent
+ * mode is on (§12.3) the device is not blocked and nothing counts. Everything runs one at a time on [scope], so the
+ * database and the parent mode store see one change after another.
  */
 class KidService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO.limitedParallelism(1))
@@ -68,6 +75,8 @@ class KidService : Service() {
     private lateinit var states: FileStateStore
     private lateinit var syncer: Syncer
     private lateinit var notifier: Notifier
+    private lateinit var parentStore: ParentModeStore
+    private var parentApi: ParentModeApi? = null
     private var engine: HttpClientEngine? = null
     private var api: ApiClient? = null
     private var live: LiveChannel? = null
@@ -90,6 +99,9 @@ class KidService : Service() {
 
     /** The engine said locked at the last run: the block screen is up and nothing counts (docs/SPEC.md §12.1). */
     private var blocked = false
+
+    /** Parent mode was on at the last run: not blocked, and nothing counts (docs/SPEC.md §12.3). */
+    private var paused = false
 
     private val warnings = WarningTracker()
 
@@ -137,6 +149,7 @@ class KidService : Service() {
             wall = System::currentTimeMillis,
             bootCount = { Settings.Global.getInt(contentResolver, Settings.Global.BOOT_COUNT, 0) },
         )
+        parentStore = ParentModeStore(this)
         segments = RoomSegmentStore(KidDatabase.open(this).segments())
         states = FileStateStore(this)
         recorder = Recorder(segments) { UUID.randomUUID().toString() }
@@ -144,6 +157,7 @@ class KidService : Service() {
         val client = ApiClient(enrolment.serverUrl, http, token = { enrolment.deviceToken })
         engine = http
         api = client
+        parentApi = ParentModeApi(client)
         syncer = Syncer(client, segments, states, clock, log = { Log.w(TAG, it) })
         live = LiveChannel(
             engine = http,
@@ -151,6 +165,10 @@ class KidService : Service() {
             token = { enrolment.deviceToken },
             onNews = { frame ->
                 frame?.let(::answerOf)?.let(::onAnswer)
+                frame?.let(::parentModeNewsOf)?.let {
+                    Log.i(TAG, "parent mode: news active=${it.active}")
+                    StatusHub.parentModeNews.value = it
+                }
                 syncWanted = true
                 wake.trySend(Unit)
             },
@@ -172,12 +190,13 @@ class KidService : Service() {
             if (inUse()) recorder.start(clock.nowMs())
             sync()
             while (isActive) {
-                // While in use, until the next warning, lock or period (at least once a minute). Blocked with the
-                // screen on, the same while the live channel is open; while it is down, at least every 30 seconds,
-                // to see a parent's grant soon. Otherwise a minute.
+                // While in use, or in parent mode with the screen on, until the next warning, lock, period or end of
+                // parent mode (at least once a minute; in parent mode a sync then if the live channel is down, to see
+                // a parent end it). Blocked with the screen on, the same while the live channel is open; while it is
+                // down, at least every 30 seconds, to see a parent's grant soon. Otherwise a minute.
                 val untilNext = (nextCheckAt - clock.nowMs()).coerceIn(SECOND, MINUTE)
                 val wait = when {
-                    inUse() -> untilNext
+                    inUse() || (paused && screenOn()) -> untilNext
                     blocked && screenOn() -> if (live?.connected == true) untilNext else minOf(untilNext, BLOCKED_POLL)
                     else -> MINUTE
                 }
@@ -192,16 +211,25 @@ class KidService : Service() {
                         if (SystemClock.elapsedRealtime() - lastSyncElapsed >= 5 * MINUTE) sync() else report()
                     }
                     blocked && screenOn() -> if (live?.connected == true) report() else sync()
+                    paused && screenOn() -> if (live?.connected == true) report() else sync()
                 }
             }
         }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // A screen just sent something (docs/SPEC.md §16.2): sync soon, so the next snapshot shows it.
-        if (intent?.action == ACTION_SYNC && started) {
-            syncWanted = true
-            wake.trySend(Unit)
+        if (!started) return START_STICKY
+        when (intent?.action) {
+            // A screen just sent something (docs/SPEC.md §16.2): sync soon, so the next snapshot shows it.
+            ACTION_SYNC -> {
+                syncWanted = true
+                wake.trySend(Unit)
+            }
+            ACTION_PARENT_CODE -> {
+                val minutes = intent.getIntExtra(EXTRA_MINUTES, 0).takeIf { it > 0 }
+                scope.launch { startWithCode(minutes) }
+            }
+            ACTION_END_PARENT_MODE -> scope.launch { endParentMode() }
         }
         return START_STICKY
     }
@@ -222,14 +250,15 @@ class KidService : Service() {
 
     private fun screenOn(): Boolean = getSystemService(PowerManager::class.java).isInteractive
 
-    /** The screen is on and unlocked, and not blocked by us: counting (docs/SPEC.md §3, Q19, §12.1). */
+    /** The screen is on and unlocked, not blocked by us and not in parent mode: counting (docs/SPEC.md §3, Q19, §12). */
     private fun inUse(): Boolean =
-        screenOn() && !getSystemService(KeyguardManager::class.java).isKeyguardLocked && !blocked
+        screenOn() && !getSystemService(KeyguardManager::class.java).isKeyguardLocked && !blocked && !paused
 
     private suspend fun onScreenOn(at: Long) {
         val stale = !lastSyncOk || SystemClock.elapsedRealtime() - lastSyncElapsed >= 2 * MINUTE
-        if (blocked) {
-            // The block screen comes back up through report(); a fresh sync may bring a grant.
+        if (blocked || paused) {
+            // The block screen comes back up through report(); a fresh sync may bring a grant, or the end of parent
+            // mode.
             if (stale) sync() else report()
             return
         }
@@ -246,10 +275,28 @@ class KidService : Service() {
         notifier.showAnswer(answer)
     }
 
+    /** The parent code was right and a parent picked how long (docs/SPEC.md §12.3): parent mode starts here and now. */
+    private suspend fun startWithCode(minutes: Int?) {
+        val local = parentStore.load()
+        parentStore.save(local.copy(code = CodeSession(UUID.randomUUID().toString(), minutes, clock.nowMs())))
+        Log.i(TAG, "parent mode: started with the code for ${minutes?.let { "$it min" } ?: "until ended"}")
+        sync()
+    }
+
+    /** **End now**, on the main screen or the notification. */
+    private suspend fun endParentMode() {
+        parentStore.save(parentStore.load().copy(endedAtMs = clock.nowMs(), endReported = false))
+        Log.i(TAG, "parent mode: ended on this device")
+        sync()
+    }
+
     private suspend fun sync() {
         syncLock.withLock {
             // This sync also brings whatever the live channel announced.
             syncWanted = false
+            // What the server must hear about parent mode goes first, so the snapshot after it shows it.
+            val local = parentStore.load()
+            if (local.pending) parentApi?.let { parentStore.save(it.flush(local, clock.nowMs())) }
             val ok = syncer.sync()
             lastSyncElapsed = SystemClock.elapsedRealtime()
             lastSyncOk = ok
@@ -273,17 +320,23 @@ class KidService : Service() {
         val cached = states.load() ?: return
         val own = segments.since(dayStartMs(cached.state, now))
         val result = evaluate(todayInput(cached.state, own, now))
-        val status = kidStatus(cached.state, result, now, lastSyncOk, SystemClock.elapsedRealtime())
+        val serverTimeMs = OffsetDateTime.parse(cached.state.serverTime).toInstant().toEpochMilli()
+        val parentMode = parentModeNow(cached.state.parentMode, serverTimeMs, parentStore.load(), now)
+        val status = kidStatus(cached.state, result, now, lastSyncOk, SystemClock.elapsedRealtime(), parentMode)
 
-        val wasBlocked = blocked
+        // Counting stops when the device becomes blocked or parent mode starts, and starts again after both.
+        val wasCounting = !blocked && !paused
         blocked = status.locked
-        if (blocked && !wasBlocked) recorder.stop(now)
-        if (!blocked && wasBlocked && inUse()) recorder.start(now)
+        if (paused != (parentMode != null)) Log.i(TAG, "parent mode: ${if (parentMode != null) "on" else "off"}")
+        paused = parentMode != null
+        val counting = !blocked && !paused
+        if (wasCounting && !counting) recorder.stop(now)
+        if (!wasCounting && counting && inUse()) recorder.start(now)
 
         StatusHub.status.value = status
         // The block screen closes itself when StatusHub says unlocked.
         if (blocked && screenOn()) BlockActivity.show(this)
-        updateLive(waiting = status.pendingMinutes != null)
+        updateLive(waiting = status.pendingMinutes != null || StatusHub.parentModeAsked.value)
         notifier.showStatus(status, now)
         if (status.locked) {
             notifier.cancelWarning()
@@ -295,17 +348,18 @@ class KidService : Service() {
         Log.i(
             TAG,
             "pool=${cached.state.device.pool.wire} used=${result.usedSec}s remaining=${result.remainingSec}s " +
-                "left=${status.leftSec}s locked=${result.locked} online=$lastSyncOk segments=${own.size}",
+                "left=${status.leftSec}s locked=${status.locked} parentMode=$paused online=$lastSyncOk segments=${own.size}",
         )
     }
 
     /**
-     * The live channel is open only while the screen is on and the kid is waiting for something: blocked (docs/SPEC.md
-     * §8.3), or [waiting] for an answer to "Ask for more time". Otherwise FCM covers the rest (CARD-034b).
+     * The live channel is open only while the screen is on and something may come: blocked (docs/SPEC.md §8.3),
+     * [waiting] for an answer to "Ask for more time" or "I'm the parent", or in parent mode (a parent may end it).
+     * Otherwise FCM covers the rest (CARD-034b).
      */
     private fun updateLive(waiting: Boolean) {
         val channel = live ?: return
-        val want = screenOn() && (blocked || waiting)
+        val want = screenOn() && (blocked || waiting || paused)
         if (want && liveJob == null) {
             Log.i(TAG, "live: started")
             liveJob = scope.launch { channel.run() }
@@ -328,6 +382,11 @@ class KidService : Service() {
         private const val KEEP_DAYS = 30L
 
         private const val ACTION_SYNC = "au.screentime.kid.action.SYNC"
+        private const val ACTION_PARENT_CODE = "au.screentime.kid.action.PARENT_CODE"
+        private const val EXTRA_MINUTES = "minutes"
+
+        /** **End now** in the notification uses it too. */
+        const val ACTION_END_PARENT_MODE = "au.screentime.kid.action.END_PARENT_MODE"
 
         fun start(context: Context) {
             context.startForegroundService(Intent(context, KidService::class.java))
@@ -336,6 +395,20 @@ class KidService : Service() {
         /** From a screen of the app, which is in front: sync as soon as the service can. */
         fun syncSoon(context: Context) {
             context.startService(Intent(context, KidService::class.java).setAction(ACTION_SYNC))
+        }
+
+        /** After a right parent code: parent mode for [minutes], or until ended when null. */
+        fun startParentMode(context: Context, minutes: Int?) {
+            context.startService(
+                Intent(context, KidService::class.java)
+                    .setAction(ACTION_PARENT_CODE)
+                    .putExtra(EXTRA_MINUTES, minutes ?: 0),
+            )
+        }
+
+        /** **End now** on the main screen. */
+        fun endParentMode(context: Context) {
+            context.startService(Intent(context, KidService::class.java).setAction(ACTION_END_PARENT_MODE))
         }
     }
 }

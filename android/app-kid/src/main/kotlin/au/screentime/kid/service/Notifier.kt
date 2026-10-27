@@ -18,8 +18,9 @@ import au.screentime.kid.status.warningText
 import au.screentime.kid.status.warningTitle
 
 /**
- * The kid app's notifications (docs/SPEC.md §16.2): the silent status notification of the foreground service, the
- * heads-up warnings before a lock, and a parent's answer to "Ask for more time".
+ * The kid app's notifications (docs/SPEC.md §16.2): the silent status notification of the foreground service (with
+ * **End now** while parent mode is on), the heads-up warnings before a lock, and a parent's answer to "Ask for more
+ * time".
  */
 class Notifier(private val context: Context) {
     private val manager = context.getSystemService(NotificationManager::class.java)
@@ -51,6 +52,14 @@ class Notifier(private val context: Context) {
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )
 
+    /** Ends parent mode through the service. */
+    private val endParentMode: PendingIntent = PendingIntent.getService(
+        context,
+        1,
+        Intent(context, KidService::class.java).setAction(KidService.ACTION_END_PARENT_MODE),
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+    )
+
     /** What the service shows before the first sync. */
     fun starting(): Notification = Notification.Builder(context, STATUS_CHANNEL)
         .setSmallIcon(R.drawable.ic_status)
@@ -63,6 +72,7 @@ class Notifier(private val context: Context) {
     /**
      * "Phone · 1h 12m left", "Bedtime 8:30 pm", with the system chronometer counting down to the lock. The
      * chronometer runs on the wall clock, so the lock is moved by the gap between the trusted clock ([nowMs]) and it.
+     * In parent mode: "Parent mode · ends 4:15 pm", "Time isn't counting" and **End now**.
      */
     fun showStatus(status: KidStatus, nowMs: Long) {
         val builder = Notification.Builder(context, STATUS_CHANNEL)
@@ -73,6 +83,9 @@ class Notifier(private val context: Context) {
             .setOngoing(true)
             .setOnlyAlertOnce(true)
         if (!status.online) builder.setSubText("Offline")
+        if (status.parentMode) {
+            builder.addAction(Notification.Action.Builder(null, "End now", endParentMode).build())
+        }
         val lockAt = status.lockAtMs
         if (lockAt != null) {
             builder

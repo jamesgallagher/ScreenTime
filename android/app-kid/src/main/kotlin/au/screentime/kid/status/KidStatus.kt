@@ -8,6 +8,7 @@ import au.screentime.core.time.LockReason
 import au.screentime.core.time.formatDuration
 import au.screentime.kid.calls.Callable
 import au.screentime.kid.calls.callablesOf
+import au.screentime.kid.parentmode.ParentModeOn
 import java.time.Instant
 import java.time.LocalTime
 import java.time.ZoneId
@@ -61,6 +62,14 @@ data class KidStatus(
     val callables: List<Callable> = emptyList(),
     /** The family's emergency number, "000". */
     val emergencyNumber: String = "000",
+    /** Parent mode is on (docs/SPEC.md §12.3): not locked, and nothing counts. */
+    val parentMode: Boolean = false,
+    /** When parent mode ends; null while it is off or lasts until a parent ends it. */
+    val parentModeEndsAtMs: Long? = null,
+    /** [parentModeEndsAtMs] as a time of day, "4:15 pm". */
+    val parentModeEndsText: String? = null,
+    /** The family's secret for the parent code (base32). */
+    val parentCodeSecret: String = "",
 ) {
     val locked: Boolean get() = lockReason != null
 
@@ -77,9 +86,15 @@ data class KidStatus(
         else -> Level.PLENTY
     }
 
-    /** The notification title: "Phone · 1h 12m left", or "It's bedtime" when locked. */
-    fun title(left: Long = leftSec): String =
-        lockReason?.let { headline(it) } ?: "$poolName · ${formatDuration(left)} left"
+    /** The notification title: "Phone · 1h 12m left", "It's bedtime" when locked, or the parent mode line. */
+    fun title(left: Long = leftSec): String = when {
+        parentMode -> parentModeText()
+        else -> lockReason?.let { headline(it) } ?: "$poolName · ${formatDuration(left)} left"
+    }
+
+    /** "Parent mode · ends 4:15 pm", or "Parent mode · until you end it". */
+    fun parentModeText(): String =
+        "Parent mode · " + (parentModeEndsText?.let { "ends $it" } ?: "until you end it")
 
     /** "Out of Phone time", "It's bedtime" or "Not yet, it's early". */
     fun headline(reason: LockReason): String = when (reason) {
@@ -89,7 +104,12 @@ data class KidStatus(
     }
 
     /** The line under it: "Bedtime 8:30 pm"; when locked "Phone is back at 7:00 am" or "New time tomorrow". */
-    fun subline(): String? = when (lockReason) {
+    fun subline(): String? = when {
+        parentMode -> "Time isn't counting"
+        else -> lockSubline()
+    }
+
+    private fun lockSubline(): String? = when (lockReason) {
         null -> bedtime?.let { "Bedtime $it" }
         LockReason.OUT_OF_TIME -> "New time tomorrow"
         else -> backAt?.let { "${deviceWord.replaceFirstChar(Char::uppercase)} is back at $it" }
@@ -112,17 +132,27 @@ data class KidStatus(
     }
 }
 
-/** The status for [result], the engine's answer for [state] at [nowMs]. */
-fun kidStatus(state: DeviceState, result: EngineResult, nowMs: Long, online: Boolean, elapsedMs: Long): KidStatus {
+/**
+ * The status for [result], the engine's answer for [state] at [nowMs]. While [parentMode] is on the device is not
+ * locked and does not lock (docs/SPEC.md §12.3).
+ */
+fun kidStatus(
+    state: DeviceState,
+    result: EngineResult,
+    nowMs: Long,
+    online: Boolean,
+    elapsedMs: Long,
+    parentMode: ParentModeOn? = null,
+): KidStatus {
     val tz = ZoneId.of(state.family.timezone)
     val local = Instant.ofEpochMilli(nowMs).atZone(tz)
     val date = local.toLocalDate()
     fun dayOf(weekday: Int) = state.schedule.days.first { it.weekday == weekday }
     val today = dayOf(date.dayOfWeek.value)
 
-    val lockAtMs = result.nextLockAt?.toEpochMilli()
+    val lockAtMs = if (parentMode != null) null else result.nextLockAt?.toEpochMilli()
     val leftSec = when {
-        result.locked -> 0L
+        result.locked && parentMode == null -> 0L
         lockAtMs != null -> maxOf(0L, (lockAtMs - nowMs) / 1000)
         else -> result.remainingSec
     }
@@ -141,7 +171,7 @@ fun kidStatus(state: DeviceState, result: EngineResult, nowMs: Long, online: Boo
         kidName = state.kid.name,
         poolName = if (state.device.pool == Pool.PHONE) "Phone" else "Screens",
         deviceWord = if (state.device.form == DeviceForm.TABLET) "tablet" else "phone",
-        lockReason = if (result.locked) result.lockReason else null,
+        lockReason = if (result.locked && parentMode == null) result.lockReason else null,
         leftSec = leftSec,
         usedSec = result.usedSec,
         lockAtMs = lockAtMs,
@@ -159,6 +189,10 @@ fun kidStatus(state: DeviceState, result: EngineResult, nowMs: Long, online: Boo
         canCall = state.device.form == DeviceForm.PHONE && state.device.hasCellular,
         callables = callablesOf(state.parents, state.contacts),
         emergencyNumber = state.family.emergencyNumber,
+        parentMode = parentMode != null,
+        parentModeEndsAtMs = parentMode?.endsAtMs,
+        parentModeEndsText = parentMode?.endsAtMs?.let { clockText(Instant.ofEpochMilli(it).atZone(tz).toLocalTime()) },
+        parentCodeSecret = state.family.parentCodeSecret,
     )
 }
 
@@ -180,13 +214,14 @@ fun clockText(time: LocalTime): String {
 }
 
 /**
- * When the service must look again (docs/SPEC.md §12.1): the first of warn 1, warn 2, the lock and [KidStatus.reevaluateAtMs]
- * that is still to come, and at least once a minute.
+ * When the service must look again (docs/SPEC.md §12.1): the first of warn 1, warn 2, the lock, the end of parent mode
+ * and [KidStatus.reevaluateAtMs] that is still to come, and at least once a minute.
  */
 fun nextCheckAtMs(status: KidStatus, nowMs: Long): Long {
     val lockAt = status.lockAtMs
     val events = buildList {
         add(status.reevaluateAtMs)
+        status.parentModeEndsAtMs?.let(::add)
         if (lockAt != null) {
             add(lockAt)
             add(lockAt - status.warn1Min * 60_000L)
