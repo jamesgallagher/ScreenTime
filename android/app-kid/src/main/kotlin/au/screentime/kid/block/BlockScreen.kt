@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -35,6 +37,8 @@ import au.screentime.core.time.LockReason
 import au.screentime.core.ui.ScreenTimeTheme
 import au.screentime.kid.ask.AskAndMessage
 import au.screentime.kid.ask.Look
+import au.screentime.kid.calls.ContactRow
+import au.screentime.kid.calls.EmergencyButton
 import au.screentime.kid.status.KidStatus
 import au.screentime.kid.status.clockText
 import java.time.LocalTime
@@ -42,8 +46,9 @@ import kotlinx.coroutines.delay
 
 /**
  * The block screen's content (docs/SPEC.md §16.2): the time at the top, a moon or an hourglass, "It's bedtime",
- * when the device is back, and **Ask for more time** and **Message Mum and Dad**. Calls, SOS and "I'm the parent"
- * come with their cards.
+ * when the device is back, and **Ask for more time** and **Message Mum and Dad**. A phone with a SIM also has the
+ * row of call buttons above them and **Emergency 000** under them. SOS and "I'm the parent" come with their cards.
+ * When it all does not fit (a phone on its side), the screen scrolls; otherwise the gaps share the spare height.
  */
 @Composable
 fun BlockScreen(status: KidStatus) {
@@ -54,6 +59,7 @@ fun BlockScreen(status: KidStatus) {
             .fillMaxSize()
             .background(Brush.verticalGradient(listOf(colors.nightTop, colors.nightBottom)))
             .safeDrawingPadding()
+            .verticalScroll(rememberScrollState())
             .padding(horizontal = 24.dp, vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -80,7 +86,16 @@ fun BlockScreen(status: KidStatus) {
             }
         }
         Spacer(Modifier.weight(1f))
+        Spacer(Modifier.height(24.dp))
+        if (status.canCall && status.callables.isNotEmpty()) {
+            ContactRow(status.callables)
+            Spacer(Modifier.height(20.dp))
+        }
         AskAndMessage(status, Look.NIGHT)
+        if (status.canCall) {
+            Spacer(Modifier.height(12.dp))
+            EmergencyButton(status.emergencyNumber)
+        }
         Spacer(Modifier.height(8.dp))
     }
 }

@@ -6,6 +6,8 @@ import au.screentime.core.model.api.Pool
 import au.screentime.core.time.EngineResult
 import au.screentime.core.time.LockReason
 import au.screentime.core.time.formatDuration
+import au.screentime.kid.calls.Callable
+import au.screentime.kid.calls.callablesOf
 import java.time.Instant
 import java.time.LocalTime
 import java.time.ZoneId
@@ -53,6 +55,12 @@ data class KidStatus(
     val presets: List<Preset> = emptyList(),
     /** Minutes of the kid's "Ask for more time" that no parent has answered yet; null when there is none. */
     val pendingMinutes: Int? = null,
+    /** A phone with a SIM: the block screen has call buttons and **Emergency** (docs/SPEC.md §12.1, Q28). */
+    val canCall: Boolean = false,
+    /** The call buttons: the parents with a mobile, then the kid's always-callable contacts. */
+    val callables: List<Callable> = emptyList(),
+    /** The family's emergency number, "000". */
+    val emergencyNumber: String = "000",
 ) {
     val locked: Boolean get() = lockReason != null
 
@@ -148,6 +156,9 @@ fun kidStatus(state: DeviceState, result: EngineResult, nowMs: Long, online: Boo
         parentNames = state.parents.map { it.displayName },
         presets = state.messagePresets.map { Preset(it.id, it.text) },
         pendingMinutes = state.pendingRequest?.minutes,
+        canCall = state.device.form == DeviceForm.PHONE && state.device.hasCellular,
+        callables = callablesOf(state.parents, state.contacts),
+        emergencyNumber = state.family.emergencyNumber,
     )
 }
 
