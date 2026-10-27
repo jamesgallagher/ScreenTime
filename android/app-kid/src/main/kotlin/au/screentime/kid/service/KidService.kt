@@ -16,6 +16,8 @@ import android.provider.Settings
 import android.util.Log
 import au.screentime.core.model.api.ApiClient
 import au.screentime.core.time.evaluate
+import au.screentime.kid.admin.Policies
+import au.screentime.kid.block.BlockActivity
 import au.screentime.kid.data.FileStateStore
 import au.screentime.kid.data.KidDatabase
 import au.screentime.kid.data.PrefsClockStore
@@ -40,13 +42,15 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * The always-on part of the kid app (docs/SPEC.md §12.1, "Foreground service"): records usage segments from the
  * screen and unlock broadcasts, syncs with the server (§8.3), and keeps the notification, the warnings and the main
- * screen up to date (§16.2). Everything runs one at a time on [scope], so the database sees one change after another.
- * Locking comes in CARD-033; for now a locked device only says so.
+ * screen up to date (§16.2), and shows the block screen while the engine says the device is locked (§12.1). Everything
+ * runs one at a time on [scope], so the database sees one change after another.
  */
 class KidService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO.limitedParallelism(1))
@@ -65,6 +69,12 @@ class KidService : Service() {
     private var lastSyncElapsed = 0L
     private var lastSyncOk = true
 
+    /** One sync at a time: a slow sync that is failing must not overlap the next one. */
+    private val syncLock = Mutex()
+
+    /** The engine said locked at the last run: the block screen is up and nothing counts (docs/SPEC.md §12.1). */
+    private var blocked = false
+
     private val warnings = WarningTracker()
 
     /** Trusted time of the next warning, lock or new period, so the loop wakes up for it (at least once a minute). */
@@ -77,7 +87,7 @@ class KidService : Service() {
         override fun onReceive(context: Context, intent: Intent) {
             val at = clock.nowMs()
             when (intent.action) {
-                Intent.ACTION_USER_PRESENT, Intent.ACTION_SCREEN_ON -> scope.launch { onInUse(at) }
+                Intent.ACTION_USER_PRESENT, Intent.ACTION_SCREEN_ON -> scope.launch { onScreenOn(at) }
                 Intent.ACTION_SCREEN_OFF -> scope.launch {
                     recorder.stop(at)
                     sync()
@@ -102,6 +112,8 @@ class KidService : Service() {
             stopSelf()
             return
         }
+        // Again on every start, so an app update gets the policies it added (Lock Task in CARD-033).
+        Policies.apply(this)
 
         clock = TrustedClock(
             store = PrefsClockStore(this),
@@ -133,13 +145,23 @@ class KidService : Service() {
             if (inUse()) recorder.start(clock.nowMs())
             sync()
             while (isActive) {
-                // While in use, until the next warning, lock or period (at least once a minute); otherwise a minute.
-                val wait = if (inUse()) (nextCheckAt - clock.nowMs()).coerceIn(SECOND, MINUTE) else MINUTE
+                // While in use, until the next warning, lock or period (at least once a minute). Blocked with the
+                // screen on, at least every 30 seconds, to see a parent's grant soon. Otherwise a minute.
+                val untilNext = (nextCheckAt - clock.nowMs()).coerceIn(SECOND, MINUTE)
+                val wait = when {
+                    inUse() -> untilNext
+                    blocked && screenOn() -> minOf(untilNext, BLOCKED_POLL)
+                    else -> MINUTE
+                }
                 // Woken early: only work out the wait again.
                 if (withTimeoutOrNull(wait) { wake.receive() } != null) continue
-                if (!inUse()) continue
-                recorder.tick(clock.nowMs())
-                if (SystemClock.elapsedRealtime() - lastSyncElapsed >= 5 * MINUTE) sync() else report()
+                when {
+                    inUse() -> {
+                        recorder.tick(clock.nowMs())
+                        if (SystemClock.elapsedRealtime() - lastSyncElapsed >= 5 * MINUTE) sync() else report()
+                    }
+                    blocked && screenOn() -> sync()
+                }
             }
         }
     }
@@ -159,33 +181,43 @@ class KidService : Service() {
         super.onDestroy()
     }
 
-    /** The screen is on and unlocked: counting (docs/SPEC.md §3, Q19). */
-    private fun inUse(): Boolean =
-        getSystemService(PowerManager::class.java).isInteractive &&
-            !getSystemService(KeyguardManager::class.java).isKeyguardLocked
+    private fun screenOn(): Boolean = getSystemService(PowerManager::class.java).isInteractive
 
-    private suspend fun onInUse(at: Long) {
+    /** The screen is on and unlocked, and not blocked by us: counting (docs/SPEC.md §3, Q19, §12.1). */
+    private fun inUse(): Boolean =
+        screenOn() && !getSystemService(KeyguardManager::class.java).isKeyguardLocked && !blocked
+
+    private suspend fun onScreenOn(at: Long) {
+        val stale = !lastSyncOk || SystemClock.elapsedRealtime() - lastSyncElapsed >= 2 * MINUTE
+        if (blocked) {
+            // The block screen comes back up through report(); a fresh sync may bring a grant.
+            if (stale) sync() else report()
+            return
+        }
         // Screen on without a lock screen, or the unlock after it: only one segment either way.
         if (!inUse() || segments.open() != null) return
         recorder.start(at)
-        if (!lastSyncOk || SystemClock.elapsedRealtime() - lastSyncElapsed >= 2 * MINUTE) sync() else report()
+        if (stale) sync() else report()
     }
 
     private suspend fun sync() {
-        val ok = syncer.sync()
-        lastSyncElapsed = SystemClock.elapsedRealtime()
-        lastSyncOk = ok
-        if (ok) {
-            segments.prune(clock.nowMs() - KEEP_DAYS * 24 * 60 * MINUTE)
-        } else {
-            recorder.markOffline()
+        syncLock.withLock {
+            val ok = syncer.sync()
+            lastSyncElapsed = SystemClock.elapsedRealtime()
+            lastSyncOk = ok
+            if (ok) {
+                segments.prune(clock.nowMs() - KEEP_DAYS * 24 * 60 * MINUTE)
+            } else {
+                recorder.markOffline()
+            }
         }
         report()
     }
 
     /**
      * Runs the engine and shows what it says: the notification, a warning when one is due (only while in use), the
-     * main screen through [StatusHub], and the log (`adb logcat -s KidService`).
+     * main screen through [StatusHub], the block screen, and the log (`adb logcat -s KidService`). Becoming locked
+     * ends the open segment; becoming unlocked starts one if the device is in use.
      */
     private suspend fun report() {
         val now = clock.nowMs()
@@ -195,7 +227,14 @@ class KidService : Service() {
         val result = evaluate(todayInput(cached.state, own, now))
         val status = kidStatus(cached.state, result, now, lastSyncOk, SystemClock.elapsedRealtime())
 
+        val wasBlocked = blocked
+        blocked = status.locked
+        if (blocked && !wasBlocked) recorder.stop(now)
+        if (!blocked && wasBlocked && inUse()) recorder.start(now)
+
         StatusHub.status.value = status
+        // The block screen closes itself when StatusHub says unlocked.
+        if (blocked && screenOn()) BlockActivity.show(this)
         notifier.showStatus(status, now)
         if (status.locked) {
             notifier.cancelWarning()
@@ -215,6 +254,9 @@ class KidService : Service() {
         private const val TAG = "KidService"
         private const val SECOND = 1_000L
         private const val MINUTE = 60_000L
+
+        /** How often a blocked device with the screen on asks the server for news (docs/SPEC.md §8.3, until CARD-034). */
+        private const val BLOCKED_POLL = 30_000L
 
         /** Sent segments are kept this long, then forgotten (docs/SPEC.md §8.3, offline buffer). */
         private const val KEEP_DAYS = 30L

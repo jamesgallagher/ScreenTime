@@ -71,12 +71,15 @@ class Recorder(private val store: SegmentStore, private val newId: () -> String)
     }
 
     /**
-     * The server could not be reached: the open segment counts as recorded offline, or when none is open, the newest
-     * one the server has not got yet (the sync at screen off failed). A segment the server already has is left as it
-     * is. Once offline, always offline.
+     * The server could not be reached: the open segment and every segment the server has not got yet count as
+     * recorded offline. That includes the one that ended at a screen off whose sync failed, even when the next unlock
+     * opened a new segment before the failure was known. A segment the server already has is left as it is. Once
+     * offline, always offline.
      */
     suspend fun markOffline() {
-        val target = store.open() ?: store.pending(Int.MAX_VALUE).lastOrNull()?.segment ?: return
-        if (!target.recordedOffline) store.put(target.copy(recordedOffline = true))
+        val targets = (listOfNotNull(store.open()) + store.pending(Int.MAX_VALUE).map { it.segment }).distinctBy { it.id }
+        for (segment in targets) {
+            if (!segment.recordedOffline) store.put(segment.copy(recordedOffline = true))
+        }
     }
 }
