@@ -9,6 +9,7 @@ import au.screentime.core.model.api.DeviceStatePendingRequest
 import au.screentime.core.time.LockReason
 import au.screentime.core.time.evaluate
 import au.screentime.kid.calls.Callable
+import au.screentime.kid.parentmode.ParentModeOn
 import au.screentime.kid.usage.state
 import au.screentime.kid.usage.todayInput
 import java.time.LocalDateTime
@@ -25,9 +26,15 @@ class KidStatusTest {
     private fun at(time: String): Long =
         LocalDateTime.parse("2026-10-26T$time").atZone(ZoneId.of("Australia/Sydney")).toInstant().toEpochMilli()
 
-    private fun statusAt(time: String, state: DeviceState = state(), elapsedMs: Long = 0): KidStatus {
+    private fun statusAt(
+        time: String,
+        state: DeviceState = state(),
+        elapsedMs: Long = 0,
+        parentMode: ParentModeOn? = null,
+    ): KidStatus {
         val now = at(time)
-        return kidStatus(state, evaluate(todayInput(state, emptyList(), now)), now, online = true, elapsedMs = elapsedMs)
+        val result = evaluate(todayInput(state, emptyList(), now))
+        return kidStatus(state, result, now, online = true, elapsedMs = elapsedMs, parentMode = parentMode)
     }
 
     private fun used(from: String, to: String) =
@@ -162,5 +169,34 @@ class KidStatusTest {
         assertEquals("45 min", minutesText(45))
         assertEquals("1h", minutesText(60))
         assertEquals("1h 30m", minutesText(90))
+    }
+
+    @Test
+    fun parentModeUnlocksAndSaysWhenItEnds() {
+        val s = statusAt("21:00", parentMode = ParentModeOn(at("21:15"), "Dad"))
+
+        assertFalse(s.locked)
+        assertNull(s.lockReason)
+        assertNull(s.lockAtMs)
+        assertTrue(s.parentMode)
+        assertEquals("Parent mode · ends 9:15 pm", s.title())
+        assertEquals("Time isn't counting", s.subline())
+        assertEquals(Level.PLENTY, s.level())
+        assertEquals(at("21:15"), s.parentModeEndsAtMs)
+        assertEquals("ABC", s.parentCodeSecret)
+
+        val forever = statusAt("10:00", parentMode = ParentModeOn(null, null))
+        assertEquals("Parent mode · until you end it", forever.title())
+        assertNull(forever.lockAtMs)
+        assertEquals(3600L, forever.leftSec)
+        assertFalse(statusAt("10:00").parentMode)
+    }
+
+    @Test
+    fun theEndOfParentModeIsANextCheck() {
+        val s = statusAt("21:00", parentMode = ParentModeOn(at("21:00:20"), "Dad"))
+
+        assertEquals(at("21:00:20"), nextCheckAtMs(s, at("21:00")))
+        assertEquals(at("21:01:20"), nextCheckAtMs(s, at("21:00:20")))
     }
 }
