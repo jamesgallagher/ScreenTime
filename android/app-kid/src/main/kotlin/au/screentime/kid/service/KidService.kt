@@ -23,7 +23,9 @@ import au.screentime.kid.data.KidDatabase
 import au.screentime.kid.data.PrefsClockStore
 import au.screentime.kid.data.RoomSegmentStore
 import au.screentime.kid.enrol.EnrolmentStore
+import au.screentime.kid.live.Answer
 import au.screentime.kid.live.LiveChannel
+import au.screentime.kid.live.answerOf
 import au.screentime.kid.live.liveUrl
 import au.screentime.kid.status.StatusHub
 import au.screentime.kid.status.WarningTracker
@@ -53,8 +55,9 @@ import kotlinx.coroutines.withTimeoutOrNull
  * The always-on part of the kid app (docs/SPEC.md §12.1, "Foreground service"): records usage segments from the
  * screen and unlock broadcasts, syncs with the server (§8.3), and keeps the notification, the warnings and the main
  * screen up to date (§16.2), and shows the block screen while the engine says the device is locked (§12.1). While the
- * block screen can be seen it also keeps the live channel open (§8.3), so a parent's grant unlocks within seconds.
- * Everything runs one at a time on [scope], so the database sees one change after another.
+ * block screen can be seen, or the kid waits for an answer to "Ask for more time", it also keeps the live channel open
+ * (§8.3), so a parent's grant or answer shows within seconds. Everything runs one at a time on [scope], so the
+ * database sees one change after another.
  */
 class KidService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO.limitedParallelism(1))
@@ -75,7 +78,11 @@ class KidService : Service() {
     private var lastSyncElapsed = 0L
     private var lastSyncOk = true
 
-    /** The live channel has news (or just connected); the loop syncs, so a sync never runs inside the live channel. */
+    /**
+     * The live channel has news (or just connected), or a screen sent something; the loop syncs, so a sync never runs
+     * inside the live channel.
+     */
+    @Volatile
     private var syncWanted = false
 
     /** One sync at a time: a slow sync that is failing must not overlap the next one. */
@@ -142,7 +149,8 @@ class KidService : Service() {
             engine = http,
             url = liveUrl(enrolment.serverUrl),
             token = { enrolment.deviceToken },
-            onNews = {
+            onNews = { frame ->
+                frame?.let(::answerOf)?.let(::onAnswer)
                 syncWanted = true
                 wake.trySend(Unit)
             },
@@ -189,7 +197,14 @@ class KidService : Service() {
         }
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // A screen just sent something (docs/SPEC.md §16.2): sync soon, so the next snapshot shows it.
+        if (intent?.action == ACTION_SYNC && started) {
+            syncWanted = true
+            wake.trySend(Unit)
+        }
+        return START_STICKY
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -222,6 +237,13 @@ class KidService : Service() {
         if (!inUse() || segments.open() != null) return
         recorder.start(at)
         if (stale) sync() else report()
+    }
+
+    /** A parent answered "Ask for more time": the screens show it for 4 seconds, and a heads-up says it too. */
+    private fun onAnswer(answer: Answer) {
+        Log.i(TAG, "answer: approved=${answer.approved} minutes=${answer.minutes}")
+        StatusHub.answer.value = answer
+        notifier.showAnswer(answer)
     }
 
     private suspend fun sync() {
@@ -261,7 +283,7 @@ class KidService : Service() {
         StatusHub.status.value = status
         // The block screen closes itself when StatusHub says unlocked.
         if (blocked && screenOn()) BlockActivity.show(this)
-        updateLive()
+        updateLive(waiting = status.pendingMinutes != null)
         notifier.showStatus(status, now)
         if (status.locked) {
             notifier.cancelWarning()
@@ -278,12 +300,12 @@ class KidService : Service() {
     }
 
     /**
-     * The live channel is open only while the block screen can be seen: blocked with the screen on (docs/SPEC.md
-     * §8.3). Otherwise the device is not waiting for anyone, and FCM covers the rest (CARD-034b).
+     * The live channel is open only while the screen is on and the kid is waiting for something: blocked (docs/SPEC.md
+     * §8.3), or [waiting] for an answer to "Ask for more time". Otherwise FCM covers the rest (CARD-034b).
      */
-    private fun updateLive() {
+    private fun updateLive(waiting: Boolean) {
         val channel = live ?: return
-        val want = blocked && screenOn()
+        val want = screenOn() && (blocked || waiting)
         if (want && liveJob == null) {
             Log.i(TAG, "live: started")
             liveJob = scope.launch { channel.run() }
@@ -305,8 +327,15 @@ class KidService : Service() {
         /** Sent segments are kept this long, then forgotten (docs/SPEC.md §8.3, offline buffer). */
         private const val KEEP_DAYS = 30L
 
+        private const val ACTION_SYNC = "au.screentime.kid.action.SYNC"
+
         fun start(context: Context) {
             context.startForegroundService(Intent(context, KidService::class.java))
+        }
+
+        /** From a screen of the app, which is in front: sync as soon as the service can. */
+        fun syncSoon(context: Context) {
+            context.startService(Intent(context, KidService::class.java).setAction(ACTION_SYNC))
         }
     }
 }

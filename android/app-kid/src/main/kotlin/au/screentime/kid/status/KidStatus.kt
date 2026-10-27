@@ -13,6 +13,9 @@ import java.time.ZoneId
 /** How much time is left, for the ring and notification colours (docs/SPEC.md §16.1). */
 enum class Level { PLENTY, LOW, CRITICAL, LOCKED }
 
+/** A ready-made message the kid can send with one tap (docs/SPEC.md §16.2, "Message sheet"). */
+data class Preset(val id: String, val text: String)
+
 /**
  * What the notification and the main screen show (docs/SPEC.md §16.2), worked out from one engine result.
  * Times are epoch milliseconds of the trusted clock, except [elapsedMs].
@@ -45,6 +48,11 @@ data class KidStatus(
     val online: Boolean,
     /** `SystemClock.elapsedRealtime()` when this was worked out, so a screen can count down without the service. */
     val elapsedMs: Long,
+    /** The family's parents, oldest first: "Mum", "Dad". */
+    val parentNames: List<String> = emptyList(),
+    val presets: List<Preset> = emptyList(),
+    /** Minutes of the kid's "Ask for more time" that no parent has answered yet; null when there is none. */
+    val pendingMinutes: Int? = null,
 ) {
     val locked: Boolean get() = lockReason != null
 
@@ -81,6 +89,12 @@ data class KidStatus(
 
     /** The big number in the ring: "1h 12m", or "<1m" in the last minute. */
     fun ringText(left: Long = leftSec): String = if (left < 60) "<1m" else formatDuration(left)
+
+    /** "Mum or Dad", for "Waiting for Mum or Dad…". */
+    val parentsOr: String get() = parentsText(parentNames, "or")
+
+    /** "Mum and Dad", for "Message Mum and Dad". */
+    val parentsAnd: String get() = parentsText(parentNames, "and")
 
     /** How full the ring is: the part of today's time that is still left. */
     fun ringFraction(left: Long = leftSec): Float = when {
@@ -131,8 +145,21 @@ fun kidStatus(state: DeviceState, result: EngineResult, nowMs: Long, online: Boo
         warn2Min = state.schedule.warn2Min,
         online = online,
         elapsedMs = elapsedMs,
+        parentNames = state.parents.map { it.displayName },
+        presets = state.messagePresets.map { Preset(it.id, it.text) },
+        pendingMinutes = state.pendingRequest?.minutes,
     )
 }
+
+/** "Dad", "Mum or Dad", "Mum, Dad or Nan" with [word] "or"; "your parents" when there are none. */
+fun parentsText(names: List<String>, word: String): String = when (names.size) {
+    0 -> "your parents"
+    1 -> names[0]
+    else -> names.dropLast(1).joinToString(", ") + " $word " + names.last()
+}
+
+/** Minutes the kid's way: "15 min", "45 min", "1h", "1h 30m". */
+fun minutesText(minutes: Int): String = if (minutes < 60) "$minutes min" else formatDuration(minutes * 60L)
 
 /** A time of day the en-AU way (docs/SPEC.md §16.1): "8:30 pm", "12:05 am". */
 fun clockText(time: LocalTime): String {

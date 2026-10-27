@@ -16,16 +16,16 @@ import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * The WebSocket to the server (docs/SPEC.md §8.3, §10). [run] connects with the device token, sends [PING] every
- * 30 seconds, and calls [onNews] when it connects (a message may have been missed while it was down) and for every
- * message that is not a pong. A socket that has said nothing for 75 seconds is dead. After a failure or a close it
- * waits 1, 2, 4 … 60 seconds (±20%) and connects again, until the coroutine is cancelled. [onNews] must return at
- * once: the service only takes note and syncs in its own loop.
+ * 30 seconds, and calls [onNews] when it connects (with null: a message may have been missed while it was down) and
+ * with every message that is not a pong. A socket that has said nothing for 75 seconds is dead. After a failure or a
+ * close it waits 1, 2, 4 … 60 seconds (±20%) and connects again, until the coroutine is cancelled. [onNews] must
+ * return at once: the service only takes note and syncs in its own loop.
  */
 class LiveChannel(
     engine: HttpClientEngine,
     private val url: String,
     private val token: () -> String,
-    private val onNews: () -> Unit,
+    private val onNews: (frame: String?) -> Unit,
     private val log: (String) -> Unit = {},
     private val random: () -> Double = Random::nextDouble,
 ) : AutoCloseable {
@@ -44,7 +44,7 @@ class LiveChannel(
                     connected = true
                     attempt = 0
                     log("connected")
-                    onNews()
+                    onNews(null)
                     val pinger = launch {
                         while (true) {
                             send(Frame.Text(PING))
@@ -63,7 +63,10 @@ class LiveChannel(
                                 log("closed: ${withTimeoutOrNull(1_000) { closeReason.await() }}")
                                 break
                             }
-                            if (frame is Frame.Text && asksForSync(frame.readText())) onNews()
+                            if (frame is Frame.Text) {
+                                val text = frame.readText()
+                                if (asksForSync(text)) onNews(text)
+                            }
                         }
                     } finally {
                         pinger.cancel()

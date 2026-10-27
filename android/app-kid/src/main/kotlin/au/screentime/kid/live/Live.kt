@@ -2,7 +2,9 @@ package au.screentime.kid.live
 
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonPrimitive
 
 /** What the device sends every 30 seconds to keep the socket alive (docs/SPEC.md §10). */
@@ -43,4 +45,29 @@ fun asksForSync(frame: String): Boolean {
         null
     }
     return type != null && type != "pong"
+}
+
+/** A parent's answer to the kid's "Ask for more time" (docs/SPEC.md §10, `request_resolved`). */
+data class Answer(
+    val approved: Boolean,
+    /** What the yes gave, which may differ from what was asked; 0 for a no. */
+    val minutes: Int,
+    /** "Dad". */
+    val byName: String,
+)
+
+/** The [Answer] in a `request_resolved` envelope, or null for any other frame. */
+fun answerOf(frame: String): Answer? = try {
+    val envelope = Json.parseToJsonElement(frame) as? JsonObject
+    val data = envelope?.get("data") as? JsonObject
+    if (envelope?.get("type")?.jsonPrimitive?.contentOrNull != "request_resolved" || data == null) {
+        null
+    } else {
+        val approved = data["approved"]?.jsonPrimitive?.booleanOrNull
+        val minutes = data["minutes"]?.jsonPrimitive?.intOrNull
+        val byName = data["byName"]?.jsonPrimitive?.contentOrNull
+        if (approved == null || minutes == null || byName == null) null else Answer(approved, minutes, byName)
+    }
+} catch (e: IllegalArgumentException) {
+    null
 }

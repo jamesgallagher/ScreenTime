@@ -2,6 +2,7 @@ package au.screentime.kid.live
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -46,5 +47,20 @@ class LiveTest {
         assertFalse(asksForSync("""{"v":1}"""))
         assertFalse(asksForSync("""{"type":{"a":1}}"""))
         assertFalse(asksForSync("""{"type":null}"""))
+    }
+
+    @Test
+    fun aParentsAnswerIsReadFromRequestResolved() {
+        val yes = """{"v":1,"type":"request_resolved","at":"2026-10-27T09:00:00Z","data":""" +
+            """{"requestId":"r1","approved":true,"minutes":30,"byName":"Dad","grant":{"id":"g1"}}}"""
+        val no = """{"v":1,"type":"request_resolved","at":"2026-10-27T09:00:00Z","data":""" +
+            """{"requestId":"r1","approved":false,"minutes":0,"byName":"Mum","grant":null}}"""
+
+        assertEquals(Answer(approved = true, minutes = 30, byName = "Dad"), answerOf(yes))
+        assertEquals(Answer(approved = false, minutes = 0, byName = "Mum"), answerOf(no))
+        assertNull(answerOf("""{"v":1,"type":"grant_added","at":"2026-10-27T09:00:00Z","data":{"byName":"Dad"}}"""))
+        assertNull(answerOf("""{"v":1,"type":"request_resolved","at":"2026-10-27T09:00:00Z","data":{"approved":true}}"""))
+        assertNull(answerOf("""{"type":"request_resolved","data":{"approved":"yes","minutes":15,"byName":"Dad"}}"""))
+        assertNull(answerOf("not json"))
     }
 }
