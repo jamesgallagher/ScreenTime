@@ -72,7 +72,8 @@ Spikes come early on purpose: Device Owner + Lock Task on the real phones, and a
 | 031 | Usage tracking, Room outbox, upload, state sync, trusted time | 014, 028, 030 | M | | 8, 12.1 |
 | 032 | Enforcement service: alarms, warnings, persistent notification, main screen | 031 | M | | 12.1, 16.2 |
 | 033 | Block screen in Lock Task | 032 | M | | 12.1, 16.2 |
-| 034 | FCM receiver and WebSocket while blocked | 016, 017, 033 | M | | 8.3 |
+| 034 | WebSocket while blocked | 017, 033 | M | | 8.3 |
+| 034b | FCM receiver (Firebase app registration by James) | 016, 034 | M | Firebase console | 8.3 |
 | 035 | Ask for more time and Message sheets | 018, 033 | M | | 16.2 |
 | 036 | Calls from the block screen + `CallRedirectionService` | 033 | M | Phone with SIM | 12.1 |
 | 037 | Parent mode (push approval + code) | 019, 033 | M | | 12.3 |
