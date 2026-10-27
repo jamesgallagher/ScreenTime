@@ -32,6 +32,10 @@ import au.screentime.kid.parentmode.CodeSession
 import au.screentime.kid.parentmode.ParentModeApi
 import au.screentime.kid.parentmode.ParentModeStore
 import au.screentime.kid.parentmode.parentModeNow
+import au.screentime.kid.sos.SOS_TICK_MS
+import au.screentime.kid.sos.SosApi
+import au.screentime.kid.sos.SosController
+import au.screentime.kid.sos.sosNewsOf
 import au.screentime.kid.status.StatusHub
 import au.screentime.kid.status.WarningTracker
 import au.screentime.kid.status.kidStatus
@@ -62,9 +66,10 @@ import kotlinx.coroutines.withTimeoutOrNull
  * screen and unlock broadcasts, syncs with the server (§8.3), and keeps the notification, the warnings and the main
  * screen up to date (§16.2), and shows the block screen while the engine says the device is locked (§12.1). While the
  * block screen can be seen, or the kid waits for an answer to "Ask for more time" or "I'm the parent", or parent mode is
- * on, it also keeps the live channel open (§8.3), so a parent's grant or answer shows within seconds. While parent
- * mode is on (§12.3) the device is not blocked and nothing counts. Everything runs one at a time on [scope], so the
- * database and the parent mode store see one change after another.
+ * on, or an SOS is on, it also keeps the live channel open (§8.3), so a parent's grant or answer shows within
+ * seconds. While parent mode is on (§12.3) the device is not blocked and nothing counts. While an SOS is on (§15)
+ * nothing counts either, and [SosController] takes a position and sends it every 30 seconds, screen on or off.
+ * Everything runs one at a time on [scope], so the database and the parent mode store see one change after another.
  */
 class KidService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO.limitedParallelism(1))
@@ -77,6 +82,7 @@ class KidService : Service() {
     private lateinit var notifier: Notifier
     private lateinit var parentStore: ParentModeStore
     private var parentApi: ParentModeApi? = null
+    private lateinit var sos: SosController
     private var engine: HttpClientEngine? = null
     private var api: ApiClient? = null
     private var live: LiveChannel? = null
@@ -102,6 +108,9 @@ class KidService : Service() {
 
     /** Parent mode was on at the last run: not blocked, and nothing counts (docs/SPEC.md §12.3). */
     private var paused = false
+
+    /** An SOS was on at the last run: nothing counts (docs/SPEC.md §15 step 8). */
+    private var sosOn = false
 
     private val warnings = WarningTracker()
 
@@ -158,6 +167,8 @@ class KidService : Service() {
         engine = http
         api = client
         parentApi = ParentModeApi(client)
+        sos = SosController(this, clock, SosApi(client))
+        sos.resume()
         syncer = Syncer(client, segments, states, clock, log = { Log.w(TAG, it) })
         live = LiveChannel(
             engine = http,
@@ -168,6 +179,12 @@ class KidService : Service() {
                 frame?.let(::parentModeNewsOf)?.let {
                     Log.i(TAG, "parent mode: news active=${it.active}")
                     StatusHub.parentModeNews.value = it
+                }
+                frame?.let(::sosNewsOf)?.let { news ->
+                    scope.launch {
+                        sos.onNews(news)
+                        report()
+                    }
                 }
                 syncWanted = true
                 wake.trySend(Unit)
@@ -193,18 +210,21 @@ class KidService : Service() {
                 // While in use, or in parent mode with the screen on, until the next warning, lock, period or end of
                 // parent mode (at least once a minute; in parent mode a sync then if the live channel is down, to see
                 // a parent end it). Blocked with the screen on, the same while the live channel is open; while it is
-                // down, at least every 30 seconds, to see a parent's grant soon. Otherwise a minute.
+                // down, at least every 30 seconds, to see a parent's grant soon. Otherwise a minute. During an SOS, at
+                // least every 30 seconds whatever the screen does.
                 val untilNext = (nextCheckAt - clock.nowMs()).coerceIn(SECOND, MINUTE)
-                val wait = when {
+                val normal = when {
                     inUse() || (paused && screenOn()) -> untilNext
                     blocked && screenOn() -> if (live?.connected == true) untilNext else minOf(untilNext, BLOCKED_POLL)
                     else -> MINUTE
                 }
+                val wait = if (sos.active) minOf(normal, SOS_TICK_MS) else normal
                 // Woken early: sync if the live channel asked for it, then work out the wait again.
                 if (withTimeoutOrNull(wait) { wake.receive() } != null) {
                     if (syncWanted) sync()
                     continue
                 }
+                if (sos.active) sos.tick()
                 when {
                     inUse() -> {
                         recorder.tick(clock.nowMs())
@@ -230,6 +250,15 @@ class KidService : Service() {
                 scope.launch { startWithCode(minutes) }
             }
             ACTION_END_PARENT_MODE -> scope.launch { endParentMode() }
+            ACTION_SOS_START -> scope.launch {
+                sos.start()
+                StatusHub.sosCountdown.value = null
+                report()
+            }
+            ACTION_SOS_END -> scope.launch {
+                sos.endByKid()
+                report()
+            }
         }
         return START_STICKY
     }
@@ -250,13 +279,16 @@ class KidService : Service() {
 
     private fun screenOn(): Boolean = getSystemService(PowerManager::class.java).isInteractive
 
-    /** The screen is on and unlocked, not blocked by us and not in parent mode: counting (docs/SPEC.md §3, Q19, §12). */
+    /**
+     * The screen is on and unlocked, not blocked by us, not in parent mode and no SOS: counting (docs/SPEC.md §3, Q19,
+     * §12, §15).
+     */
     private fun inUse(): Boolean =
-        screenOn() && !getSystemService(KeyguardManager::class.java).isKeyguardLocked && !blocked && !paused
+        screenOn() && !getSystemService(KeyguardManager::class.java).isKeyguardLocked && !blocked && !paused && !sosOn
 
     private suspend fun onScreenOn(at: Long) {
         val stale = !lastSyncOk || SystemClock.elapsedRealtime() - lastSyncElapsed >= 2 * MINUTE
-        if (blocked || paused) {
+        if (blocked || paused || sosOn) {
             // The block screen comes back up through report(); a fresh sync may bring a grant, or the end of parent
             // mode.
             if (stale) sync() else report()
@@ -297,6 +329,8 @@ class KidService : Service() {
             // What the server must hear about parent mode goes first, so the snapshot after it shows it.
             val local = parentStore.load()
             if (local.pending) parentApi?.let { parentStore.save(it.flush(local, clock.nowMs())) }
+            // And whatever an SOS still has to send.
+            if (sos.pending) sos.tick()
             val ok = syncer.sync()
             lastSyncElapsed = SystemClock.elapsedRealtime()
             lastSyncOk = ok
@@ -323,13 +357,17 @@ class KidService : Service() {
         val serverTimeMs = OffsetDateTime.parse(cached.state.serverTime).toInstant().toEpochMilli()
         val parentMode = parentModeNow(cached.state.parentMode, serverTimeMs, parentStore.load(), now)
         val status = kidStatus(cached.state, result, now, lastSyncOk, SystemClock.elapsedRealtime(), parentMode)
+        sos.onSnapshot(cached.state, serverTimeMs)
 
-        // Counting stops when the device becomes blocked or parent mode starts, and starts again after both.
-        val wasCounting = !blocked && !paused
+        // Counting stops when the device becomes blocked, parent mode starts or an SOS starts, and starts again after
+        // all three.
+        val wasCounting = !blocked && !paused && !sosOn
         blocked = status.locked
         if (paused != (parentMode != null)) Log.i(TAG, "parent mode: ${if (parentMode != null) "on" else "off"}")
         paused = parentMode != null
-        val counting = !blocked && !paused
+        if (sosOn != sos.active) Log.i(TAG, "sos: ${if (sos.active) "on" else "off"}")
+        sosOn = sos.active
+        val counting = !blocked && !paused && !sosOn
         if (wasCounting && !counting) recorder.stop(now)
         if (!wasCounting && counting && inUse()) recorder.start(now)
 
@@ -337,7 +375,7 @@ class KidService : Service() {
         // The block screen closes itself when StatusHub says unlocked.
         if (blocked && screenOn()) BlockActivity.show(this)
         updateLive(waiting = status.pendingMinutes != null || StatusHub.parentModeAsked.value)
-        notifier.showStatus(status, now)
+        notifier.showStatus(status, now, StatusHub.sos.value)
         if (status.locked) {
             notifier.cancelWarning()
         } else if (inUse()) {
@@ -348,18 +386,19 @@ class KidService : Service() {
         Log.i(
             TAG,
             "pool=${cached.state.device.pool.wire} used=${result.usedSec}s remaining=${result.remainingSec}s " +
-                "left=${status.leftSec}s locked=${status.locked} parentMode=$paused online=$lastSyncOk segments=${own.size}",
+                "left=${status.leftSec}s locked=${status.locked} parentMode=$paused sos=$sosOn online=$lastSyncOk " +
+                "segments=${own.size}",
         )
     }
 
     /**
      * The live channel is open only while the screen is on and something may come: blocked (docs/SPEC.md §8.3),
-     * [waiting] for an answer to "Ask for more time" or "I'm the parent", or in parent mode (a parent may end it).
-     * Otherwise FCM covers the rest (CARD-034b).
+     * [waiting] for an answer to "Ask for more time" or "I'm the parent", in parent mode (a parent may end it), or
+     * during an SOS (a parent's "I'm on it"). Otherwise FCM covers the rest (CARD-034b).
      */
     private fun updateLive(waiting: Boolean) {
         val channel = live ?: return
-        val want = screenOn() && (blocked || waiting || paused)
+        val want = screenOn() && (blocked || waiting || paused || sosOn)
         if (want && liveJob == null) {
             Log.i(TAG, "live: started")
             liveJob = scope.launch { channel.run() }
@@ -388,6 +427,9 @@ class KidService : Service() {
         /** **End now** in the notification uses it too. */
         const val ACTION_END_PARENT_MODE = "au.screentime.kid.action.END_PARENT_MODE"
 
+        private const val ACTION_SOS_START = "au.screentime.kid.action.SOS_START"
+        private const val ACTION_SOS_END = "au.screentime.kid.action.SOS_END"
+
         fun start(context: Context) {
             context.startForegroundService(Intent(context, KidService::class.java))
         }
@@ -409,6 +451,16 @@ class KidService : Service() {
         /** **End now** on the main screen. */
         fun endParentMode(context: Context) {
             context.startService(Intent(context, KidService::class.java).setAction(ACTION_END_PARENT_MODE))
+        }
+
+        /** The SOS countdown finished: the SOS starts (docs/SPEC.md §15). */
+        fun startSos(context: Context) {
+            context.startService(Intent(context, KidService::class.java).setAction(ACTION_SOS_START))
+        }
+
+        /** The kid held **I'm safe**. */
+        fun endSos(context: Context) {
+            context.startService(Intent(context, KidService::class.java).setAction(ACTION_SOS_END))
         }
     }
 }

@@ -3,9 +3,11 @@ package au.screentime.kid.block
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
@@ -40,6 +42,8 @@ import au.screentime.kid.ask.Look
 import au.screentime.kid.calls.ContactRow
 import au.screentime.kid.calls.EmergencyButton
 import au.screentime.kid.parentmode.ParentButton
+import au.screentime.kid.sos.SosButton
+import au.screentime.kid.sos.SosLayer
 import au.screentime.kid.status.KidStatus
 import au.screentime.kid.status.clockText
 import java.time.LocalTime
@@ -48,14 +52,19 @@ import kotlinx.coroutines.delay
 /**
  * The block screen's content (docs/SPEC.md §16.2): the time at the top, a moon or an hourglass, "It's bedtime",
  * when the device is back, and **Ask for more time** and **Message Mum and Dad**. A phone with a SIM also has the
- * row of call buttons above them and **Emergency 000** under them. **I'm the parent** is last. SOS comes with its
- * card.
+ * row of call buttons above them, **Emergency 000** under them and the **SOS** button in the top corner; the SOS
+ * screens cover everything while they are up. **I'm the parent** is last.
  * When it all does not fit (a phone on its side), the screen scrolls; otherwise the gaps share the spare height.
  */
 @Composable
 fun BlockScreen(status: KidStatus) {
-    val colors = ScreenTimeTheme.colors
     val reason = status.lockReason ?: return
+    SosLayer { Blocked(status, reason) }
+}
+
+@Composable
+private fun Blocked(status: KidStatus, reason: LockReason) {
+    val colors = ScreenTimeTheme.colors
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -65,7 +74,10 @@ fun BlockScreen(status: KidStatus) {
             .padding(horizontal = 24.dp, vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Clock(colors.onNight.copy(alpha = 0.7f))
+        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            Clock(colors.onNight.copy(alpha = 0.7f))
+            if (status.canCall) SosButton(Look.NIGHT, Modifier.align(Alignment.CenterEnd))
+        }
         Spacer(Modifier.weight(1f))
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
             if (reason == LockReason.OUT_OF_TIME) Hourglass(colors.onNight) else MoonAndStars(colors.onNight)

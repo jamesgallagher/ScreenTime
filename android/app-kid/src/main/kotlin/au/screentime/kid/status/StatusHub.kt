@@ -2,6 +2,7 @@ package au.screentime.kid.status
 
 import au.screentime.kid.live.Answer
 import au.screentime.kid.live.ParentModeNews
+import au.screentime.kid.sos.SosView
 import kotlinx.coroutines.flow.MutableStateFlow
 
 /** The latest status, from the service to the screens of the same process. Null until the first sync. */
@@ -16,4 +17,13 @@ object StatusHub {
 
     /** The last `parent_mode` message; the "Hand to a parent" sheet shows a no. */
     val parentModeNews = MutableStateFlow<ParentModeNews?>(null)
+
+    /** The SOS that is on (docs/SPEC.md §15); the screens show it over everything. */
+    val sos = MutableStateFlow<SosView?>(null)
+
+    /**
+     * `SystemClock.elapsedRealtime()` when the SOS countdown started, `SOS_FIRED` once it finished, null when there is
+     * none. The service sets it back to null when it shows the SOS.
+     */
+    val sosCountdown = MutableStateFlow<Long?>(null)
 }
