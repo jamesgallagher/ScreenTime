@@ -33,14 +33,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import au.screentime.core.time.LockReason
 import au.screentime.core.ui.ScreenTimeTheme
+import au.screentime.kid.ask.AskAndMessage
+import au.screentime.kid.ask.Look
 import au.screentime.kid.status.KidStatus
 import au.screentime.kid.status.clockText
 import java.time.LocalTime
 import kotlinx.coroutines.delay
 
 /**
- * The block screen's content (docs/SPEC.md §16.2): the time at the top, a moon or an hourglass, "It's bedtime" and
- * when the device is back. The buttons (ask, message, calls, SOS, parent) come with their cards.
+ * The block screen's content (docs/SPEC.md §16.2): the time at the top, a moon or an hourglass, "It's bedtime",
+ * when the device is back, and **Ask for more time** and **Message Mum and Dad**. Calls, SOS and "I'm the parent"
+ * come with their cards.
  */
 @Composable
 fun BlockScreen(status: KidStatus) {
@@ -77,6 +80,8 @@ fun BlockScreen(status: KidStatus) {
             }
         }
         Spacer(Modifier.weight(1f))
+        AskAndMessage(status, Look.NIGHT)
+        Spacer(Modifier.height(8.dp))
     }
 }
 

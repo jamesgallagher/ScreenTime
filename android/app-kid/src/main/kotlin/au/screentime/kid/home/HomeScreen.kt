@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -41,14 +43,17 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import au.screentime.core.time.formatDuration
 import au.screentime.core.ui.ScreenTimeTheme
+import au.screentime.kid.ask.AskAndMessage
+import au.screentime.kid.ask.Look
 import au.screentime.kid.status.KidStatus
 import au.screentime.kid.status.Level
 import au.screentime.kid.status.StatusHub
 import kotlinx.coroutines.delay
 
 /**
- * The kid's main screen (docs/SPEC.md §16.2): "Hi Alex", the ring with the time left, bedtime, and "Offline · still
- * counting" when the last sync failed. The buttons (ask, message, SOS, parent) come with their cards.
+ * The kid's main screen (docs/SPEC.md §16.2): "Hi Alex", the ring with the time left, bedtime, "Offline · still
+ * counting" when the last sync failed, and **Ask for more time** and **Message Mum and Dad**. SOS and "I'm the
+ * parent" come with their cards.
  */
 @Composable
 fun HomeScreen() {
@@ -94,15 +99,22 @@ private fun Home(s: KidStatus) {
             .padding(24.dp),
     ) {
         if (maxWidth >= 600.dp) {
-            // Tablet or landscape: the ring on the left half, the words on the right.
+            // Tablet or landscape: the ring on the left half, the words and buttons on the right.
             Row(modifier = Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
                 Box(modifier = Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
                     Ring(s, left)
                 }
-                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.Center,
+                ) {
                     Greeting(s.kidName)
                     Spacer(Modifier.height(16.dp))
                     Details(s, TextAlign.Start)
+                    Spacer(Modifier.height(24.dp))
+                    AskAndMessage(s, Look.DAY)
                 }
             }
         } else {
@@ -113,6 +125,7 @@ private fun Home(s: KidStatus) {
                 Spacer(Modifier.height(24.dp))
                 Details(s, TextAlign.Center)
                 Spacer(Modifier.weight(1f))
+                AskAndMessage(s, Look.DAY)
             }
         }
     }

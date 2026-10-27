@@ -10,14 +10,16 @@ import android.os.VibrationEffect
 import android.os.VibratorManager
 import au.screentime.kid.MainActivity
 import au.screentime.kid.R
+import au.screentime.kid.ask.answerText
+import au.screentime.kid.live.Answer
 import au.screentime.kid.status.KidStatus
 import au.screentime.kid.status.Warning
 import au.screentime.kid.status.warningText
 import au.screentime.kid.status.warningTitle
 
 /**
- * The kid app's notifications (docs/SPEC.md §16.2): the silent status notification of the foreground service, and
- * the heads-up warnings before a lock.
+ * The kid app's notifications (docs/SPEC.md §16.2): the silent status notification of the foreground service, the
+ * heads-up warnings before a lock, and a parent's answer to "Ask for more time".
  */
 class Notifier(private val context: Context) {
     private val manager = context.getSystemService(NotificationManager::class.java)
@@ -29,6 +31,12 @@ class Notifier(private val context: Context) {
         manager.createNotificationChannel(
             NotificationChannel(WARNING_CHANNEL, "Time warnings", NotificationManager.IMPORTANCE_HIGH).apply {
                 // Heads-up without a sound; the phone buzzes itself at the second warning.
+                setSound(null, null)
+                enableVibration(false)
+            },
+        )
+        manager.createNotificationChannel(
+            NotificationChannel(ANSWER_CHANNEL, "Answers from your parents", NotificationManager.IMPORTANCE_HIGH).apply {
                 setSound(null, null)
                 enableVibration(false)
             },
@@ -96,6 +104,19 @@ class Notifier(private val context: Context) {
         }
     }
 
+    /** "Dad said yes! +15 min 🎉" or "Dad said not this time", heads-up; it goes away by itself after a minute. */
+    fun showAnswer(answer: Answer) {
+        val notification = Notification.Builder(context, ANSWER_CHANNEL)
+            .setSmallIcon(R.drawable.ic_status)
+            .setContentTitle(answerText(answer))
+            .setCategory(Notification.CATEGORY_MESSAGE)
+            .setContentIntent(openApp)
+            .setAutoCancel(true)
+            .setTimeoutAfter(60_000L)
+            .build()
+        manager.notify(ANSWER_ID, notification)
+    }
+
     fun cancelWarning() {
         manager.cancel(WARNING_ID)
     }
@@ -103,7 +124,9 @@ class Notifier(private val context: Context) {
     companion object {
         const val STATUS_ID = 1
         private const val WARNING_ID = 2
+        private const val ANSWER_ID = 3
         private const val STATUS_CHANNEL = "status"
         private const val WARNING_CHANNEL = "warnings"
+        private const val ANSWER_CHANNEL = "answers"
     }
 }
