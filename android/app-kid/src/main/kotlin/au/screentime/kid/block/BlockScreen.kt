@@ -39,6 +39,7 @@ import au.screentime.kid.ask.AskAndMessage
 import au.screentime.kid.ask.Look
 import au.screentime.kid.calls.ContactRow
 import au.screentime.kid.calls.EmergencyButton
+import au.screentime.kid.parentmode.ParentButton
 import au.screentime.kid.status.KidStatus
 import au.screentime.kid.status.clockText
 import java.time.LocalTime
@@ -47,7 +48,8 @@ import kotlinx.coroutines.delay
 /**
  * The block screen's content (docs/SPEC.md §16.2): the time at the top, a moon or an hourglass, "It's bedtime",
  * when the device is back, and **Ask for more time** and **Message Mum and Dad**. A phone with a SIM also has the
- * row of call buttons above them and **Emergency 000** under them. SOS and "I'm the parent" come with their cards.
+ * row of call buttons above them and **Emergency 000** under them. **I'm the parent** is last. SOS comes with its
+ * card.
  * When it all does not fit (a phone on its side), the screen scrolls; otherwise the gaps share the spare height.
  */
 @Composable
@@ -97,6 +99,7 @@ fun BlockScreen(status: KidStatus) {
             EmergencyButton(status.emergencyNumber)
         }
         Spacer(Modifier.height(8.dp))
+        ParentButton(status, Look.NIGHT)
     }
 }
 

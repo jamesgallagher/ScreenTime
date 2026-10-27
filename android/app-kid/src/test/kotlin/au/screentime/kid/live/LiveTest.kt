@@ -63,4 +63,22 @@ class LiveTest {
         assertNull(answerOf("""{"type":"request_resolved","data":{"approved":"yes","minutes":15,"byName":"Dad"}}"""))
         assertNull(answerOf("not json"))
     }
+
+    @Test
+    fun parentModeNewsIsReadFromParentMode() {
+        val yes = """{"v":1,"type":"parent_mode","at":"2026-10-27T09:00:00Z","data":""" +
+            """{"active":true,"endsAt":"2026-10-27T09:15:00.000Z","byName":"Dad","requestId":"r1"}}"""
+        val no = """{"v":1,"type":"parent_mode","at":"2026-10-27T09:00:00Z","data":""" +
+            """{"active":false,"endsAt":null,"byName":"Mum","requestId":"r1"}}"""
+        val ended = """{"v":1,"type":"parent_mode","at":"2026-10-27T09:00:00Z","data":""" +
+            """{"active":false,"endsAt":null,"byName":"Dad","requestId":null}}"""
+
+        assertEquals(ParentModeNews(active = true, requestId = "r1", byName = "Dad"), parentModeNewsOf(yes))
+        assertEquals(ParentModeNews(active = false, requestId = "r1", byName = "Mum"), parentModeNewsOf(no))
+        assertEquals(ParentModeNews(active = false, requestId = null, byName = "Dad"), parentModeNewsOf(ended))
+        assertNull(parentModeNewsOf("""{"v":1,"type":"request_resolved","data":{"active":true}}"""))
+        assertNull(parentModeNewsOf("""{"v":1,"type":"parent_mode","data":{"active":"yes"}}"""))
+        assertNull(parentModeNewsOf("""{"v":1,"type":"parent_mode","data":null}"""))
+        assertNull(parentModeNewsOf("not json"))
+    }
 }

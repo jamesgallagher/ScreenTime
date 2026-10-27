@@ -71,3 +71,27 @@ fun answerOf(frame: String): Answer? = try {
 } catch (e: IllegalArgumentException) {
     null
 }
+
+/**
+ * A parent turned parent mode on or off for this device (docs/SPEC.md §10, `parent_mode`). [requestId] is set when
+ * it answers this device's "I'm the parent"; [active] false with a [requestId] is a no.
+ */
+data class ParentModeNews(val active: Boolean, val requestId: String?, val byName: String?)
+
+/** The [ParentModeNews] in a `parent_mode` envelope, or null for any other frame. */
+fun parentModeNewsOf(frame: String): ParentModeNews? = try {
+    val envelope = Json.parseToJsonElement(frame) as? JsonObject
+    val data = envelope?.get("data") as? JsonObject
+    val active = data?.get("active")?.jsonPrimitive?.booleanOrNull
+    if (envelope?.get("type")?.jsonPrimitive?.contentOrNull != "parent_mode" || active == null) {
+        null
+    } else {
+        ParentModeNews(
+            active = active,
+            requestId = data["requestId"]?.jsonPrimitive?.contentOrNull,
+            byName = data["byName"]?.jsonPrimitive?.contentOrNull,
+        )
+    }
+} catch (e: IllegalArgumentException) {
+    null
+}

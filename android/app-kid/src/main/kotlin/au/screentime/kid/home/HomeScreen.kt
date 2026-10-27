@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
@@ -45,6 +46,8 @@ import au.screentime.core.time.formatDuration
 import au.screentime.core.ui.ScreenTimeTheme
 import au.screentime.kid.ask.AskAndMessage
 import au.screentime.kid.ask.Look
+import au.screentime.kid.parentmode.ParentButton
+import au.screentime.kid.parentmode.ParentModeBanner
 import au.screentime.kid.status.KidStatus
 import au.screentime.kid.status.Level
 import au.screentime.kid.status.StatusHub
@@ -52,8 +55,8 @@ import kotlinx.coroutines.delay
 
 /**
  * The kid's main screen (docs/SPEC.md §16.2): "Hi Alex", the ring with the time left, bedtime, "Offline · still
- * counting" when the last sync failed, and **Ask for more time** and **Message Mum and Dad**. SOS and "I'm the
- * parent" come with their cards.
+ * counting" when the last sync failed, **Ask for more time**, **Message Mum and Dad** and **I'm the parent**; in
+ * parent mode the parent mode banner with **End now**. SOS comes with its card.
  */
 @Composable
 fun HomeScreen() {
@@ -114,7 +117,7 @@ private fun Home(s: KidStatus) {
                     Spacer(Modifier.height(16.dp))
                     Details(s, TextAlign.Start)
                     Spacer(Modifier.height(24.dp))
-                    AskAndMessage(s, Look.DAY)
+                    KidActions(s)
                 }
             }
         } else {
@@ -125,9 +128,30 @@ private fun Home(s: KidStatus) {
                 Spacer(Modifier.height(24.dp))
                 Details(s, TextAlign.Center)
                 Spacer(Modifier.weight(1f))
-                AskAndMessage(s, Look.DAY)
+                KidActions(s)
             }
         }
+    }
+}
+
+/**
+ * **Ask for more time**, **Message Mum and Dad** and **I'm the parent**; while parent mode is on, the parent mode
+ * banner with **End now** instead.
+ */
+@Composable
+private fun KidActions(s: KidStatus) {
+    if (s.parentMode) {
+        ParentModeBanner(s)
+    } else {
+        AskAndMessage(s, Look.DAY)
+        Spacer(Modifier.height(8.dp))
+        ParentButton(
+            s,
+            Look.DAY,
+            Modifier
+                .widthIn(max = 420.dp)
+                .fillMaxWidth(),
+        )
     }
 }
 
@@ -153,7 +177,7 @@ private fun Details(s: KidStatus, align: TextAlign) {
             textAlign = align,
         )
     }
-    if (!s.online) {
+    if (!s.online && !s.parentMode) {
         Spacer(Modifier.height(8.dp))
         Text(
             text = "Offline · still counting",
