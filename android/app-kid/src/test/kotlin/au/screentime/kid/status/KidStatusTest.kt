@@ -1,18 +1,23 @@
 package au.screentime.kid.status
 
+import au.screentime.core.model.api.DeviceForm
 import au.screentime.core.model.api.DeviceState
+import au.screentime.core.model.api.DeviceStateContactsItem
 import au.screentime.core.model.api.DeviceStateMessagePresetsItem
 import au.screentime.core.model.api.DeviceStateParentsItem
 import au.screentime.core.model.api.DeviceStatePendingRequest
 import au.screentime.core.time.LockReason
 import au.screentime.core.time.evaluate
+import au.screentime.kid.calls.Callable
 import au.screentime.kid.usage.state
 import au.screentime.kid.usage.todayInput
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 class KidStatusTest {
@@ -128,6 +133,24 @@ class KidStatusTest {
         assertEquals("Mum or Dad", s.parentsOr)
         assertEquals("Mum and Dad", s.parentsAnd)
         assertNull(statusAt("10:00").pendingMinutes)
+    }
+
+    @Test
+    fun aPhoneWithASimGetsTheCallButtonsATabletDoesNot() {
+        val family = state().copy(
+            parents = listOf(DeviceStateParentsItem("p1", "Mum", null), DeviceStateParentsItem("p2", "Dad", "+61400000000")),
+            contacts = listOf(DeviceStateContactsItem("Grandma", "+61298765432")),
+        )
+
+        val phone = statusAt("10:00", family)
+
+        assertTrue(phone.canCall)
+        assertEquals(listOf(Callable("Dad", "+61400000000"), Callable("Grandma", "+61298765432")), phone.callables)
+        assertEquals("000", phone.emergencyNumber)
+        val tablet = family.copy(device = family.device.copy(form = DeviceForm.TABLET))
+        assertFalse(statusAt("10:00", tablet).canCall)
+        val noSim = family.copy(device = family.device.copy(hasCellular = false))
+        assertFalse(statusAt("10:00", noSim).canCall)
     }
 
     @Test
