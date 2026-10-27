@@ -23,6 +23,8 @@ import au.screentime.kid.data.KidDatabase
 import au.screentime.kid.data.PrefsClockStore
 import au.screentime.kid.data.RoomSegmentStore
 import au.screentime.kid.enrol.EnrolmentStore
+import au.screentime.kid.live.LiveChannel
+import au.screentime.kid.live.liveUrl
 import au.screentime.kid.status.StatusHub
 import au.screentime.kid.status.WarningTracker
 import au.screentime.kid.status.kidStatus
@@ -37,6 +39,7 @@ import io.ktor.client.engine.okhttp.OkHttp
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
@@ -49,8 +52,9 @@ import kotlinx.coroutines.withTimeoutOrNull
 /**
  * The always-on part of the kid app (docs/SPEC.md §12.1, "Foreground service"): records usage segments from the
  * screen and unlock broadcasts, syncs with the server (§8.3), and keeps the notification, the warnings and the main
- * screen up to date (§16.2), and shows the block screen while the engine says the device is locked (§12.1). Everything
- * runs one at a time on [scope], so the database sees one change after another.
+ * screen up to date (§16.2), and shows the block screen while the engine says the device is locked (§12.1). While the
+ * block screen can be seen it also keeps the live channel open (§8.3), so a parent's grant unlocks within seconds.
+ * Everything runs one at a time on [scope], so the database sees one change after another.
  */
 class KidService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO.limitedParallelism(1))
@@ -63,11 +67,16 @@ class KidService : Service() {
     private lateinit var notifier: Notifier
     private var engine: HttpClientEngine? = null
     private var api: ApiClient? = null
+    private var live: LiveChannel? = null
+    private var liveJob: Job? = null
     private var started = false
 
     /** [SystemClock.elapsedRealtime] of the last sync, for "every 5 minutes" and "if the last sync is older than 2 minutes". */
     private var lastSyncElapsed = 0L
     private var lastSyncOk = true
+
+    /** The live channel has news (or just connected); the loop syncs, so a sync never runs inside the live channel. */
+    private var syncWanted = false
 
     /** One sync at a time: a slow sync that is failing must not overlap the next one. */
     private val syncLock = Mutex()
@@ -80,7 +89,7 @@ class KidService : Service() {
     /** Trusted time of the next warning, lock or new period, so the loop wakes up for it (at least once a minute). */
     private var nextCheckAt = 0L
 
-    /** Wakes the loop early, when an unlock or a sync has moved [nextCheckAt]. */
+    /** Wakes the loop early, when an unlock or a sync has moved [nextCheckAt], or the live channel has news. */
     private val wake = Channel<Unit>(Channel.CONFLATED)
 
     private val screen = object : BroadcastReceiver() {
@@ -129,6 +138,16 @@ class KidService : Service() {
         engine = http
         api = client
         syncer = Syncer(client, segments, states, clock, log = { Log.w(TAG, it) })
+        live = LiveChannel(
+            engine = http,
+            url = liveUrl(enrolment.serverUrl),
+            token = { enrolment.deviceToken },
+            onNews = {
+                syncWanted = true
+                wake.trySend(Unit)
+            },
+            log = { Log.i(TAG, "live: $it") },
+        )
 
         val filter = IntentFilter().apply {
             addAction(Intent.ACTION_SCREEN_ON)
@@ -146,21 +165,25 @@ class KidService : Service() {
             sync()
             while (isActive) {
                 // While in use, until the next warning, lock or period (at least once a minute). Blocked with the
-                // screen on, at least every 30 seconds, to see a parent's grant soon. Otherwise a minute.
+                // screen on, the same while the live channel is open; while it is down, at least every 30 seconds,
+                // to see a parent's grant soon. Otherwise a minute.
                 val untilNext = (nextCheckAt - clock.nowMs()).coerceIn(SECOND, MINUTE)
                 val wait = when {
                     inUse() -> untilNext
-                    blocked && screenOn() -> minOf(untilNext, BLOCKED_POLL)
+                    blocked && screenOn() -> if (live?.connected == true) untilNext else minOf(untilNext, BLOCKED_POLL)
                     else -> MINUTE
                 }
-                // Woken early: only work out the wait again.
-                if (withTimeoutOrNull(wait) { wake.receive() } != null) continue
+                // Woken early: sync if the live channel asked for it, then work out the wait again.
+                if (withTimeoutOrNull(wait) { wake.receive() } != null) {
+                    if (syncWanted) sync()
+                    continue
+                }
                 when {
                     inUse() -> {
                         recorder.tick(clock.nowMs())
                         if (SystemClock.elapsedRealtime() - lastSyncElapsed >= 5 * MINUTE) sync() else report()
                     }
-                    blocked && screenOn() -> sync()
+                    blocked && screenOn() -> if (live?.connected == true) report() else sync()
                 }
             }
         }
@@ -176,6 +199,7 @@ class KidService : Service() {
             getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(network)
         }
         scope.cancel()
+        live?.close()
         api?.close()
         engine?.close()
         super.onDestroy()
@@ -202,6 +226,8 @@ class KidService : Service() {
 
     private suspend fun sync() {
         syncLock.withLock {
+            // This sync also brings whatever the live channel announced.
+            syncWanted = false
             val ok = syncer.sync()
             lastSyncElapsed = SystemClock.elapsedRealtime()
             lastSyncOk = ok
@@ -216,8 +242,8 @@ class KidService : Service() {
 
     /**
      * Runs the engine and shows what it says: the notification, a warning when one is due (only while in use), the
-     * main screen through [StatusHub], the block screen, and the log (`adb logcat -s KidService`). Becoming locked
-     * ends the open segment; becoming unlocked starts one if the device is in use.
+     * main screen through [StatusHub], the block screen, the live channel, and the log (`adb logcat -s KidService`).
+     * Becoming locked ends the open segment; becoming unlocked starts one if the device is in use.
      */
     private suspend fun report() {
         val now = clock.nowMs()
@@ -235,6 +261,7 @@ class KidService : Service() {
         StatusHub.status.value = status
         // The block screen closes itself when StatusHub says unlocked.
         if (blocked && screenOn()) BlockActivity.show(this)
+        updateLive()
         notifier.showStatus(status, now)
         if (status.locked) {
             notifier.cancelWarning()
@@ -250,12 +277,29 @@ class KidService : Service() {
         )
     }
 
+    /**
+     * The live channel is open only while the block screen can be seen: blocked with the screen on (docs/SPEC.md
+     * §8.3). Otherwise the device is not waiting for anyone, and FCM covers the rest (CARD-034b).
+     */
+    private fun updateLive() {
+        val channel = live ?: return
+        val want = blocked && screenOn()
+        if (want && liveJob == null) {
+            Log.i(TAG, "live: started")
+            liveJob = scope.launch { channel.run() }
+        } else if (!want && liveJob != null) {
+            Log.i(TAG, "live: stopped")
+            liveJob?.cancel()
+            liveJob = null
+        }
+    }
+
     companion object {
         private const val TAG = "KidService"
         private const val SECOND = 1_000L
         private const val MINUTE = 60_000L
 
-        /** How often a blocked device with the screen on asks the server for news (docs/SPEC.md §8.3, until CARD-034). */
+        /** How often a blocked device with the screen on asks the server for news while the live channel is down. */
         private const val BLOCKED_POLL = 30_000L
 
         /** Sent segments are kept this long, then forgotten (docs/SPEC.md §8.3, offline buffer). */
