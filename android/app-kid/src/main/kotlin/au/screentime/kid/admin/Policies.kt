@@ -1,10 +1,12 @@
 package au.screentime.kid.admin
 
 import android.app.admin.DevicePolicyManager
+import android.app.role.RoleManager
 import android.content.Context
 import android.content.pm.PackageManager
 import android.content.pm.PermissionInfo
 import android.os.UserManager
+import android.telecom.TelecomManager
 import android.util.Log
 import au.screentime.kid.BuildConfig
 
@@ -45,13 +47,31 @@ object Policies {
         dpm.setAutoTimeEnabled(admin, true)
         dpm.setAutoTimeZoneEnabled(admin, true)
         // The block screen runs in Lock Task (docs/SPEC.md §12.1): no Home, Recents or notification shade, but the
-        // power menu and the phone's own lock screen (with its emergency call button) still work.
-        dpm.setLockTaskPackages(admin, arrayOf(context.packageName))
+        // power menu and the phone's own lock screen (with its emergency call button) still work. On a phone with a
+        // SIM the phone app may run too, for its call screen and the emergency dialer.
+        dpm.setLockTaskPackages(admin, (listOf(context.packageName) + phonePackages(context)).distinct().toTypedArray())
         dpm.setLockTaskFeatures(
             admin,
             DevicePolicyManager.LOCK_TASK_FEATURE_GLOBAL_ACTIONS or DevicePolicyManager.LOCK_TASK_FEATURE_KEYGUARD,
         )
         grantRuntimePermissions(context)
+        if (canCall(context) && !context.getSystemService(RoleManager::class.java).isRoleHeld(RoleManager.ROLE_CALL_REDIRECTION)) {
+            // Without it every call goes through while blocked. Given with adb at setup (docs/SPEC.md §12.1).
+            Log.w(TAG, "calls: not the call redirection app, so calls are not checked while blocked")
+        }
+    }
+
+    private fun canCall(context: Context): Boolean =
+        context.packageManager.hasSystemFeature(PackageManager.FEATURE_TELEPHONY_CALLING)
+
+    /**
+     * The phone app (the default one and the one the phone came with; often the same) and Android's call service,
+     * which shows a "Call with" choice on a phone with two SIMs. None on a tablet.
+     */
+    private fun phonePackages(context: Context): List<String> {
+        if (!canCall(context)) return emptyList()
+        val telecom = context.getSystemService(TelecomManager::class.java)
+        return listOfNotNull(telecom.defaultDialerPackage, telecom.systemDialerPackage, "com.android.server.telecom")
     }
 
     /**

@@ -13,6 +13,12 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- The short buzz at the second warning on a phone (docs/SPEC.md §16.2). -->
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!--
+        The call buttons on the block screen (docs/SPEC.md §12.1). Device Owner grants it. Tablets have no phone,
+        so it is not required.
+    -->
+    <uses-permission android:name="android.permission.CALL_PHONE" />
+    <uses-feature android:name="android.hardware.telephony" android:required="false" />
 
     <!--
         No backup and no device-to-device transfer: the device token must never leave this device
@@ -58,6 +64,19 @@
             android:name=".service.KidService"
             android:exported="false"
             android:foregroundServiceType="systemExempted" />
+
+        <!--
+            Stops calls to numbers off the kid's list while blocked (docs/SPEC.md §12.1). Android only uses it once
+            the app holds the call redirection role, given with adb when the phone is set up.
+        -->
+        <service
+            android:name=".calls.CallGuard"
+            android:exported="true"
+            android:permission="android.permission.BIND_CALL_REDIRECTION_SERVICE">
+            <intent-filter>
+                <action android:name="android.telecom.CallRedirectionService" />
+            </intent-filter>
+        </service>
 
         <receiver
             android:name=".service.BootReceiver"
