@@ -48,6 +48,8 @@ import au.screentime.kid.ask.AskAndMessage
 import au.screentime.kid.ask.Look
 import au.screentime.kid.parentmode.ParentButton
 import au.screentime.kid.parentmode.ParentModeBanner
+import au.screentime.kid.sos.SosButton
+import au.screentime.kid.sos.SosLayer
 import au.screentime.kid.status.KidStatus
 import au.screentime.kid.status.Level
 import au.screentime.kid.status.StatusHub
@@ -56,14 +58,15 @@ import kotlinx.coroutines.delay
 /**
  * The kid's main screen (docs/SPEC.md §16.2): "Hi Alex", the ring with the time left, bedtime, "Offline · still
  * counting" when the last sync failed, **Ask for more time**, **Message Mum and Dad** and **I'm the parent**; in
- * parent mode the parent mode banner with **End now**. SOS comes with its card.
+ * parent mode the parent mode banner with **End now**. A phone with a SIM has the **SOS** button in the top corner,
+ * and the SOS screens cover everything while they are up.
  */
 @Composable
 fun HomeScreen() {
     val status by StatusHub.status.collectAsState()
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         val s = status
-        if (s == null) Waiting() else Home(s)
+        if (s == null) Waiting() else SosLayer { Home(s) }
     }
 }
 
@@ -122,7 +125,7 @@ private fun Home(s: KidStatus) {
             }
         } else {
             Column(modifier = Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
-                Greeting(s.kidName, Modifier.fillMaxWidth())
+                Greeting(s.kidName, Modifier.fillMaxWidth().padding(end = 80.dp))
                 Spacer(Modifier.weight(1f))
                 Ring(s, left)
                 Spacer(Modifier.height(24.dp))
@@ -131,6 +134,7 @@ private fun Home(s: KidStatus) {
                 KidActions(s)
             }
         }
+        if (s.canCall) SosButton(Look.DAY, Modifier.align(Alignment.TopEnd))
     }
 }
 

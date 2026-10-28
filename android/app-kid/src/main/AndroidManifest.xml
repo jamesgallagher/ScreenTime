@@ -19,6 +19,15 @@
     -->
     <uses-permission android:name="android.permission.CALL_PHONE" />
     <uses-feature android:name="android.hardware.telephony" android:required="false" />
+    <!--
+        SOS (docs/SPEC.md §15): a text to every parent, and the phone's position every 30 seconds, also with the
+        screen off. Device Owner grants all four, fine location before background location.
+    -->
+    <uses-permission android:name="android.permission.SEND_SMS" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    <uses-feature android:name="android.hardware.location.gps" android:required="false" />
 
     <!--
         No backup and no device-to-device transfer: the device token must never leave this device

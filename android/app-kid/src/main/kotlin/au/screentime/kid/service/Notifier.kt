@@ -12,6 +12,7 @@ import au.screentime.kid.MainActivity
 import au.screentime.kid.R
 import au.screentime.kid.ask.answerText
 import au.screentime.kid.live.Answer
+import au.screentime.kid.sos.SosView
 import au.screentime.kid.status.KidStatus
 import au.screentime.kid.status.Warning
 import au.screentime.kid.status.warningText
@@ -72,13 +73,14 @@ class Notifier(private val context: Context) {
     /**
      * "Phone · 1h 12m left", "Bedtime 8:30 pm", with the system chronometer counting down to the lock. The
      * chronometer runs on the wall clock, so the lock is moved by the gap between the trusted clock ([nowMs]) and it.
-     * In parent mode: "Parent mode · ends 4:15 pm", "Time isn't counting" and **End now**.
+     * In parent mode: "Parent mode · ends 4:15 pm", "Time isn't counting" and **End now**. During an [sos]: "SOS is
+     * on" and who has seen it, or how far it got.
      */
-    fun showStatus(status: KidStatus, nowMs: Long) {
+    fun showStatus(status: KidStatus, nowMs: Long, sos: SosView? = null) {
         val builder = Notification.Builder(context, STATUS_CHANNEL)
             .setSmallIcon(R.drawable.ic_status)
-            .setContentTitle(status.title())
-            .setContentText(status.subline())
+            .setContentTitle(if (sos != null) "SOS is on" else status.title())
+            .setContentText(sos?.let { it.seenLine() ?: it.line() } ?: status.subline())
             .setContentIntent(openApp)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
@@ -87,7 +89,7 @@ class Notifier(private val context: Context) {
             builder.addAction(Notification.Action.Builder(null, "End now", endParentMode).build())
         }
         val lockAt = status.lockAtMs
-        if (lockAt != null) {
+        if (lockAt != null && sos == null) {
             builder
                 .setWhen(System.currentTimeMillis() + (lockAt - nowMs))
                 .setShowWhen(true)
