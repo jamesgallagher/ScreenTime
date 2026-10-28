@@ -16,7 +16,7 @@ Screen Time: a self-hosted parental screen-time limiter. Monorepo with a TypeScr
 6. Run every acceptance command before pushing, and paste the key output into the PR body.
 7. Never commit secrets (`.env`, keys, tokens, `google-services.json`, keystores). Use `.env.example` style files with placeholder values.
 8. Put every temporary file (a PR body, scratch output, downloads) in `C:\Users\james\OpenCode\Testing\temp\`, never in `$env:TEMP` or `AppData\Local\Temp`. Create the folder if it is missing. It sits next to the repo, so nothing in it gets committed.
-9. When the PR is open, finish with the card's **handback report** (section 12 of every card) as your last message to James. Report only what you actually ran and saw; write `NOT RUN` for anything you did not run.
+9. When the PR is open, finish with the card's **handback report** (section 12 of every card) as your last message to James. Report only what you actually ran and saw; write `NOT RUN` for anything you did not run. For an emulator or device run, paste the **real output of every step** (every `Screen-Text`, helper and script line), not a summary and not "the screenshots are the evidence": a step without its pasted output counts as `NOT RUN`, and Claude sends the PR back. Every workaround you used (a force-stop, a restart, an extra script, a retry) is a deviation: list it with why you needed it.
 
 ## Conventions
 
