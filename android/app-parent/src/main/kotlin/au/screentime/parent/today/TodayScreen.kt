@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -26,20 +27,28 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedIconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.repeatOnLifecycle
+import au.screentime.core.model.api.Pool
 import au.screentime.core.model.api.TodayKid
 import au.screentime.core.model.api.TodayPool
 import au.screentime.core.ui.AvatarColors
@@ -49,7 +58,7 @@ import java.time.Instant
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-/** The Today screen (docs/SPEC.md §16.4): one card per kid, refreshed every 30 seconds. */
+/** The Today screen (docs/SPEC.md §16.4): one card per kid, refreshed every 30 seconds; the ± button opens the adjust sheet. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TodayScreen(vm: TodayViewModel) {
@@ -64,6 +73,12 @@ fun TodayScreen(vm: TodayViewModel) {
             }
         }
     }
+    // The kid and pool the adjust sheet is open for.
+    var adjusting by remember { mutableStateOf<Pair<String, Pool>?>(null) }
+    val adjustingKid = adjusting?.let { (kidId, pool) ->
+        state.today?.kids?.find { it.id == kidId }?.let { it to pool }
+    }
+    if (adjusting != null && adjustingKid == null) adjusting = null
     val now = Instant.now()
     Column(modifier = Modifier.fillMaxSize()) {
         ScreenHeader("Today", state.today?.let { dayTitle(it.date) })
@@ -74,7 +89,7 @@ fun TodayScreen(vm: TodayViewModel) {
         ) {
             when (val today = state.today) {
                 null -> if (state.error != null) {
-                    ErrorColumn(state.error) { scope.launch { vm.load(pulled = true) } }
+                    Problem(state.error) { scope.launch { vm.load(pulled = true) } }
                 } else {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator()
@@ -104,17 +119,20 @@ fun TodayScreen(vm: TodayViewModel) {
                         }
                     }
                     items(today.kids, key = { it.id }) { kid ->
-                        KidCard(kid, now)
+                        KidCard(kid, now) { adjusting = kid.id to it.pool }
                     }
                 }
             }
         }
     }
+    if (adjustingKid != null) {
+        AdjustSheet(adjustingKid.first, adjustingKid.second, vm) { adjusting = null }
+    }
 }
 
 /** A kid card: the avatar and name, each pool's row, and the chips. */
 @Composable
-private fun KidCard(kid: TodayKid, now: Instant) {
+private fun KidCard(kid: TodayKid, now: Instant, onAdjust: (TodayPool) -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -135,7 +153,7 @@ private fun KidCard(kid: TodayKid, now: Instant) {
             }
             for (pool in kid.pools) {
                 Spacer(Modifier.height(16.dp))
-                PoolRow(poolView(pool))
+                PoolRow(kid, pool) { onAdjust(pool) }
             }
             val chips = kidChips(kid, now)
             if (chips.isNotEmpty()) {
@@ -171,9 +189,10 @@ private fun Avatar(kid: TodayKid) {
     }
 }
 
-/** A pool row: the name and status, the bar, and the detail. */
+/** A pool row: the name and status with the ± button, the bar, and the detail. */
 @Composable
-private fun PoolRow(view: PoolView) {
+private fun PoolRow(kid: TodayKid, pool: TodayPool, onAdjust: () -> Unit) {
+    val view = poolView(pool)
     val toneColor = toneColor(view.tone)
     Column {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -190,6 +209,19 @@ private fun PoolRow(view: PoolView) {
                 fontWeight = FontWeight.SemiBold,
                 color = toneColor,
             )
+            Spacer(Modifier.width(8.dp))
+            OutlinedIconButton(
+                onClick = onAdjust,
+                modifier = Modifier
+                    .size(36.dp)
+                    .semantics { contentDescription = "Change ${kid.name}'s ${poolName(pool.pool)}" },
+            ) {
+                Text(
+                    text = "±",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
         }
         Spacer(Modifier.height(6.dp))
         Box(
@@ -249,7 +281,7 @@ private fun toneColor(tone: Tone): Color {
 
 /** The "no answer yet and an error" state: a centred, scrollable column with a Try again button. */
 @Composable
-private fun ErrorColumn(error: String, onTryAgain: () -> Unit) {
+fun Problem(text: String, onRetry: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -259,13 +291,13 @@ private fun ErrorColumn(error: String, onTryAgain: () -> Unit) {
     ) {
         Spacer(Modifier.height(96.dp))
         Text(
-            text = error,
+            text = text,
             style = MaterialTheme.typography.bodyLarge,
             color = ScreenTimeTheme.colors.muted,
             textAlign = TextAlign.Center,
         )
         Spacer(Modifier.height(16.dp))
-        FilledTonalButton(onClick = onTryAgain) {
+        FilledTonalButton(onClick = onRetry) {
             Text("Try again")
         }
     }

@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.Badge
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -19,6 +21,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -29,11 +32,17 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.repeatOnLifecycle
 import au.screentime.core.model.api.Me
 import au.screentime.core.ui.ScreenTimeTheme
 import au.screentime.parent.R
+import au.screentime.parent.inbox.InboxScreen
+import au.screentime.parent.inbox.InboxViewModel
+import au.screentime.parent.today.REFRESH_MS
 import au.screentime.parent.today.TodayScreen
 import au.screentime.parent.today.TodayViewModel
+import java.time.ZoneId
+import kotlinx.coroutines.delay
 
 /** The four tabs of the parent app (docs/SPEC.md §16.4). */
 enum class Tab(val label: String, val icon: Int) {
@@ -45,7 +54,17 @@ enum class Tab(val label: String, val icon: Int) {
 
 /** The home screen: the four tabs and the bottom navigation (docs/SPEC.md §16.4). */
 @Composable
-fun HomeScreen(me: Me, today: TodayViewModel, secure: Boolean, onSignOut: () -> Unit) {
+fun HomeScreen(me: Me, today: TodayViewModel, inbox: InboxViewModel, secure: Boolean, onSignOut: () -> Unit) {
+    // Poll the Inbox on every tab, so the badge on the Inbox icon is right.
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(lifecycle) {
+        lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+            while (true) {
+                inbox.load()
+                delay(REFRESH_MS)
+            }
+        }
+    }
     var tab by rememberSaveable { mutableStateOf(Tab.TODAY) }
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -55,7 +74,15 @@ fun HomeScreen(me: Me, today: TodayViewModel, secure: Boolean, onSignOut: () -> 
                     NavigationBarItem(
                         selected = tab == t,
                         onClick = { tab = t },
-                        icon = { Icon(painterResource(t.icon), contentDescription = null) },
+                        icon = {
+                            if (t == Tab.INBOX) {
+                                BadgedBox(badge = { if (inbox.pending > 0) Badge { Text("${inbox.pending}") } }) {
+                                    Icon(painterResource(t.icon), contentDescription = null)
+                                }
+                            } else {
+                                Icon(painterResource(t.icon), contentDescription = null)
+                            }
+                        },
                         label = { Text(t.label) },
                     )
                 }
@@ -65,7 +92,7 @@ fun HomeScreen(me: Me, today: TodayViewModel, secure: Boolean, onSignOut: () -> 
         Box(modifier = Modifier.padding(padding)) {
             when (tab) {
                 Tab.TODAY -> TodayScreen(today)
-                Tab.INBOX -> ComingSoonPage("Inbox", "Time requests, messages and events will show here.")
+                Tab.INBOX -> InboxScreen(inbox, runCatching { ZoneId.of(me.family!!.timezone) }.getOrElse { ZoneId.systemDefault() })
                 Tab.KIDS -> ComingSoonPage("Kids", "Schedules, devices and contacts will show here. Use the web app for now.")
                 Tab.SETTINGS -> SettingsScreen(me, secure, onSignOut)
             }
