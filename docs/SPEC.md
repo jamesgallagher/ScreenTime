@@ -872,6 +872,8 @@ As built (CARD-040): sign-in is email then the 6-digit code; the refresh token i
 
 As built (CARD-041): the adjust sheet is a bottom sheet with Screens | Phone, − and + in 15-minute steps from −4h to +8h (default +15m) and quick amounts +15m, +30m, +1h, +2h instead of the wheel, the preview, **Apply** (disabled at 0) and **Lock now** with a confirm dialog, hidden when the pool is already locked; each attempt has its own grant id, so a retry never adds twice. Inbox: waiting time requests as cards with **Other amount** (a 15-minute stepper from 15m to 8h), **No** and **Yes, 30m**; then the last 50 events in one card, each with a tone dot and the time. The home screen asks for the Inbox every 30 s on every tab, and the Inbox tab shows a badge with the number of waiting requests. An answer that comes too late (409) says "Someone already answered this request." and reloads. Parent-mode requests come with push (CARD-042).
 
+As planned (CARD-043): Kids lists each kid with the number of devices; the kid page lists devices with **Rename** and **Remove** and has **Add device** (Phone, Tablet or PC, then the QR code drawn with zxing core, the code in 48 sp and a countdown; it checks the device list every 3 s and says **Connected**). The schedule editor and always-callable contacts follow in CARD-043b; adding kids stays in the web app.
+
 ### 16.5 Parent web app
 
 Same functions as the parent app except SOS alarms (the web shows a red banner at the top of every page while an SOS is active, with the map link) and parent code (also shown in Settings).
