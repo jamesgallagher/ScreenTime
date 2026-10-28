@@ -21,9 +21,11 @@
     <uses-feature android:name="android.hardware.telephony" android:required="false" />
     <!--
         SOS (docs/SPEC.md §15): a text to every parent, and the phone's position every 30 seconds, also with the
-        screen off. Device Owner grants all four, fine location before background location.
+        screen off. Device Owner grants all five, fine location before background location. Splitting a text into
+        parts reads the SIM's group id, which needs READ_PHONE_STATE: without it every text fails.
     -->
     <uses-permission android:name="android.permission.SEND_SMS" />
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
