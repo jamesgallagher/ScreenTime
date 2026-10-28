@@ -15,6 +15,7 @@ import au.screentime.kid.calls.callablesOf
 import au.screentime.kid.status.StatusHub
 import au.screentime.kid.sync.TrustedClock
 import java.util.UUID
+import java.util.concurrent.Executors
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -31,6 +32,12 @@ class SosController(private val context: Context, private val clock: TrustedCloc
     private val store = SosStore(context)
     private val locator = Locator(context, clock, ::battery)
     private val lock = Mutex()
+
+    /**
+     * Texts go out on their own thread. While sending, Android calls the default messaging app, and a slow or stuck
+     * one must never hold up the SOS: the server, the positions and the screen go on without it.
+     */
+    private val texter = Executors.newSingleThreadExecutor()
     private var sos: LocalSos? = store.load()
 
     /** From the last snapshot: who to text and call, and what to call the kid. */
@@ -146,20 +153,26 @@ class SosController(private val context: Context, private val clock: TrustedCloc
 
     private fun kidName(): String = state?.kid?.name ?: "your kid"
 
-    /** A text to every parent with a mobile; it works without data (docs/SPEC.md §15 step 2). */
+    /**
+     * A text to every parent with a mobile; it works without data (docs/SPEC.md §15 step 2). It returns at once:
+     * [texter] sends it.
+     */
     private fun text(message: String) {
         val numbers = state?.parents.orEmpty().mapNotNull { it.phoneE164 }
         if (numbers.isEmpty()) {
             Log.w(TAG, "sos: no parent has a mobile number, so no text")
             return
         }
-        try {
-            val sms = context.getSystemService(SmsManager::class.java)
-            for (number in numbers) sms.sendMultipartTextMessage(number, null, sms.divideMessage(message), null, null)
-            Log.i(TAG, "sos: texted ${numbers.size} parent(s)")
-        } catch (e: Exception) {
-            // No permission, or no SIM: the push and the email still go.
-            Log.w(TAG, "sos: the text failed", e)
+        texter.execute {
+            try {
+                val sms = context.getSystemService(SmsManager::class.java)
+                val parts = sms.divideMessage(message)
+                for (number in numbers) sms.sendMultipartTextMessage(number, null, parts, null, null)
+                Log.i(TAG, "sos: texted ${numbers.size} parent(s)")
+            } catch (e: Exception) {
+                // No permission, or no SIM: the push and the email still go.
+                Log.w(TAG, "sos: the text failed", e)
+            }
         }
     }
 
