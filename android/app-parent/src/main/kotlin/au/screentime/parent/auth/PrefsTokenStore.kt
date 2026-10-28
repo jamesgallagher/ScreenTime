@@ -79,7 +79,9 @@ class PrefsTokenStore(context: Context) : TokenStore {
 
     /** Decrypt a `<iv>.<ciphertext>` token. */
     private fun decrypt(stored: String): String {
-        val (ivBase64, bodyBase64) = stored.split(".", limit = 2)
+        val parts = stored.split(".", limit = 2)
+        require(parts.size == 2) { "not iv.ciphertext" }
+        val (ivBase64, bodyBase64) = parts
         val iv = Base64.decode(ivBase64, Base64.NO_WRAP)
         val ciphertext = Base64.decode(bodyBase64, Base64.NO_WRAP)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")

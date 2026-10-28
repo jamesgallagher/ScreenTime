@@ -121,7 +121,6 @@ class TodayViewTest {
         val days = device(lastSeenAt = "2026-10-25T05:00:00Z")
         val never = device(lastSeenAt = null)
         val inUseLongAgo = device(inUse = true, lastSeenAt = "2026-10-27T05:00:00Z")
-
         fun chips(d: TodayDevice) = kidChips(TodayKid("k", "Sam", AvatarColor._7C3AED, listOf(pool(devices = listOf(d)))), now)
 
         assertEquals(listOf(Chip("Parent mode on PC", ChipTone.NEUTRAL)), chips(endless))
