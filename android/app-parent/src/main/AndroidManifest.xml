@@ -1,14 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- The app lock: fingerprint or the phone's PIN, pattern or password (docs/SPEC.md §11.1). -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+
+    <!--
+        No backup and no device-to-device transfer: the sign-in is encrypted with a key that never leaves this
+        phone, so a copy on another phone could not be read anyway (docs/SPEC.md §11.1).
+    -->
     <application
+        android:name=".ParentApp"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:label="Screen Time Parent"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
 
         <activity
             android:name=".MainActivity"
-            android:exported="true">
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
