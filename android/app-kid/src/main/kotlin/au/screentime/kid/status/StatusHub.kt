@@ -3,6 +3,7 @@ package au.screentime.kid.status
 import au.screentime.kid.live.Answer
 import au.screentime.kid.live.ParentModeNews
 import au.screentime.kid.sos.SosView
+import au.screentime.kid.tamper.CaughtLine
 import kotlinx.coroutines.flow.MutableStateFlow
 
 /** The latest status, from the service to the screens of the same process. Null until the first sync. */
@@ -26,4 +27,7 @@ object StatusHub {
      * none. The service sets it back to null when it shows the SOS.
      */
     val sosCountdown = MutableStateFlow<Long?>(null)
+
+    /** What the caught screen says while it is up (docs/SPEC.md §14); it sets it back to null when it closes. */
+    val caught = MutableStateFlow<CaughtLine?>(null)
 }
