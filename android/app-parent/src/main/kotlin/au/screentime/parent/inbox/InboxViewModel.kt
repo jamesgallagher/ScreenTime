@@ -5,6 +5,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
 import au.screentime.core.model.api.ApiException
 import au.screentime.core.model.api.EventItem
 import au.screentime.core.model.api.TimeRequest
@@ -13,6 +14,7 @@ import au.screentime.core.model.api.TimeRequestStatus
 import au.screentime.parent.ParentApp
 import au.screentime.parent.auth.SignedOutException
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 
 /** The Inbox's state. `requests` is null until the first answer. */
 data class InboxState(
@@ -71,17 +73,24 @@ class InboxViewModel(app: Application) : AndroidViewModel(app) {
     private suspend fun answer(call: suspend () -> Any?) {
         if (state.busy) return
         state = state.copy(busy = true, notice = null)
-        try {
-            call()
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: SignedOutException) {
-            // The app is going back to sign-in anyway.
-        } catch (e: Exception) {
-            state = state.copy(notice = answerError(e))
-        }
-        load()
-        state = state.copy(busy = false)
+        // In the view model's scope, so closing the dialog or a card leaving the list cannot cancel the answer
+        // halfway and leave the buttons disabled.
+        viewModelScope.launch {
+            try {
+                call()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: SignedOutException) {
+                // The app is going back to sign-in anyway.
+            } catch (e: Exception) {
+                state = state.copy(notice = answerError(e))
+            }
+            try {
+                load()
+            } finally {
+                state = state.copy(busy = false)
+            }
+        }.join()
     }
 
     /** Back to a blank state, after a sign-out. */
