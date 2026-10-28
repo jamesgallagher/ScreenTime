@@ -4,8 +4,6 @@ import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.util.Log
-import android.view.WindowInsets
-import android.view.WindowInsetsController
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
@@ -54,16 +52,14 @@ private val PoliceRed = Color(0xFFB91C1C)
 /**
  * The "caught" screen (docs/SPEC.md §14): after a tamper attempt, cheesy on purpose, over everything for 8 seconds,
  * then it closes itself. Back does nothing. It opens in the block screen's task, so while the device is blocked it
- * sits on top of the block screen in Lock Task, and the block screen is what is left when it closes.
+ * sits on top of the block screen in Lock Task, and the block screen is what is left when it closes. The status and
+ * navigation bars stay, over its colours: hiding them makes Android show its "Viewing full screen" hint on top, the
+ * first time, which covers the screen for most of its 8 seconds.
  */
 class CaughtActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        window.insetsController?.let {
-            it.hide(WindowInsets.Type.systemBars())
-            it.systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        }
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() = Unit
         })
