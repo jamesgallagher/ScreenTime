@@ -868,6 +868,8 @@ Status chips under each kid: "Using PC now", "Parent mode on Pixel 7 · 10 min",
 
 Unlock: biometric prompt on open (section 11.1). App lock screen shows the app icon and **Unlock**.
 
+As built (CARD-040): sign-in is email then the 6-digit code; the refresh token is AES-GCM encrypted under an Android Keystore key in SharedPreferences `session`, and the access token stays in memory; one token swap at a time, a 401 swaps and retries once, and only a refused refresh token signs out (never a lost connection). The lock uses the framework `BiometricPrompt` (strong biometric or device credential) on a fresh start and after 5 minutes away, never straight after signing in, and not at all on a phone with no screen lock. Today shows each pool as name and "45m left" on one line, the bar under it and "1h 15m used of 2h" under that, asks the server every 30 s while on screen and on pull-down, and has no ± yet (CARD-041). Inbox and Kids are placeholders; Settings has who is signed in, the app lock note and **Sign out** with a confirm step. Phones only: no navigation rail yet.
+
 ### 16.5 Parent web app
 
 Same functions as the parent app except SOS alarms (the web shows a red banner at the top of every page while an SOS is active, with the map link) and parent code (also shown in Settings).
