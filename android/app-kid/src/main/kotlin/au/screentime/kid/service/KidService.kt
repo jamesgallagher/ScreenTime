@@ -135,7 +135,8 @@ class KidService : Service() {
 
     private val network = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
-            scope.launch { if (!lastSyncOk) sync() }
+            // Back online: what an SOS still has to send goes at once, not at the next tick.
+            scope.launch { if (!lastSyncOk || sos.pending) sync() }
         }
     }
 
@@ -211,7 +212,8 @@ class KidService : Service() {
                 // parent mode (at least once a minute; in parent mode a sync then if the live channel is down, to see
                 // a parent end it). Blocked with the screen on, the same while the live channel is open; while it is
                 // down, at least every 30 seconds, to see a parent's grant soon. Otherwise a minute. During an SOS, at
-                // least every 30 seconds whatever the screen does.
+                // least every 30 seconds whatever the screen does, and a sync every 5 minutes (every tick while the
+                // live channel is down), so a parent's end or a new schedule still arrives.
                 val untilNext = (nextCheckAt - clock.nowMs()).coerceIn(SECOND, MINUTE)
                 val normal = when {
                     inUse() || (paused && screenOn()) -> untilNext
@@ -232,6 +234,10 @@ class KidService : Service() {
                     }
                     blocked && screenOn() -> if (live?.connected == true) report() else sync()
                     paused && screenOn() -> if (live?.connected == true) report() else sync()
+                    sosOn -> {
+                        val recent = SystemClock.elapsedRealtime() - lastSyncElapsed < 5 * MINUTE
+                        if (live?.connected == true && recent) report() else sync()
+                    }
                 }
             }
         }

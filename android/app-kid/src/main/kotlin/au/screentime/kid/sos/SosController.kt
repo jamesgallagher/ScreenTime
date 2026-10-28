@@ -159,7 +159,7 @@ class SosController(private val context: Context, private val clock: TrustedCloc
             Log.i(TAG, "sos: texted ${numbers.size} parent(s)")
         } catch (e: Exception) {
             // No permission, or no SIM: the push and the email still go.
-            Log.w(TAG, "sos: the text failed: ${e.javaClass.simpleName}")
+            Log.w(TAG, "sos: the text failed", e)
         }
     }
 
