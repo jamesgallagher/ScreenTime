@@ -48,12 +48,10 @@ class Session(
     private val clock: () -> Long,
 ) {
     @Volatile
-    var accessToken: String? = null
-        private set
+    private var accessToken: String? = null
 
     @Volatile
-    var accessValidUntil: Long = 0
-        private set
+    private var accessValidUntil: Long = 0
 
     private val api = ApiClient(baseUrl, engine, token = { accessToken })
     private val swapLock = Mutex()
