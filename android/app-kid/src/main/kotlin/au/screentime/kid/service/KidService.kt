@@ -15,6 +15,7 @@ import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
 import au.screentime.core.model.api.ApiClient
+import au.screentime.core.model.api.DeviceEventKind
 import au.screentime.core.time.evaluate
 import au.screentime.kid.admin.Policies
 import au.screentime.kid.block.BlockActivity
@@ -42,6 +43,14 @@ import au.screentime.kid.status.kidStatus
 import au.screentime.kid.status.nextCheckAtMs
 import au.screentime.kid.sync.Syncer
 import au.screentime.kid.sync.TrustedClock
+import au.screentime.kid.tamper.CaughtActivity
+import au.screentime.kid.tamper.TamperApi
+import au.screentime.kid.tamper.TamperStore
+import au.screentime.kid.tamper.caughtLine
+import au.screentime.kid.tamper.clockJumpMin
+import au.screentime.kid.tamper.isRepeat
+import au.screentime.kid.tamper.plusEvent
+import au.screentime.kid.tamper.tamperEvent
 import au.screentime.kid.usage.Recorder
 import au.screentime.kid.usage.dayStartMs
 import au.screentime.kid.usage.todayInput
@@ -69,6 +78,8 @@ import kotlinx.coroutines.withTimeoutOrNull
  * on, or an SOS is on, it also keeps the live channel open (§8.3), so a parent's grant or answer shows within
  * seconds. While parent mode is on (§12.3) the device is not blocked and nothing counts. While an SOS is on (§15)
  * nothing counts either, and [SosController] takes a position and sends it every 30 seconds, screen on or off.
+ * A tamper attempt (§14: the clock set by hand, a policy found off, a call stopped while blocked) goes to the server
+ * with the next sync and shows the caught screen.
  * Everything runs one at a time on [scope], so the database and the parent mode store see one change after another.
  */
 class KidService : Service() {
@@ -83,6 +94,9 @@ class KidService : Service() {
     private lateinit var parentStore: ParentModeStore
     private var parentApi: ParentModeApi? = null
     private lateinit var sos: SosController
+    private lateinit var tamper: TamperStore
+    private var tamperApi: TamperApi? = null
+    private var kidName = ""
     private var engine: HttpClientEngine? = null
     private var api: ApiClient? = null
     private var live: LiveChannel? = null
@@ -112,6 +126,9 @@ class KidService : Service() {
     /** An SOS was on at the last run: nothing counts (docs/SPEC.md §15 step 8). */
     private var sosOn = false
 
+    /** A tamper attempt was recorded and the kid has not seen the caught screen for it yet. */
+    private var caughtWanted = false
+
     private val warnings = WarningTracker()
 
     /** Trusted time of the next warning, lock or new period, so the loop wakes up for it (at least once a minute). */
@@ -129,6 +146,7 @@ class KidService : Service() {
                     recorder.stop(at)
                     sync()
                 }
+                Intent.ACTION_TIME_CHANGED -> scope.launch { onTimeSet() }
             }
         }
     }
@@ -169,6 +187,9 @@ class KidService : Service() {
         api = client
         parentApi = ParentModeApi(client)
         sos = SosController(this, clock, SosApi(client))
+        tamper = TamperStore(this)
+        tamperApi = TamperApi(client)
+        kidName = enrolment.kidName
         sos.resume()
         syncer = Syncer(client, segments, states, clock, log = { Log.w(TAG, it) })
         live = LiveChannel(
@@ -197,6 +218,7 @@ class KidService : Service() {
             addAction(Intent.ACTION_SCREEN_ON)
             addAction(Intent.ACTION_SCREEN_OFF)
             addAction(Intent.ACTION_USER_PRESENT)
+            addAction(Intent.ACTION_TIME_CHANGED)
         }
         registerReceiver(screen, filter, Context.RECEIVER_NOT_EXPORTED)
         getSystemService(ConnectivityManager::class.java).registerDefaultNetworkCallback(network)
@@ -246,6 +268,8 @@ class KidService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (!started) return START_STICKY
         when (intent?.action) {
+            // A start: the app, the setup screen or Android after a reboot. The policies were just applied again.
+            null -> scope.launch { checkPolicies() }
             // A screen just sent something (docs/SPEC.md §16.2): sync soon, so the next snapshot shows it.
             ACTION_SYNC -> {
                 syncWanted = true
@@ -265,6 +289,7 @@ class KidService : Service() {
                 sos.endByKid()
                 report()
             }
+            ACTION_CALL_BLOCKED -> scope.launch { onTamper(DeviceEventKind.TAMPER_CALL_BLOCKED) }
         }
         return START_STICKY
     }
@@ -293,6 +318,7 @@ class KidService : Service() {
         screenOn() && !getSystemService(KeyguardManager::class.java).isKeyguardLocked && !blocked && !paused && !sosOn
 
     private suspend fun onScreenOn(at: Long) {
+        showCaughtIfWanted()
         val stale = !lastSyncOk || SystemClock.elapsedRealtime() - lastSyncElapsed >= 2 * MINUTE
         if (blocked || paused || sosOn) {
             // The block screen comes back up through report(); a fresh sync may bring a grant, or the end of parent
@@ -304,6 +330,51 @@ class KidService : Service() {
         if (!inUse() || segments.open() != null) return
         recorder.start(at)
         if (stale) sync() else report()
+    }
+
+    /** The phone's clock was set. Trusted time does not move; set more than 2 minutes away from it is an attempt. */
+    private suspend fun onTimeSet() {
+        if (!clock.isAnchored) return
+        val offsetMin = clockJumpMin(System.currentTimeMillis(), clock.nowMs()) ?: return
+        onTamper(DeviceEventKind.TAMPER_CLOCK, mapOf("offsetMin" to "$offsetMin"))
+    }
+
+    /** Device Owner policies found off and turned on again (see [Policies.apply]). */
+    private suspend fun checkPolicies() {
+        val missing = Policies.takeMissing(this)
+        if (missing.isEmpty()) return
+        onTamper(DeviceEventKind.TAMPER_POLICY, mapOf("missing" to missing.joinToString(",").take(200)))
+    }
+
+    /**
+     * A tamper attempt (docs/SPEC.md §14): it is queued for the server and the kid sees the caught screen, now or when
+     * they next unlock. The same kind again within a minute is the same attempt and is only logged.
+     */
+    private suspend fun onTamper(kind: DeviceEventKind, payload: Map<String, String> = emptyMap()) {
+        val now = clock.nowMs()
+        if (isRepeat(tamper.lastAt(kind), now)) {
+            Log.i(TAG, "tamper: ${kind.wire} again")
+            return
+        }
+        tamper.setLastAt(kind, now)
+        tamper.saveQueue(tamper.queue().plusEvent(tamperEvent(UUID.randomUUID().toString(), kind, now, payload)))
+        Log.i(TAG, "tamper: ${kind.wire}")
+        caughtWanted = true
+        showCaughtIfWanted()
+        sync()
+    }
+
+    /** The caught screen, if one is wanted and the kid can see it: screen on and unlocked. Never over an SOS. */
+    private fun showCaughtIfWanted() {
+        if (!caughtWanted || !screenOn() || getSystemService(KeyguardManager::class.java).isKeyguardLocked) return
+        caughtWanted = false
+        if (sos.active) return
+        val status = StatusHub.status.value
+        val showing = StatusHub.caught.value != null
+        val name = status?.kidName ?: kidName
+        StatusHub.caught.value = caughtLine(tamper.nextCaught(), name, status?.parentNames.orEmpty())
+        Log.i(TAG, "tamper: caught screen")
+        if (!showing) CaughtActivity.show(this)
     }
 
     /** A parent answered "Ask for more time": the screens show it for 4 seconds, and a heads-up says it too. */
@@ -335,8 +406,9 @@ class KidService : Service() {
             // What the server must hear about parent mode goes first, so the snapshot after it shows it.
             val local = parentStore.load()
             if (local.pending) parentApi?.let { parentStore.save(it.flush(local, clock.nowMs())) }
-            // And whatever an SOS still has to send.
+            // And whatever an SOS still has to send, and the tamper attempts.
             if (sos.pending) sos.tick()
+            sendTamper()
             val ok = syncer.sync()
             lastSyncElapsed = SystemClock.elapsedRealtime()
             lastSyncOk = ok
@@ -347,6 +419,16 @@ class KidService : Service() {
             }
         }
         report()
+    }
+
+    /** Sends the tamper events in the queue. An attempt recorded while they were on the way stays for the next sync. */
+    private suspend fun sendTamper() {
+        val queued = tamper.queue()
+        if (queued.isEmpty()) return
+        val sent = tamperApi?.flush(queued).orEmpty().map { it.id }.toSet()
+        if (sent.isEmpty()) return
+        tamper.saveQueue(tamper.queue().filterNot { it.id in sent })
+        Log.i(TAG, "tamper: ${sent.size} sent")
     }
 
     /**
@@ -378,8 +460,10 @@ class KidService : Service() {
         if (!wasCounting && counting && inUse()) recorder.start(now)
 
         StatusHub.status.value = status
-        // The block screen closes itself when StatusHub says unlocked.
-        if (blocked && screenOn()) BlockActivity.show(this)
+        showCaughtIfWanted()
+        // The block screen closes itself when StatusHub says unlocked. While the caught screen is up, it waits:
+        // showing it would close the caught screen, which sits on top of it.
+        if (blocked && screenOn() && StatusHub.caught.value == null) BlockActivity.show(this)
         updateLive(waiting = status.pendingMinutes != null || StatusHub.parentModeAsked.value)
         notifier.showStatus(status, now, StatusHub.sos.value)
         if (status.locked) {
@@ -435,6 +519,7 @@ class KidService : Service() {
 
         private const val ACTION_SOS_START = "au.screentime.kid.action.SOS_START"
         private const val ACTION_SOS_END = "au.screentime.kid.action.SOS_END"
+        private const val ACTION_CALL_BLOCKED = "au.screentime.kid.action.CALL_BLOCKED"
 
         fun start(context: Context) {
             context.startForegroundService(Intent(context, KidService::class.java))
@@ -467,6 +552,11 @@ class KidService : Service() {
         /** The kid held **I'm safe**. */
         fun endSos(context: Context) {
             context.startService(Intent(context, KidService::class.java).setAction(ACTION_SOS_END))
+        }
+
+        /** [CallGuard][au.screentime.kid.calls.CallGuard] stopped a call while blocked: a tamper attempt. */
+        fun callBlocked(context: Context) {
+            context.startService(Intent(context, KidService::class.java).setAction(ACTION_CALL_BLOCKED))
         }
     }
 }

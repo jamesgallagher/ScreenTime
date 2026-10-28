@@ -71,6 +71,17 @@
             android:launchMode="singleTask"
             android:taskAffinity="au.screentime.kid.block" />
 
+        <!--
+            The "caught" screen after a tamper attempt (docs/SPEC.md §14), 8 seconds over everything. It joins the
+            block screen's task, so while blocked it sits on top of the block screen in Lock Task. Kept out of
+            Recents; only the app itself opens it.
+        -->
+        <activity
+            android:name=".tamper.CaughtActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity="au.screentime.kid.block" />
+
         <service
             android:name=".service.KidService"
             android:exported="false"
