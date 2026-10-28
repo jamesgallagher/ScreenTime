@@ -21,6 +21,7 @@ import au.screentime.parent.auth.SignInScreen
 import au.screentime.parent.auth.SignInViewModel
 import au.screentime.parent.home.HomeScreen
 import au.screentime.parent.home.NoFamilyScreen
+import au.screentime.parent.inbox.InboxViewModel
 import au.screentime.parent.lock.AppLock
 import au.screentime.parent.lock.LockScreen
 import au.screentime.parent.today.TodayViewModel
@@ -32,6 +33,7 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
     private val signIn: SignInViewModel by viewModels()
     private val today: TodayViewModel by viewModels()
+    private val inbox: InboxViewModel by viewModels()
     private val session get() = (application as ParentApp).session
 
     @Volatile
@@ -44,7 +46,10 @@ class MainActivity : ComponentActivity() {
             val state by session.state.collectAsState()
             val locked by AppLock.locked.collectAsState()
             LaunchedEffect(state) {
-                if (state is SessionState.SignedOut) today.clear()
+                if (state is SessionState.SignedOut) {
+                    today.clear()
+                    inbox.clear()
+                }
             }
             ScreenTimeTheme {
                 when (val s = state) {
@@ -52,7 +57,7 @@ class MainActivity : ComponentActivity() {
                     is SessionState.SignedIn -> when {
                         locked -> LockScreen(onUnlock = ::askToUnlock)
                         s.me.family == null -> NoFamilyScreen(s.me, ::signOut)
-                        else -> HomeScreen(s.me, today, secure = isSecure(), ::signOut)
+                        else -> HomeScreen(s.me, today, inbox, secure = isSecure(), ::signOut)
                     }
                 }
             }
