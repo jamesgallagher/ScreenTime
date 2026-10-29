@@ -4,7 +4,7 @@
  * so a new kind of schema is noticed when `pnpm contract` runs, not on a phone.
  */
 
-type Schema = {
+export type Schema = {
   $ref?: string;
   type?: string | string[];
   format?: string;
@@ -18,7 +18,7 @@ type Schema = {
 
 type Parameter = { name: string; in: string; required?: boolean; schema: Schema };
 
-type Operation = {
+export type Operation = {
   summary?: string;
   security?: unknown[];
   parameters?: Parameter[];
