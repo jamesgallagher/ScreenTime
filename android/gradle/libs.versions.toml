@@ -1,5 +1,6 @@
 [versions]
 zxing = "3.5.3"
+firebaseBom = "34.0.0"
 agp = "9.4.0"
 kotlin = "2.4.21"
 composeBom = "2026.09.00"
@@ -13,6 +14,8 @@ room = "2.8.5"
 ksp = "2.3.12"
 
 [libraries]
+firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
+firebase-messaging = { group = "com.google.firebase", name = "firebase-messaging" }
 zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" }
 androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
 androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }

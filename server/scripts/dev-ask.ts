@@ -1,8 +1,10 @@
 // Makes a kid of the development database ask for more time from a phone, for the parent app's Inbox: it enrols a
 // pretend Android phone through the API and sends one "Ask for more time" from it, so the parents get a pending
 // request in the phone pool. One request per kid and pool can wait at a time: answer it before asking again.
+// With `parent-mode` in place of the minutes, the pretend phone asks for parent mode instead (CARD-042).
 // Usage (from the repo root, with DATABASE_URL set):
 //   pnpm --filter @screentime/server exec tsx scripts/dev-ask.ts Alex 30 Finishing my homework video
+//   pnpm --filter @screentime/server exec tsx scripts/dev-ask.ts Alex parent-mode
 // Minutes are 15, 30 or 60; every word after them is the reason (none: no reason). The API is at
 // http://localhost:8080 unless API_URL says otherwise. Never run this against the production database.
 import { randomUUID } from 'node:crypto';
@@ -13,11 +15,12 @@ import { newEnrolmentCode } from '../src/devices/token.js';
 
 const databaseUrl = process.env.DATABASE_URL;
 const kidName = process.argv[2]?.trim();
+const parentMode = process.argv[3] === 'parent-mode';
 const minutes = Number(process.argv[3]);
 const reason = process.argv.slice(4).join(' ').trim() || null;
 const apiUrl = (process.env.API_URL ?? 'http://localhost:8080').replace(/\/+$/, '');
-if (!databaseUrl || !kidName || ![15, 30, 60].includes(minutes)) {
-  console.error('Usage: DATABASE_URL=postgres://... tsx scripts/dev-ask.ts <kid name> <15, 30 or 60> [reason words]');
+if (!databaseUrl || !kidName || !(parentMode || [15, 30, 60].includes(minutes))) {
+  console.error('Usage: DATABASE_URL=postgres://... tsx scripts/dev-ask.ts <kid name> <15, 30, 60 or parent-mode> [reason words]');
   process.exit(1);
 }
 
@@ -66,8 +69,13 @@ try {
     osVersion: 'Android 14',
     appVersion: 'dev',
   })) as { deviceToken: string };
-  await post('/v1/device/time-requests', { id: randomUUID(), minutes, reason }, enrolled.deviceToken);
-  console.log(`${kid.name} asked for ${minutes} min more Phone from "${phone}"${reason ? `: "${reason}"` : '.'}`);
+  if (parentMode) {
+    await post('/v1/device/parent-mode-requests', { id: randomUUID() }, enrolled.deviceToken);
+    console.log(`${kid.name} asked for parent mode from "${phone}".`);
+  } else {
+    await post('/v1/device/time-requests', { id: randomUUID(), minutes, reason }, enrolled.deviceToken);
+    console.log(`${kid.name} asked for ${minutes} min more Phone from "${phone}"${reason ? `: "${reason}"` : '.'}`);
+  }
 } finally {
   await pool.end();
 }
