@@ -10,6 +10,11 @@
         <PackageReference Include="xunit.v3" Version="4.0.2" />
     </ItemGroup>
 
+    <!-- The shared engine cases (docs/SPEC.md §7.4), copied next to the tests as vectors/*.json (CARD-045). -->
+    <ItemGroup>
+        <None Include="..\..\..\test-vectors\engine\*.json" Link="vectors\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+
     <ItemGroup>
         <ProjectReference Include="..\..\src\ScreenTime.Core\ScreenTime.Core.csproj" />
     </ItemGroup>
