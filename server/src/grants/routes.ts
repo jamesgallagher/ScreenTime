@@ -176,7 +176,14 @@ export function registerGrantRoutes(app: Router, deps: AppDeps) {
         type: 'grant_added',
         at: grant.createdAt,
         data: {
-          grant: { id: grant.id, minutes: grant.minutes, createdAt: grant.createdAt, byName: grant.byName },
+          grant: {
+            id: grant.id,
+            pool: grant.pool,
+            minutes: grant.minutes,
+            createdAt: grant.createdAt,
+            byName: grant.byName,
+            requestId: grant.requestId,
+          },
           byName: grant.byName,
         },
       },
