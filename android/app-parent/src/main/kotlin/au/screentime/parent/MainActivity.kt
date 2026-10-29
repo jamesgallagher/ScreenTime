@@ -22,6 +22,7 @@ import au.screentime.parent.auth.SignInViewModel
 import au.screentime.parent.home.HomeScreen
 import au.screentime.parent.home.NoFamilyScreen
 import au.screentime.parent.inbox.InboxViewModel
+import au.screentime.parent.kids.KidsViewModel
 import au.screentime.parent.lock.AppLock
 import au.screentime.parent.lock.LockScreen
 import au.screentime.parent.today.TodayViewModel
@@ -34,6 +35,7 @@ class MainActivity : ComponentActivity() {
     private val signIn: SignInViewModel by viewModels()
     private val today: TodayViewModel by viewModels()
     private val inbox: InboxViewModel by viewModels()
+    private val kids: KidsViewModel by viewModels()
     private val session get() = (application as ParentApp).session
 
     @Volatile
@@ -49,6 +51,7 @@ class MainActivity : ComponentActivity() {
                 if (state is SessionState.SignedOut) {
                     today.clear()
                     inbox.clear()
+                    kids.clear()
                 }
             }
             ScreenTimeTheme {
@@ -57,7 +60,7 @@ class MainActivity : ComponentActivity() {
                     is SessionState.SignedIn -> when {
                         locked -> LockScreen(onUnlock = ::askToUnlock)
                         s.me.family == null -> NoFamilyScreen(s.me, ::signOut)
-                        else -> HomeScreen(s.me, today, inbox, secure = isSecure(), ::signOut)
+                        else -> HomeScreen(s.me, today, inbox, kids, secure = isSecure(), ::signOut)
                     }
                 }
             }
