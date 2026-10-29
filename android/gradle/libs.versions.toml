@@ -12,6 +12,7 @@ camerax = "1.6.0"
 mlkitBarcode = "17.3.0"
 room = "2.8.5"
 ksp = "2.3.12"
+osmdroid = "6.1.20"
 
 [libraries]
 firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
@@ -35,6 +36,7 @@ androidx-camera-mlkit-vision = { group = "androidx.camera", name = "camera-mlkit
 mlkit-barcode-scanning = { group = "com.google.mlkit", name = "barcode-scanning", version.ref = "mlkitBarcode" }
 androidx-room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
 androidx-room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
+osmdroid = { group = "org.osmdroid", name = "osmdroid-android", version.ref = "osmdroid" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

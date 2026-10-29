@@ -75,9 +75,6 @@ private enum class Sheet { ASK, MESSAGE }
 /** How long a parent's answer stays on the screen (docs/SPEC.md §16.2). */
 private const val ANSWER_MS = 4_000L
 
-/** The green of "Dad said yes!" (the green kid avatar colour, docs/SPEC.md §16.1). */
-private val Yes = Color(0xFF16A34A)
-
 /**
  * The kid's two buttons, **Ask for more time** and **Message Mum and Dad**, with the card above them: a parent's
  * answer for 4 seconds, or "Waiting for Mum or Dad…" while a request has no answer (docs/SPEC.md §16.2). The
@@ -190,12 +187,12 @@ private fun WaitingCard(text: String, look: Look) {
 private fun AnswerCard(answer: Answer, look: Look) {
     val colors = ScreenTimeTheme.colors
     val container = when {
-        answer.approved -> Yes
+        answer.approved -> colors.success
         look == Look.DAY -> MaterialTheme.colorScheme.surfaceVariant
         else -> colors.onNight.copy(alpha = 0.12f)
     }
     val content = when {
-        answer.approved -> Color.White
+        answer.approved -> if (look == Look.DAY) Color.White else colors.nightTop
         look == Look.DAY -> MaterialTheme.colorScheme.onSurface
         else -> colors.onNight
     }

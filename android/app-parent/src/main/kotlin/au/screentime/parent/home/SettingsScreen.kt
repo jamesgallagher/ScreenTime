@@ -4,6 +4,7 @@ import android.app.NotificationManager
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -82,15 +83,24 @@ fun SettingsScreen(me: Me, secure: Boolean, onSignOut: () -> Unit) {
                     }
                 }
                 SettingsCard("App lock") {
-                    Text(
-                        text = if (secure) {
-                            "The app locks when you have been away from it for 5 minutes. Open it with your fingerprint or this phone's PIN."
-                        } else {
-                            "This phone has no screen lock, so the app can't lock itself. Set a PIN in the phone's settings."
-                        },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
+                    if (secure) {
+                        Text(
+                            text = "The app locks when you have been away from it for 5 minutes. Open it with your fingerprint or this phone's PIN.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                    } else {
+                        // A warning, not a fact: it asks the parent to do something.
+                        Text(
+                            text = "\u26A0\uFE0F  This phone has no screen lock, so the app can't lock itself. Set a PIN in the phone's settings.",
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(ScreenTimeTheme.colors.warning.copy(alpha = 0.14f), MaterialTheme.shapes.small)
+                                .padding(12.dp),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
                 }
                 SettingsCard("SOS alarm") {
                     SosAlarmCard()

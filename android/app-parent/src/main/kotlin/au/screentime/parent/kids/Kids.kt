@@ -85,3 +85,18 @@ fun actionError(e: Exception): String = when {
     e is ApiException -> "Something went wrong on the server. Try again soon."
     else -> "Can't reach Screen Time. Check the internet connection and try again."
 }
+
+/** What devices a kid has, for the Kids list: "No devices", "1 phone", "1 phone · 2 PCs". */
+fun devicesSummary(devices: List<Device>): String {
+    if (devices.isEmpty()) return "No devices"
+    return DeviceForm.entries.mapNotNull { form ->
+        val n = devices.count { it.form == form }
+        if (n == 0) return@mapNotNull null
+        val word = when (form) {
+            DeviceForm.PHONE -> "phone"
+            DeviceForm.TABLET -> "tablet"
+            DeviceForm.PC -> "PC"
+        }
+        if (n == 1) "1 $word" else "$n ${word}s"
+    }.joinToString(" · ")
+}

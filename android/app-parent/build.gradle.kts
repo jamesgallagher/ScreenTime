@@ -73,6 +73,7 @@ dependencies {
     implementation(libs.androidx.activity.compose)
     implementation(libs.ktor.client.okhttp)
     implementation(libs.zxing.core)
+    implementation(libs.osmdroid)
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.messaging)
 

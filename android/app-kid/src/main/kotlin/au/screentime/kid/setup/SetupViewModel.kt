@@ -24,6 +24,7 @@ import au.screentime.kid.enrol.serverUrl
 import au.screentime.kid.service.KidService
 import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 /** One screen of the first-run setup (docs/SPEC.md §16.2, "Setup screen"). */
@@ -78,9 +79,18 @@ class SetupViewModel(app: Application) : AndroidViewModel(app) {
     /** Looks again, for example after a parent ran the adb command while this screen was open. */
     fun refresh() {
         if (state is SetupState.NotOwner) state = initialState()
-        if (state is SetupState.Done) {
-            Policies.apply(getApplication())
-            KidService.start(getApplication())
+        if (state is SetupState.Done) lockDown()
+    }
+
+    /**
+     * Applies the Device Owner policies and starts the service. Off the main thread: the policy calls are dozens of
+     * binder calls into the system and took over 5 s on the emulator right after pairing ("isn't responding").
+     */
+    private fun lockDown() {
+        val app = getApplication<Application>()
+        viewModelScope.launch(Dispatchers.Default) {
+            Policies.apply(app)
+            KidService.start(app)
         }
     }
 
@@ -176,9 +186,8 @@ class SetupViewModel(app: Application) : AndroidViewModel(app) {
     fun onConfirm() {
         val enrolment = store.load() ?: return
         store.save(enrolment.copy(confirmed = true))
-        Policies.apply(getApplication())
-        KidService.start(getApplication())
         state = SetupState.Done(enrolment.kidName)
+        lockDown()
     }
 
     /** "No": forget this enrolment. A parent removes the device in the parent app (it stays listed until then). */

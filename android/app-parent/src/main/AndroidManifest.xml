@@ -17,6 +17,8 @@
         phone, so a copy on another phone could not be read anyway (docs/SPEC.md §11.1).
     -->
     <application
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:name=".ParentApp"
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"

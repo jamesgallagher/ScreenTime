@@ -87,4 +87,21 @@ class KidsTest {
         // The finder pattern: the top-left corner module is dark.
         assertTrue(qr[0][0])
     }
+
+    @Test
+    fun theKidsListSaysWhatDevicesAKidHas() {
+        assertEquals("No devices", devicesSummary(emptyList()))
+        assertEquals("1 phone", devicesSummary(listOf(device("d1"))))
+        assertEquals(
+            "1 phone · 1 tablet · 2 PCs",
+            devicesSummary(
+                listOf(
+                    device("d1", form = DeviceForm.PC),
+                    device("d2"),
+                    device("d3", form = DeviceForm.TABLET),
+                    device("d4", form = DeviceForm.PC),
+                ),
+            ),
+        )
+    }
 }

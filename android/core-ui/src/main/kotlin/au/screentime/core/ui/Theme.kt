@@ -14,6 +14,7 @@ import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 /** Screen Time colours that Material 3 has no slot for (warning, critical, night...). */
 val LocalScreenTimeColors = staticCompositionLocalOf { LightColors }
@@ -34,10 +35,16 @@ val ScreenTimeTypography = BaseTypography.copy(
         fontWeight = FontWeight.Bold,
         fontFeatureSettings = "tnum",
     ),
+    headlineMedium = BaseTypography.headlineMedium.copy(fontWeight = FontWeight.Bold),
+    headlineSmall = BaseTypography.headlineSmall.copy(fontWeight = FontWeight.SemiBold),
+    titleLarge = BaseTypography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
+    titleMedium = BaseTypography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+    labelLarge = BaseTypography.labelLarge.copy(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
 )
 
-/** Cards 16 dp radius (medium); sheets 28 dp radius (extraLarge). */
+/** Chips and fields 12 dp (small); cards 16 dp (medium); sheets and dialogs 28 dp (extraLarge). */
 val ScreenTimeShapes = Shapes(
+    small = RoundedCornerShape(12.dp),
     medium = RoundedCornerShape(16.dp),
     extraLarge = RoundedCornerShape(28.dp),
 )
@@ -57,7 +64,29 @@ private fun colorSchemeOf(c: ScreenTimeColors, dark: Boolean): ColorScheme {
         secondaryContainer = c.surfaceVariant,
         onSecondaryContainer = c.onSurface,
         outline = c.outline,
+        outlineVariant = c.outline,
         error = c.danger,
+        primaryContainer = c.primarySoft,
+        onPrimaryContainer = c.onPrimarySoft,
+        secondary = c.primary,
+        onSecondary = c.onPrimary,
+        tertiary = c.primary,
+        onTertiary = c.onPrimary,
+        // The clock picker's AM/PM and other tertiary bits: soft teal, not Material's pink.
+        tertiaryContainer = c.primarySoft,
+        onTertiaryContainer = c.onPrimarySoft,
+        // Sheets, dialogs, menus, date and time pickers all draw on these. Material's defaults are lavender, which
+        // fights the teal; ours are the plain neutrals (white sheets in light mode, warm charcoal in dark).
+        surfaceTint = c.surface,
+        surfaceBright = c.surface,
+        surfaceDim = c.surfaceVariant,
+        surfaceContainerLowest = c.surface,
+        surfaceContainerLow = c.surface,
+        surfaceContainer = c.surface,
+        surfaceContainerHigh = c.raised,
+        surfaceContainerHighest = c.surfaceVariant,
+        inverseSurface = c.onSurface,
+        inverseOnSurface = c.surface,
     )
 }
 

@@ -3,6 +3,7 @@ package au.screentime.parent.kids
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,20 +16,28 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -43,7 +52,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import au.screentime.core.model.api.Kid
+import au.screentime.core.model.api.ScheduleDay
 import au.screentime.core.model.api.ScheduleInput
 import au.screentime.core.ui.AvatarColors
 import au.screentime.core.ui.ScreenTimeTheme
@@ -65,6 +76,8 @@ fun ScheduleScreen(kid: Kid, vm: KidsViewModel, onBack: () -> Unit) {
     var error by remember { mutableStateOf<String?>(null) }
     var justSaved by remember { mutableStateOf(false) }
     var confirmLeave by remember { mutableStateOf(false) }
+    // The weekday whose editor sheet is open.
+    var editing by remember { mutableStateOf<Int?>(null) }
 
     val dirty = draft != saved
 
@@ -122,22 +135,6 @@ fun ScheduleScreen(kid: Kid, vm: KidsViewModel, onBack: () -> Unit) {
         val next = step(allowanceOptions(day.phoneMin), day.phoneMin, by)
         if (next == day.phoneMin) return null
         return d.copy(days = d.days.map { if (it.weekday == weekday) it.copy(phoneMin = next) else it })
-    }
-
-    fun stepWake(weekday: Int, by: Int): ScheduleInput? {
-        val d = draft ?: return null
-        val day = d.days.first { it.weekday == weekday }
-        val next = step(wakeOptions(day.wake), day.wake, by)
-        if (next == day.wake) return null
-        return d.copy(days = d.days.map { if (it.weekday == weekday) it.copy(wake = next) else it })
-    }
-
-    fun stepBedtime(weekday: Int, by: Int): ScheduleInput? {
-        val d = draft ?: return null
-        val day = d.days.first { it.weekday == weekday }
-        val next = step(bedtimeOptions(day.bedtime), day.bedtime, by)
-        if (next == day.bedtime) return null
-        return d.copy(days = d.days.map { if (it.weekday == weekday) it.copy(bedtime = next) else it })
     }
 
     fun copyMonday() {
@@ -248,74 +245,25 @@ fun ScheduleScreen(kid: Kid, vm: KidsViewModel, onBack: () -> Unit) {
                             }
                         }
                     }
-                    (1..7).forEach { weekday ->
-                        item(key = weekday) {
-                            val day = d.days.first { it.weekday == weekday }
-                            val dayName = WEEKDAYS[weekday - 1]
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = MaterialTheme.shapes.medium,
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                                border = BorderStroke(1.dp, ScreenTimeTheme.colors.outline),
-                            ) {
-                                Column(modifier = Modifier.padding(16.dp)) {
-                                    Text(
-                                        text = dayName,
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                    )
-                                    Stepper(
-                                        label = "Screens",
-                                        value = formatAllowance(day.screensMin),
-                                        what = "$dayName Screens",
-                                        onLess = if (stepScreens(weekday, -1) != null) { { applyEdit(stepScreens(weekday, -1)) } } else null,
-                                        onMore = if (stepScreens(weekday, 1) != null) { { applyEdit(stepScreens(weekday, 1)) } } else null,
-                                    )
-                                    Stepper(
-                                        label = "Phone",
-                                        value = formatAllowance(day.phoneMin),
-                                        what = "$dayName Phone",
-                                        onLess = if (stepPhone(weekday, -1) != null) { { applyEdit(stepPhone(weekday, -1)) } } else null,
-                                        onMore = if (stepPhone(weekday, 1) != null) { { applyEdit(stepPhone(weekday, 1)) } } else null,
-                                    )
-                                    Stepper(
-                                        label = "Wake-up",
-                                        value = formatClock(day.wake),
-                                        what = "$dayName Wake-up",
-                                        onLess = if (stepWake(weekday, -1) != null) { { applyEdit(stepWake(weekday, -1)) } } else null,
-                                        onMore = if (stepWake(weekday, 1) != null) { { applyEdit(stepWake(weekday, 1)) } } else null,
-                                    )
-                                    Stepper(
-                                        label = "Bedtime",
-                                        value = formatClock(day.bedtime),
-                                        what = "$dayName Bedtime",
-                                        onLess = if (stepBedtime(weekday, -1) != null) { { applyEdit(stepBedtime(weekday, -1)) } } else null,
-                                        onMore = if (stepBedtime(weekday, 1) != null) { { applyEdit(stepBedtime(weekday, 1)) } } else null,
-                                    )
-                                    dayError(day)?.let {
-                                        Text(
-                                            text = it,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = ScreenTimeTheme.colors.critical,
-                                        )
-                                    }
+                    item(key = "week") {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = MaterialTheme.shapes.medium,
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            border = BorderStroke(1.dp, ScreenTimeTheme.colors.outline),
+                        ) {
+                            Column {
+                                (1..7).forEach { weekday ->
+                                    if (weekday > 1) HorizontalDivider(color = ScreenTimeTheme.colors.outline)
+                                    DayRow(d.days.first { it.weekday == weekday }) { editing = weekday }
                                 }
                             }
                         }
-                        if (weekday == 1) {
-                            item(key = "copy-monday") {
-                                TextButton(onClick = { copyMonday() }) {
-                                    Text("Copy Monday to weekdays")
-                                }
-                            }
-                        }
-                        if (weekday == 6) {
-                            item(key = "copy-saturday") {
-                                TextButton(onClick = { copySaturday() }) {
-                                    Text("Copy Saturday to weekend")
-                                }
-                            }
+                    }
+                    item(key = "copy") {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            AssistChip(onClick = { copyMonday() }, label = { Text("Monday → weekdays") })
+                            AssistChip(onClick = { copySaturday() }, label = { Text("Saturday → Sunday") })
                         }
                     }
                 }
@@ -351,6 +299,24 @@ fun ScheduleScreen(kid: Kid, vm: KidsViewModel, onBack: () -> Unit) {
             }
         }
     }
+    val editDay = editing
+    val editDraft = draft
+    if (editDay != null && editDraft != null) {
+        val day = editDraft.days.first { it.weekday == editDay }
+        DaySheet(
+            day = day,
+            onScreens = { by -> applyEdit(stepScreens(editDay, by)) },
+            onPhone = { by -> applyEdit(stepPhone(editDay, by)) },
+            canScreens = { by -> stepScreens(editDay, by) != null },
+            canPhone = { by -> stepPhone(editDay, by) != null },
+            onClock = { wake, bedtime ->
+                applyEdit(editDraft.copy(days = editDraft.days.map {
+                    if (it.weekday == editDay) it.copy(wake = wake, bedtime = bedtime) else it
+                }))
+            },
+            onDone = { editing = null },
+        )
+    }
     if (confirmLeave) {
         AlertDialog(
             title = { Text("Discard changes?") },
@@ -368,6 +334,145 @@ fun ScheduleScreen(kid: Kid, vm: KidsViewModel, onBack: () -> Unit) {
             onDismissRequest = { confirmLeave = false },
         )
     }
+}
+
+/** One day in the week overview: the day, its time and its hours, and a chevron; a tap opens the day's editor. */
+@Composable
+private fun DayRow(day: ScheduleDay, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = WEEKDAYS[day.weekday - 1].take(3),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.width(52.dp),
+        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = allowanceLine(day),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = hoursLine(day),
+                style = MaterialTheme.typography.bodyMedium,
+                color = ScreenTimeTheme.colors.muted,
+            )
+            dayError(day)?.let {
+                Text(text = it, style = MaterialTheme.typography.bodySmall, color = ScreenTimeTheme.colors.critical)
+            }
+        }
+        Text("\u203A", fontSize = 28.sp, color = ScreenTimeTheme.colors.muted)
+    }
+}
+
+/**
+ * One day's editor: Screens and Phone time with − and +, and wake-up and bedtime as clock buttons that open a clock
+ * picker. Changes go into the draft at once; the page's **Save schedule** saves them.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DaySheet(
+    day: ScheduleDay,
+    onScreens: (Int) -> Unit,
+    onPhone: (Int) -> Unit,
+    canScreens: (Int) -> Boolean,
+    canPhone: (Int) -> Boolean,
+    onClock: (wake: String, bedtime: String) -> Unit,
+    onDone: () -> Unit,
+) {
+    val dayName = WEEKDAYS[day.weekday - 1]
+    var picking by remember { mutableStateOf<String?>(null) }
+    ModalBottomSheet(onDismissRequest = onDone, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+        Column(modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, bottom = 24.dp)) {
+            Text(dayName, style = MaterialTheme.typography.headlineSmall)
+            Spacer(Modifier.height(8.dp))
+            Stepper(
+                label = "Screens",
+                value = formatAllowance(day.screensMin),
+                what = "$dayName Screens",
+                onLess = if (canScreens(-1)) { { onScreens(-1) } } else null,
+                onMore = if (canScreens(1)) { { onScreens(1) } } else null,
+            )
+            Stepper(
+                label = "Phone",
+                value = formatAllowance(day.phoneMin),
+                what = "$dayName Phone",
+                onLess = if (canPhone(-1)) { { onPhone(-1) } } else null,
+                onMore = if (canPhone(1)) { { onPhone(1) } } else null,
+            )
+            Spacer(Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                ClockButton("Wake-up", day.wake, Modifier.weight(1f)) { picking = "wake" }
+                ClockButton("Bedtime", day.bedtime, Modifier.weight(1f)) { picking = "bedtime" }
+            }
+            dayError(day)?.let {
+                Spacer(Modifier.height(8.dp))
+                Text(text = it, style = MaterialTheme.typography.bodyMedium, color = ScreenTimeTheme.colors.critical)
+            }
+            Spacer(Modifier.height(20.dp))
+            Button(onClick = onDone, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
+                Text("Done")
+            }
+        }
+    }
+    val which = picking
+    if (which != null) {
+        val bedtime = which == "bedtime"
+        ClockDialog(
+            title = if (bedtime) "$dayName bedtime" else "$dayName wake-up",
+            time = if (bedtime) day.bedtime else day.wake,
+            bedtime = bedtime,
+            onPick = { picked ->
+                picking = null
+                if (bedtime) onClock(day.wake, picked) else onClock(picked, day.bedtime)
+            },
+            onDone = { picking = null },
+        )
+    }
+}
+
+/** A tall button with a small label over the time: "Wake-up / 7:00 am". */
+@Composable
+private fun ClockButton(label: String, time: String, modifier: Modifier, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier,
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceVariant,
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+            Text(label, style = MaterialTheme.typography.bodyMedium, color = ScreenTimeTheme.colors.muted)
+            Text(formatClock(time), style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
+        }
+    }
+}
+
+/** The clock picker in a dialog; the picked time snaps to the quarter hour. A bedtime can also be "Midnight". */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ClockDialog(title: String, time: String, bedtime: Boolean, onPick: (String) -> Unit, onDone: () -> Unit) {
+    val (hour, minute) = pickerStart(time)
+    val state = rememberTimePickerState(initialHour = hour, initialMinute = minute, is24Hour = false)
+    AlertDialog(
+        onDismissRequest = onDone,
+        title = { Text(title) },
+        text = { TimePicker(state = state) },
+        confirmButton = {
+            TextButton(onClick = { onPick(pickedClock(state.hour, state.minute, bedtime)) }) { Text("OK") }
+        },
+        dismissButton = {
+            Row {
+                if (bedtime) TextButton(onClick = { onPick("24:00") }) { Text("Midnight") }
+                TextButton(onClick = onDone) { Text("Cancel") }
+            }
+        },
+    )
 }
 
 /** A stepper row: a label, a − button, the value, and a + button. */

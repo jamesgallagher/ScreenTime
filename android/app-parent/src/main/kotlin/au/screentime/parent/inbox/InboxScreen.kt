@@ -47,6 +47,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import au.screentime.core.model.api.EventItem
 import au.screentime.core.model.api.TimeRequest
 import au.screentime.core.time.formatDuration
@@ -143,19 +144,32 @@ fun InboxScreen(vm: InboxViewModel, zone: ZoneId) {
                             )
                         }
                     } else {
-                        item {
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = MaterialTheme.shapes.medium,
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                                border = BorderStroke(1.dp, ScreenTimeTheme.colors.outline),
-                            ) {
-                                Column {
-                                    state.events.forEachIndexed { index, e ->
-                                        if (index > 0) {
-                                            HorizontalDivider(color = ScreenTimeTheme.colors.outline)
+                        for ((heading, events) in byDay(state.events, now, zone)) {
+                            item(key = "day-$heading") {
+                                Text(
+                                    text = heading,
+                                    modifier = Modifier.padding(start = 4.dp, top = 4.dp),
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = ScreenTimeTheme.colors.muted,
+                                )
+                            }
+                            item(key = "events-$heading") {
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = MaterialTheme.shapes.medium,
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                    border = BorderStroke(1.dp, ScreenTimeTheme.colors.outline),
+                                ) {
+                                    Column {
+                                        events.forEachIndexed { index, e ->
+                                            if (index > 0) {
+                                                HorizontalDivider(
+                                                    modifier = Modifier.padding(start = 64.dp),
+                                                    color = ScreenTimeTheme.colors.outline,
+                                                )
+                                            }
+                                            EventRow(e, zone)
                                         }
-                                        EventRow(e, now, zone)
                                     }
                                 }
                             }
@@ -297,44 +311,57 @@ private fun AmountDialog(r: TimeRequest, vm: InboxViewModel, onDone: () -> Unit)
     )
 }
 
-/** One event row: the dot, the line and its detail, and when it happened. */
+/** One event row: the tone's badge, the line and its detail, and the time of day. */
 @Composable
-private fun EventRow(e: EventItem, now: Instant, zone: ZoneId) {
+private fun EventRow(e: EventItem, zone: ZoneId) {
     val v = eventView(e, zone)
+    val tint = dotColor(v.tone)
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.Top,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
             modifier = Modifier
-                .padding(top = 6.dp)
-                .size(10.dp)
-                .background(dotColor(v.tone), CircleShape),
-        )
+                .size(36.dp)
+                .background(tint.copy(alpha = 0.14f), CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(text = badge(v.tone), fontSize = 16.sp)
+        }
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = v.text,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurface,
             )
             v.detail?.let {
                 Text(
                     text = it,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = ScreenTimeTheme.colors.muted,
                 )
             }
         }
         Spacer(Modifier.width(8.dp))
         Text(
-            text = whenText(e.at, now, zone),
+            text = timeOfDay(Instant.parse(e.at), zone),
             style = MaterialTheme.typography.bodySmall,
             color = ScreenTimeTheme.colors.muted,
         )
     }
+}
+
+/** The little picture in an event's badge. */
+private fun badge(tone: EventTone): String = when (tone) {
+    EventTone.SOS -> "\uD83C\uDD98"
+    EventTone.ALERT -> "\u26A0\uFE0F"
+    EventTone.REQUEST -> "\u23F3"
+    EventTone.MESSAGE -> "\uD83D\uDCAC"
+    EventTone.TIME -> "\u23F1\uFE0F"
+    EventTone.INFO -> "\uD83D\uDCF1"
 }
 
 /** The colour of an event's dot, from its tone. */

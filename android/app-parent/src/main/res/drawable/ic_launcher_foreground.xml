@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Launcher icon foreground: the Screen Time hourglass with sand, inside the 66 dp safe zone of a 108 dp icon. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group android:translateX="25.2" android:translateY="25.2" android:scaleX="2.4" android:scaleY="2.4">
+        <path
+            android:fillColor="#FF0F766E"
+            android:pathData="M6,2h12v2h-1.2l-4.8,8l4.8,8h1.2v2h-12v-2h1.2l4.8,-8l-4.8,-8h-1.2z" />
+        <path
+            android:fillColor="#FF2DD4BF"
+            android:pathData="M9.4,6h5.2l-2.6,4.3z M12,15.2l3.4,4.8h-6.8z" />
+    </group>
+</vector>

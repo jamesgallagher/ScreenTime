@@ -39,14 +39,16 @@ fun agoText(at: Instant, now: Instant): String {
     }
 }
 
-/** The kid's last position in plain words, or "No location yet". */
-fun locationText(loc: SosLocation?, now: Instant): String {
-    if (loc == null) return "No location yet"
-    val parts = mutableListOf<String>()
-    parts.add(String.format(Locale.ROOT, "%.5f, %.5f", loc.lat, loc.lng))
+/**
+ * How fresh and how exact the kid's last position is, in plain words: "Updated 1 min ago · within 20 m", plus
+ * "· by text" when it came by SMS. "Waiting for a location" before the first one.
+ */
+fun seenText(loc: SosLocation?, now: Instant): String {
+    if (loc == null) return "Waiting for a location"
+    val parts = mutableListOf("Updated ${agoText(Instant.parse(loc.at), now)}")
     val accuracy = loc.accuracyM
-    if (accuracy != null) parts.add("±${Math.round(accuracy).toInt()} m")
-    parts.add(agoText(Instant.parse(loc.at), now))
+    // A no-break space keeps "20 m" on one line.
+    if (accuracy != null) parts.add("within ${Math.round(accuracy).toInt()}\u00A0m")
     if (loc.via == SosLocationVia.SMS) parts.add("by text")
     return parts.joinToString(" · ")
 }

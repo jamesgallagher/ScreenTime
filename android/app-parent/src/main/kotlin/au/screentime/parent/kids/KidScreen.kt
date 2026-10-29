@@ -22,6 +22,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
@@ -45,7 +47,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import au.screentime.core.model.api.Device
 import au.screentime.core.model.api.DeviceForm
 import au.screentime.core.model.api.Kid
@@ -231,35 +235,73 @@ fun KidScreen(kid: Kid, vm: KidsViewModel, onBack: () -> Unit, onAdd: (DeviceFor
     }
 }
 
-/** One device row: the name and the form and last seen, and the Rename and Remove buttons. */
+/** One device row: the form's badge, the name, the form and last seen, and a menu with Rename and Remove. */
 @Composable
 private fun DeviceRow(d: Device, now: Instant, onRename: () -> Unit, onRemove: () -> Unit) {
+    var menu by remember { mutableStateOf(false) }
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
+            .clickable { menu = true }
+            .padding(start = 16.dp, end = 4.dp, top = 10.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .background(ScreenTimeTheme.colors.primarySoft, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(formBadge(d.form), fontSize = 18.sp)
+        }
+        Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = d.name,
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
             Text(
                 text = "${formName(d.form)} · ${lastSeenText(d.lastSeenAt, now)}",
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.bodyMedium,
                 color = ScreenTimeTheme.colors.muted,
             )
         }
-        TextButton(onClick = onRename, modifier = Modifier.semantics { contentDescription = "Rename ${d.name}" }) {
-            Text("Rename")
-        }
-        TextButton(onClick = onRemove, modifier = Modifier.semantics { contentDescription = "Remove ${d.name}" }) {
-            Text("Remove", color = ScreenTimeTheme.colors.danger)
+        Box {
+            IconButton(
+                onClick = { menu = true },
+                modifier = Modifier.semantics { contentDescription = "More for ${d.name}" },
+            ) {
+                Text("\u22EE", fontSize = 22.sp, color = ScreenTimeTheme.colors.muted)
+            }
+            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                DropdownMenuItem(
+                    text = { Text("Rename") },
+                    onClick = {
+                        menu = false
+                        onRename()
+                    },
+                )
+                DropdownMenuItem(
+                    text = { Text("Remove", color = ScreenTimeTheme.colors.danger) },
+                    onClick = {
+                        menu = false
+                        onRemove()
+                    },
+                )
+            }
         }
     }
+}
+
+/** The picture on a device's badge. */
+private fun formBadge(form: DeviceForm): String = when (form) {
+    DeviceForm.PHONE -> "\uD83D\uDCF1"
+    DeviceForm.TABLET -> "\uD83C\uDFA8"
+    DeviceForm.PC -> "\uD83D\uDCBB"
 }
 
 /** The kid's avatar: a 40 dp circle in the kid's colour with the initial. */

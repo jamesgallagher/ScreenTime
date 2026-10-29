@@ -13,8 +13,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -45,12 +45,13 @@ import au.screentime.core.model.api.Sos
 import au.screentime.core.ui.ScreenTimeTheme
 import au.screentime.parent.R
 import au.screentime.parent.auth.Session
+import au.screentime.parent.inbox.InboxNews
 import au.screentime.parent.inbox.InboxScreen
 import au.screentime.parent.inbox.InboxViewModel
 import au.screentime.parent.kids.KidsScreen
 import au.screentime.parent.kids.KidsViewModel
-import au.screentime.parent.sos.SosAlarm
 import au.screentime.parent.sos.SosActivity
+import au.screentime.parent.sos.SosAlarm
 import au.screentime.parent.sos.SosNews
 import au.screentime.parent.today.REFRESH_MS
 import au.screentime.parent.today.TodayScreen
@@ -98,6 +99,10 @@ fun HomeScreen(
                     delay(REFRESH_MS)
                     loadSos()
                 }
+            }
+            launch {
+                // A push arrived: the Inbox and its badge update now, not at the next 30 s poll.
+                InboxNews.changed.collect { if (it > 0) inbox.load() }
             }
             SosNews.changed.collect {
                 loadSos()

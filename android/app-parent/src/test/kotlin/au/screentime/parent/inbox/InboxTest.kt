@@ -152,6 +152,14 @@ class InboxTest {
     }
 
     @Test
+    fun theHistoryIsHeadedByDay() {
+        assertEquals("Today", dayHeading("2026-10-28T04:30:00Z", now, sydney))
+        assertEquals("Today", dayHeading("2026-10-27T13:05:00Z", now, sydney))
+        assertEquals("Yesterday", dayHeading("2026-10-27T12:55:00Z", now, sydney))
+        assertEquals("Saturday 24 October", dayHeading("2026-10-23T22:00:00Z", now, sydney))
+    }
+
+    @Test
     fun answeringTooLateSaysSo() {
         assertEquals("Someone already answered this request.", answerError(ApiException(409, null)))
         assertEquals("This request is gone.", answerError(ApiException(404, null)))
