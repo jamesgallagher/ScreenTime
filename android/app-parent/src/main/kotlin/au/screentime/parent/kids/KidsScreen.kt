@@ -57,8 +57,9 @@ fun KidsScreen(vm: KidsViewModel) {
     val state = vm.state
     val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) { vm.load() }
-    // The open kid's id, and while adding, the chosen form and the code.
+    // The open kid's id, the open page for a kid, and while adding, the chosen form and the code.
     var openKidId by rememberSaveable { mutableStateOf<String?>(null) }
+    var kidPage by rememberSaveable { mutableStateOf<String?>(null) }
     var addingForm by remember { mutableStateOf<DeviceForm?>(null) }
     var addingCode by remember { mutableStateOf<EnrolmentCode?>(null) }
     var addError by remember { mutableStateOf<String?>(null) }
@@ -69,6 +70,7 @@ fun KidsScreen(vm: KidsViewModel) {
         openKidId = null
         addingCode = null
         addingForm = null
+        kidPage = null
     }
 
     fun onAdd(form: DeviceForm) {
@@ -102,7 +104,19 @@ fun KidsScreen(vm: KidsViewModel) {
             )
         }
         openKid != null -> {
-            KidScreen(kid = openKid, vm = vm, onBack = { openKidId = null }, onAdd = { onAdd(it) }, error = addError)
+            when (kidPage) {
+                "schedule" -> ScheduleScreen(kid = openKid, vm = vm, onBack = { kidPage = null })
+                "contacts" -> ContactsScreen(kid = openKid, vm = vm, onBack = { kidPage = null })
+                else -> KidScreen(
+                    kid = openKid,
+                    vm = vm,
+                    onBack = { openKidId = null; kidPage = null },
+                    onAdd = { onAdd(it) },
+                    error = addError,
+                    onSchedule = { kidPage = "schedule" },
+                    onContacts = { kidPage = "contacts" },
+                )
+            }
         }
         else -> {
             KidsList(vm, state) { kid -> openKidId = kid.id }

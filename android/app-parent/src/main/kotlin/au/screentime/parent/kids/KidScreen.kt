@@ -61,7 +61,7 @@ import kotlinx.coroutines.launch
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun KidScreen(kid: Kid, vm: KidsViewModel, onBack: () -> Unit, onAdd: (DeviceForm) -> Unit, error: String?) {
+fun KidScreen(kid: Kid, vm: KidsViewModel, onBack: () -> Unit, onAdd: (DeviceForm) -> Unit, error: String?, onSchedule: () -> Unit, onContacts: () -> Unit) {
     BackHandler(onBack = onBack)
     val state = vm.state
     val scope = rememberCoroutineScope()
@@ -163,10 +163,59 @@ fun KidScreen(kid: Kid, vm: KidsViewModel, onBack: () -> Unit, onAdd: (DeviceFor
                 }
                 item {
                     Text(
-                        text = "Schedule and contacts are in the web app for now.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = ScreenTimeTheme.colors.muted,
+                        text = "Settings",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onBackground,
                     )
+                }
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = MaterialTheme.shapes.medium,
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        border = BorderStroke(1.dp, ScreenTimeTheme.colors.outline),
+                    ) {
+                        Column {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onSchedule() }
+                                    .padding(16.dp),
+                            ) {
+                                Text(
+                                    text = "Schedule",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
+                                Text(
+                                    text = "Time each day, wake-up and bedtime.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = ScreenTimeTheme.colors.muted,
+                                )
+                            }
+                            HorizontalDivider(color = ScreenTimeTheme.colors.outline)
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onContacts() }
+                                    .padding(16.dp),
+                            ) {
+                                Text(
+                                    text = "Always callable",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
+                                Text(
+                                    text = "Numbers ${kid.name}'s phone can call when locked.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = ScreenTimeTheme.colors.muted,
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
