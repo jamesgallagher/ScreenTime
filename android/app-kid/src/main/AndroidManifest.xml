@@ -87,6 +87,15 @@
             android:exported="false"
             android:foregroundServiceType="systemExempted" />
 
+        <!-- FCM pushes, handed to KidService like a WebSocket frame (docs/SPEC.md §10, CARD-034b). -->
+        <service
+            android:name=".push.KidPushService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
         <!--
             Stops calls to numbers off the kid's list while blocked (docs/SPEC.md §12.1). Android only uses it once
             the app holds the call redirection role, given with adb when the phone is set up.
