@@ -4,11 +4,13 @@ on:
   pull_request:
     paths:
       - "windows/**"
+      - "test-vectors/**"
       - ".github/workflows/windows.yml"
   push:
     branches: [main]
     paths:
       - "windows/**"
+      - "test-vectors/**"
       - ".github/workflows/windows.yml"
 
 concurrency:
