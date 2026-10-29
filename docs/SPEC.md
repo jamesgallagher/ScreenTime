@@ -874,6 +874,8 @@ As built (CARD-041): the adjust sheet is a bottom sheet with Screens | Phone, �
 
 As planned (CARD-043): Kids lists each kid with the number of devices; the kid page lists devices with **Rename** and **Remove** and has **Add device** (Phone, Tablet or PC, then the QR code drawn with zxing core, the code in 48 sp and a countdown; it checks the device list every 3 s and says **Connected**). The schedule editor and always-callable contacts follow in CARD-043b; adding kids stays in the web app.
 
+As planned (CARD-043b): the kid page's **Settings** card opens **Schedule** (the two warnings and, per day, Screens, Phone, wake-up and bedtime, each with −/+ steppers of one option, 15 minutes for times and allowances; Copy Monday to weekdays, Copy Saturday to weekend; Save schedule) and **Always callable** (up to 10 names and numbers, Australian `04…` numbers saved as `+61…`; Save numbers). Leaving with unsaved changes asks to discard them.
+
 ### 16.5 Parent web app
 
 Same functions as the parent app except SOS alarms (the web shows a red banner at the top of every page while an SOS is active, with the map link) and parent code (also shown in Settings).
