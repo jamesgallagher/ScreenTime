@@ -21,6 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
@@ -29,68 +30,83 @@ import au.screentime.core.model.api.Me
 import au.screentime.core.ui.ScreenTimeTheme
 import au.screentime.parent.BuildConfig
 
-/** The Settings tab (docs/SPEC.md §16.4): who is signed in, the app lock, and sign out. */
+/** The Settings tab (docs/SPEC.md §16.4): who is signed in, the app lock, the parent code, and sign out. */
 @Composable
 fun SettingsScreen(me: Me, secure: Boolean, onSignOut: () -> Unit) {
     var showConfirm by remember { mutableStateOf(false) }
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState()),
-    ) {
-        ScreenHeader("Settings")
+    var showParentCode by rememberSaveable { mutableStateOf(false) }
+    if (showParentCode) {
+        ParentCodeScreen(onBack = { showParentCode = false })
+    } else {
         Column(
-            modifier = Modifier.padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState()),
         ) {
-            SettingsCard("Signed in as") {
-                Text(
-                    text = me.parent?.displayName.orEmpty(),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Text(
-                    text = me.parent?.email.orEmpty(),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = ScreenTimeTheme.colors.muted,
-                )
-                me.family?.let {
+            ScreenHeader("Settings")
+            Column(
+                modifier = Modifier.padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                SettingsCard("Signed in as") {
                     Text(
-                        text = it.name,
+                        text = me.parent?.displayName.orEmpty(),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = me.parent?.email.orEmpty(),
                         style = MaterialTheme.typography.bodyMedium,
                         color = ScreenTimeTheme.colors.muted,
                     )
+                    me.family?.let {
+                        Text(
+                            text = it.name,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = ScreenTimeTheme.colors.muted,
+                        )
+                    }
                 }
-            }
-            SettingsCard("App lock") {
+                SettingsCard("App lock") {
+                    Text(
+                        text = if (secure) {
+                            "The app locks when you have been away from it for 5 minutes. Open it with your fingerprint or this phone's PIN."
+                        } else {
+                            "This phone has no screen lock, so the app can't lock itself. Set a PIN in the phone's settings."
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+                SettingsCard("Parent code") {
+                    Text(
+                        text = "For a kid's device that can't reach the internet.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = ScreenTimeTheme.colors.muted,
+                    )
+                    TextButton(onClick = { showParentCode = true }) {
+                        Text("Show parent code")
+                    }
+                }
+                OutlinedButton(
+                    onClick = { showConfirm = true },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp),
+                ) {
+                    Text("Sign out")
+                }
                 Text(
-                    text = if (secure) {
-                        "The app locks when you have been away from it for 5 minutes. Open it with your fingerprint or this phone's PIN."
-                    } else {
-                        "This phone has no screen lock, so the app can't lock itself. Set a PIN in the phone's settings."
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    text = "Version ${BuildConfig.VERSION_NAME}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = ScreenTimeTheme.colors.muted,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 16.dp),
+                    textAlign = TextAlign.Center,
                 )
             }
-            OutlinedButton(
-                onClick = { showConfirm = true },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 48.dp),
-            ) {
-                Text("Sign out")
-            }
-            Text(
-                text = "Version ${BuildConfig.VERSION_NAME}",
-                style = MaterialTheme.typography.bodySmall,
-                color = ScreenTimeTheme.colors.muted,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 16.dp),
-                textAlign = TextAlign.Center,
-            )
         }
     }
     if (showConfirm) {
