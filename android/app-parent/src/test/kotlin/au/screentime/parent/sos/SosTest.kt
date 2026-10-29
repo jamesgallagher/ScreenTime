@@ -54,12 +54,12 @@ class SosTest {
 
     @Test
     fun locationWords() {
-        assertEquals("No location yet", locationText(null, now))
+        assertEquals("Waiting for a location", seenText(null, now))
         val good = loc("2026-10-29T03:09:00Z", 19.6, 54, SosLocationVia.DATA)
-        assertEquals("-33.86880, 151.20930 · ±20 m · 1 min ago", locationText(good, now))
+        assertEquals("Updated 1 min ago · within 20 m", seenText(good, now))
         assertEquals("Battery 54%", batteryText(good))
         val text = loc("2026-10-29T03:00:00Z", null, null, SosLocationVia.SMS)
-        assertEquals("-33.86880, 151.20930 · 10 min ago · by text", locationText(text, now))
+        assertEquals("Updated 10 min ago · by text", seenText(text, now))
         assertNull(batteryText(text))
         assertNull(batteryText(null))
         assertEquals("geo:0,0?q=-33.86880,151.20930(Alex)", mapsUri(good, "Alex"))

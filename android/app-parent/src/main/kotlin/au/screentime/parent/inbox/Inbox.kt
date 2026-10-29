@@ -7,13 +7,13 @@ import au.screentime.core.time.formatDuration
 import au.screentime.parent.today.poolName
 import java.time.Instant
 import java.time.ZoneId
-import java.time.temporal.ChronoUnit
-import kotlin.math.abs
 import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 import java.util.Locale
+import kotlin.math.abs
 import kotlinx.serialization.json.JsonNull
-import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 
 /** The colour of an event's dot in the history. */
 enum class EventTone { SOS, ALERT, REQUEST, MESSAGE, TIME, INFO }
@@ -161,6 +161,21 @@ fun whenText(at: String, now: Instant, zone: ZoneId): String {
     val date = DateTimeFormatter.ofPattern("EEE d MMM", Locale.ENGLISH).format(instant.atZone(zone).toLocalDate())
     return "$date, $time"
 }
+
+/** The history's day heading: "Today", "Yesterday", then "Saturday 24 October", in the family time zone. */
+fun dayHeading(at: String, now: Instant, zone: ZoneId): String {
+    val day = Instant.parse(at).atZone(zone).toLocalDate()
+    val today = now.atZone(zone).toLocalDate()
+    return when (day) {
+        today -> "Today"
+        today.minusDays(1) -> "Yesterday"
+        else -> DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.ENGLISH).format(day)
+    }
+}
+
+/** The history split into days, newest first, each with its heading (the events arrive newest first). */
+fun byDay(events: List<EventItem>, now: Instant, zone: ZoneId): List<Pair<String, List<EventItem>>> =
+    events.groupBy { dayHeading(it.at, now, zone) }.toList()
 
 /** The words for a Yes or No that did not work. */
 fun answerError(e: Exception): String = when {

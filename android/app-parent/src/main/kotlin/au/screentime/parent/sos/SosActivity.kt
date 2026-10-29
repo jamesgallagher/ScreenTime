@@ -7,9 +7,12 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -36,6 +39,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -251,31 +255,66 @@ fun SosScreen(id: String, kidName: String, deviceName: String?, session: Session
             }
         }
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(20.dp))
         Surface(
             modifier = Modifier.fillMaxWidth(),
-            color = Color.White.copy(alpha = 0.15f),
-            shape = RoundedCornerShape(16.dp),
+            color = Color.White,
+            shape = RoundedCornerShape(20.dp),
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text("Last seen", fontSize = 14.sp, color = Color.White.copy(alpha = 0.8f))
-                Text(locationText(s?.lastLocation, Instant.ofEpochMilli(now)), fontSize = 18.sp, color = Color.White)
-                batteryText(s?.lastLocation)?.let {
-                    Text(it, fontSize = 16.sp, color = Color.White)
-                }
-                s?.lastLocation?.let { loc ->
-                    OutlinedButton(
-                        onClick = { openMaps(loc) },
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+            Column {
+                val loc = s?.lastLocation
+                if (loc != null) {
+                    SosMap(
+                        loc = loc,
+                        onTap = { openMaps(loc) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(240.dp)
+                            .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)),
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(160.dp)
+                            .background(Color(0xFFF5F5F4)),
+                        contentAlignment = Alignment.Center,
                     ) {
-                        Text("Open in Maps")
+                        Text("Waiting for $kidName's location…", fontSize = 16.sp, color = Color(0xFF57534E))
+                    }
+                }
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            seenText(loc, Instant.ofEpochMilli(now)),
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFF1C1917),
+                        )
+                        batteryText(loc)?.let {
+                            Text(it, fontSize = 14.sp, color = Color(0xFF57534E))
+                        }
+                    }
+                    if (loc != null) {
+                        Button(
+                            onClick = { openMaps(loc) },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = ScreenTimeTheme.colors.danger,
+                                contentColor = Color.White,
+                            ),
+                        ) {
+                            Text("Directions", fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }
         }
 
         Spacer(Modifier.height(16.dp))
-        Text(acksText(s?.acks ?: emptyList()), fontSize = 16.sp, color = Color.White)
+        Text(acksText(s?.acks ?: emptyList()), fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
 
         Spacer(Modifier.height(24.dp))
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -304,22 +343,24 @@ fun SosScreen(id: String, kidName: String, deviceName: String?, session: Session
                         modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
                         colors = ButtonDefaults.textButtonColors(contentColor = Color.White),
                     ) {
-                        Text("Silence alarm")
+                        Text("Silence alarm", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
                 OutlinedButton(
                     onClick = { scope.launch { extend() } },
                     modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                    border = BorderStroke(1.5.dp, Color.White.copy(alpha = 0.8f)),
                 ) {
-                    Text("Keep on 2 more hours")
+                    Text("Keep on 2 more hours", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                 }
                 OutlinedButton(
                     onClick = { showEndDialog = true },
                     modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                    border = BorderStroke(1.5.dp, Color.White.copy(alpha = 0.8f)),
                 ) {
-                    Text("End SOS")
+                    Text("End SOS", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                 }
             } else {
                 Button(

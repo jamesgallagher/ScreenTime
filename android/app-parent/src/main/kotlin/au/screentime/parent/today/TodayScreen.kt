@@ -27,7 +27,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedIconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
@@ -58,7 +57,7 @@ import java.time.Instant
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-/** The Today screen (docs/SPEC.md §16.4): one card per kid, refreshed every 30 seconds; the ± button opens the adjust sheet. */
+/** The Today screen (docs/SPEC.md §16.4): one card per kid, refreshed every 30 seconds; the Adjust button opens the adjust sheet. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TodayScreen(vm: TodayViewModel) {
@@ -189,7 +188,7 @@ private fun Avatar(kid: TodayKid) {
     }
 }
 
-/** A pool row: the name and status with the ± button, the bar, and the detail. */
+/** A pool row: the name and status with the Adjust button, the bar, and the detail. */
 @Composable
 private fun PoolRow(kid: TodayKid, pool: TodayPool, onAdjust: () -> Unit) {
     val view = poolView(pool)
@@ -210,24 +209,21 @@ private fun PoolRow(kid: TodayKid, pool: TodayPool, onAdjust: () -> Unit) {
                 color = toneColor,
             )
             Spacer(Modifier.width(8.dp))
-            OutlinedIconButton(
+            FilledTonalButton(
                 onClick = onAdjust,
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
                 modifier = Modifier
-                    .size(36.dp)
+                    .height(34.dp)
                     .semantics { contentDescription = "Change ${kid.name}'s ${poolName(pool.pool)}" },
             ) {
-                Text(
-                    text = "±",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
+                Text(text = "Adjust", style = MaterialTheme.typography.labelMedium)
             }
         }
         Spacer(Modifier.height(6.dp))
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(8.dp)
+                .height(10.dp)
                 .background(MaterialTheme.colorScheme.surfaceVariant, CircleShape),
         ) {
             if (view.fraction > 0) {
@@ -242,7 +238,7 @@ private fun PoolRow(kid: TodayKid, pool: TodayPool, onAdjust: () -> Unit) {
         Spacer(Modifier.height(4.dp))
         Text(
             text = view.detail,
-            style = MaterialTheme.typography.bodySmall,
+            style = MaterialTheme.typography.bodyMedium,
             color = ScreenTimeTheme.colors.muted,
         )
     }

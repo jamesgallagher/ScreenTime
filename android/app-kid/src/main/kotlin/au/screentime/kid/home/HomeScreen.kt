@@ -2,6 +2,7 @@ package au.screentime.kid.home
 
 import android.os.SystemClock
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -32,6 +34,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -170,12 +173,21 @@ private fun Greeting(name: String, modifier: Modifier = Modifier) {
     )
 }
 
-/** "Bedtime 8:30 pm" (or when a locked device is back), and the offline line. */
+/** "Bedtime 8:30 pm" (or when a locked device is back) as a soft pill, and the offline line. */
 @Composable
 private fun Details(s: KidStatus, align: TextAlign) {
     s.subline()?.let {
+        val icon = when {
+            s.parentMode -> "\u2728 "
+            s.lockReason == null && s.bedtime != null -> "\uD83C\uDF19 "
+            else -> ""
+        }
         Text(
-            text = it,
+            text = icon + it,
+            modifier = Modifier
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .padding(horizontal = 16.dp, vertical = 8.dp),
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onBackground,
             textAlign = align,
@@ -192,28 +204,32 @@ private fun Details(s: KidStatus, align: TextAlign) {
     }
 }
 
-/** The 240 dp ring: the time left (or why it is locked) in the middle, the arc coloured by how much is left. */
+/**
+ * The 260 dp ring: the time left (or why it is locked) in the middle, the arc coloured by how much is left. In
+ * parent mode the ring is full and soft teal with "Parent mode" in the middle, since no time is counting.
+ */
 @Composable
 private fun Ring(s: KidStatus, left: Long) {
     val colors = ScreenTimeTheme.colors
     val track = MaterialTheme.colorScheme.surfaceVariant
-    val arc: Color = when (s.level(left)) {
-        Level.PLENTY -> colors.primary
-        Level.LOW -> colors.warning
-        Level.CRITICAL -> colors.critical
-        Level.LOCKED -> track
+    val arc: Color = when {
+        s.parentMode -> colors.primarySoft
+        else -> levelColor(s.level(left), track)
     }
-    val fraction = s.ringFraction(left)
-    val description = s.lockReason?.let { s.headline(it) } ?: "${formatDuration(left)} of ${s.poolName} left"
+    val fraction = if (s.parentMode) 1f else s.ringFraction(left)
+    val description = when {
+        s.parentMode -> "Parent mode. Time isn't counting"
+        else -> s.lockReason?.let { s.headline(it) } ?: "${formatDuration(left)} of ${s.poolName} left"
+    }
 
     Box(
         modifier = Modifier
-            .size(240.dp)
+            .size(260.dp)
             .clearAndSetSemantics { contentDescription = description },
         contentAlignment = Alignment.Center,
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
-            val stroke = 20.dp.toPx()
+            val stroke = 22.dp.toPx()
             val inset = stroke / 2
             val arcSize = Size(size.width - stroke, size.height - stroke)
             val topLeft = Offset(inset, inset)
@@ -230,23 +246,31 @@ private fun Ring(s: KidStatus, left: Long) {
                 )
             }
         }
-        Column(modifier = Modifier.width(176.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(modifier = Modifier.width(192.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             val reason = s.lockReason
-            if (reason == null) {
-                Text(
-                    text = s.ringText(left),
-                    style = MaterialTheme.typography.displayMedium.copy(fontFeatureSettings = "tnum"),
+            when {
+                s.parentMode -> Text(
+                    text = "Parent mode",
+                    style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onBackground,
-                    maxLines = 1,
+                    textAlign = TextAlign.Center,
                 )
-                Text(
-                    text = "${s.poolName} left",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            } else {
-                Text(
+                reason == null -> {
+                    Text(
+                        text = s.ringText(left),
+                        style = MaterialTheme.typography.displayMedium.copy(fontFeatureSettings = "tnum"),
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        maxLines = 1,
+                    )
+                    Text(
+                        text = "${s.poolName} left",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                else -> Text(
                     text = s.headline(reason),
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
@@ -255,5 +279,16 @@ private fun Ring(s: KidStatus, left: Long) {
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun levelColor(level: Level, track: Color): Color {
+    val colors = ScreenTimeTheme.colors
+    return when (level) {
+        Level.PLENTY -> colors.primary
+        Level.LOW -> colors.warning
+        Level.CRITICAL -> colors.critical
+        Level.LOCKED -> track
     }
 }

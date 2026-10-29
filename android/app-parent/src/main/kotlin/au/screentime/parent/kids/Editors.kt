@@ -58,6 +58,33 @@ private fun <T> withCurrent(options: List<Option<T>>, current: T, label: (T) -> 
     return (options + Option(current, label(current))).sortedBy { key(it.value) }
 }
 
+/** The hour and minute a clock picker starts on for [time]; "24:00" (midnight, the end of the day) starts on 12 am. */
+fun pickerStart(time: String): Pair<Int, Int> {
+    val minutes = minutesOf(time) % 1440
+    return minutes / 60 to minutes % 60
+}
+
+/**
+ * The "HH:MM" a clock picker's [hour] and [minute] mean, on the 15-minute grid (rounded to the nearest step). For a
+ * [bedtime], 12 am is midnight at the end of the day ("24:00"); a wake-up never rounds past 11:45 pm.
+ */
+fun pickedClock(hour: Int, minute: Int, bedtime: Boolean): String {
+    val rounded = ((hour * 60 + minute + 7) / 15) * 15
+    val minutes = when {
+        bedtime && rounded % 1440 == 0 -> 1440
+        bedtime -> rounded.coerceAtMost(1440)
+        else -> rounded.coerceAtMost(1425)
+    }
+    return timeOf(minutes)
+}
+
+/** A day's row in the week overview: "Screens 2h · Phone 1h 30m". */
+fun allowanceLine(day: ScheduleDay): String =
+    "Screens ${formatAllowance(day.screensMin)} · Phone ${formatAllowance(day.phoneMin)}"
+
+/** A day's second line in the week overview: "7:00 am – 8:30 pm". */
+fun hoursLine(day: ScheduleDay): String = "${formatClock(day.wake)} – ${formatClock(day.bedtime)}"
+
 /** Wake-up: midnight to 11:45 pm, in 15-minute steps. */
 fun wakeOptions(current: String): List<Option<String>> {
     val options = (0 until 1440 step 15).map { Option(timeOf(it), formatClock(timeOf(it))) }

@@ -2,6 +2,7 @@ package au.screentime.parent.push
 
 import au.screentime.parent.ParentApp
 import au.screentime.parent.auth.SessionState
+import au.screentime.parent.inbox.InboxNews
 import au.screentime.parent.sos.SosAlarm
 import au.screentime.parent.sos.SosNews
 import au.screentime.parent.sos.ringsAlarm
@@ -27,6 +28,8 @@ class ParentPushService : FirebaseMessagingService() {
                 else -> show(this, e)
             }
             if (sosIdOf(e) != null) SosNews.bump()
+            // Every push is news for the Inbox (a request, an answer from the other parent, an event).
+            InboxNews.bump()
         }
     }
 
