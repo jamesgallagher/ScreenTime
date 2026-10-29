@@ -534,6 +534,8 @@ To parent apps: `type` is the notification kind of section 13 and `data` is the 
 
 Delivery (CARD-016): pushes are sent after the database transaction commits. A failed push is logged and dropped (the event is in the history anyway, and devices also sync). Tokens that FCM reports as unregistered or invalid are cleared. `grant_added` to kid devices goes to the kid's Android devices in the grant's pool, with an FCM time to live that ends at local midnight. Without `FIREBASE_SERVICE_ACCOUNT_JSON` nothing is sent.
 
+As planned (CARD-034b), the Android kid app: starts Firebase itself from `BuildConfig` values read from the git-ignored `app-kid/google-services.json` (as the parent app, CARD-042), sends its token with `PUT /v1/device/push-token` each time its service starts and when the token changes, and hands every push's `msg` to the same handler as a WebSocket frame. A `grant_added` that is not the answer to a request shows "Dad added 15 min of Phone time" (or "took away") on the answers channel, one notification id for all grants, so the same grant from both paths shows once.
+
 When the server sends to kid devices (CARD-017). Every message goes by WebSocket to each connected device it is for; "and FCM" means Android devices with a push token get it by FCM too:
 
 | Change | Message | To | FCM |
