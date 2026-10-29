@@ -5,6 +5,12 @@
     <!-- The app lock: fingerprint or the phone's PIN, pattern or password (docs/SPEC.md §11.1). -->
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- The SOS alarm (docs/SPEC.md §15, CARD-044). -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
 
     <!--
         No backup and no device-to-device transfer: the sign-in is encrypted with a key that never leaves this
@@ -37,6 +43,21 @@
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
+
+        <!-- The SOS page, over the lock screen (docs/SPEC.md §15, CARD-044). -->
+        <activity
+            android:name=".sos.SosActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:excludeFromRecents="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true" />
+
+        <!-- Rings the SOS alarm until a parent answers (docs/SPEC.md §15, CARD-044). -->
+        <service
+            android:name=".sos.SosAlarm"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
 
     </application>
 

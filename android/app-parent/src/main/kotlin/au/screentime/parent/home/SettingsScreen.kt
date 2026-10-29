@@ -1,9 +1,15 @@
 package au.screentime.parent.home
 
+import android.app.NotificationManager
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -18,14 +24,21 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import au.screentime.core.model.api.Me
 import au.screentime.core.ui.ScreenTimeTheme
 import au.screentime.parent.BuildConfig
@@ -78,6 +91,9 @@ fun SettingsScreen(me: Me, secure: Boolean, onSignOut: () -> Unit) {
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurface,
                     )
+                }
+                SettingsCard("SOS alarm") {
+                    SosAlarmCard()
                 }
                 SettingsCard("Parent code") {
                     Text(
@@ -153,4 +169,63 @@ private fun SettingsCard(label: String, content: @Composable ColumnScope.() -> U
             content()
         }
     }
+}
+
+/**
+ * The two Android permissions the SOS alarm needs (docs/SPEC.md §15, CARD-044): full-screen alerts and
+ * Do Not Disturb access. Both are read again on every resume, so coming back from Android's page shows "On".
+ */
+@Composable
+private fun SosAlarmCard() {
+    val context = LocalContext.current
+    val notificationManager = context.getSystemService(NotificationManager::class.java)
+    var fullScreenOn by remember { mutableStateOf(false) }
+    var dndOn by remember { mutableStateOf(false) }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(lifecycle) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            fullScreenOn = notificationManager.canUseFullScreenIntent()
+            dndOn = notificationManager.isNotificationPolicyAccessGranted
+        }
+    }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(text = "Full-screen alerts", fontSize = 16.sp)
+        Spacer(Modifier.weight(1f))
+        if (fullScreenOn) {
+            Text(text = "On", color = ScreenTimeTheme.colors.muted)
+        } else {
+            TextButton(onClick = {
+                context.startActivity(
+                    Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT)
+                        .setData(Uri.parse("package:au.screentime.parent")),
+                )
+            }) {
+                Text("Turn on")
+            }
+        }
+    }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(text = "Ring in Do Not Disturb", fontSize = 16.sp)
+        Spacer(Modifier.weight(1f))
+        if (dndOn) {
+            Text(text = "On", color = ScreenTimeTheme.colors.muted)
+        } else {
+            TextButton(onClick = {
+                context.startActivity(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS))
+            }) {
+                Text("Turn on")
+            }
+        }
+    }
+    Text(
+        text = "So an SOS rings and fills the screen, even when the phone is locked or quiet.",
+        fontSize = 14.sp,
+        color = ScreenTimeTheme.colors.muted,
+    )
 }
