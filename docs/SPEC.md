@@ -876,6 +876,8 @@ As planned (CARD-043): Kids lists each kid with the number of devices; the kid p
 
 As planned (CARD-043b): the kid page's **Settings** card opens **Schedule** (the two warnings and, per day, Screens, Phone, wake-up and bedtime, each with −/+ steppers of one option, 15 minutes for times and allowances; Copy Monday to weekdays, Copy Saturday to weekend; Save schedule) and **Always callable** (up to 10 names and numbers, Australian `04…` numbers saved as `+61…`; Save numbers). Leaving with unsaved changes asks to discard them.
 
+As planned (CARD-042): the parent app starts Firebase itself from four `BuildConfig` values that the build reads from the git-ignored `app-parent/google-services.json` (no `google-services` plugin; without the file there is no push), sends its FCM token with `PUT /v1/me/push-token` after sign-in and when it changes, asks for the notification permission, makes the four channels of section 13 and shows each push with the Inbox's words. Tapping a parent-mode request opens **Parent mode for Alex?** with **How long?** (2 min, 5 min, 15 min, 1 hour, Until I end it), **Approve** and **Say no**. Settings › **Show parent code** shows the code in 48 sp with a 30-second ring; the secret is fetched each time and not stored on the phone. SOS pushes are plain notifications on `critical` until CARD-044.
+
 ### 16.5 Parent web app
 
 Same functions as the parent app except SOS alarms (the web shows a red banner at the top of every page while an SOS is active, with the map link) and parent code (also shown in Settings).
