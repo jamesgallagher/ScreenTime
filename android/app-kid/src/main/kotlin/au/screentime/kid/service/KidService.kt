@@ -16,6 +16,7 @@ import android.provider.Settings
 import android.util.Log
 import au.screentime.core.model.api.ApiClient
 import au.screentime.core.model.api.DeviceEventKind
+import au.screentime.core.model.api.PushTokenPut
 import au.screentime.core.time.evaluate
 import au.screentime.kid.admin.Policies
 import au.screentime.kid.block.BlockActivity
@@ -33,6 +34,9 @@ import au.screentime.kid.parentmode.CodeSession
 import au.screentime.kid.parentmode.ParentModeApi
 import au.screentime.kid.parentmode.ParentModeStore
 import au.screentime.kid.parentmode.parentModeNow
+import au.screentime.kid.push.KidFirebase
+import au.screentime.kid.push.grantNewsOf
+import au.screentime.kid.push.grantText
 import au.screentime.kid.sos.SOS_TICK_MS
 import au.screentime.kid.sos.SosApi
 import au.screentime.kid.sos.SosController
@@ -58,6 +62,7 @@ import io.ktor.client.engine.HttpClientEngine
 import io.ktor.client.engine.okhttp.OkHttp
 import java.time.OffsetDateTime
 import java.util.UUID
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -196,21 +201,7 @@ class KidService : Service() {
             engine = http,
             url = liveUrl(enrolment.serverUrl),
             token = { enrolment.deviceToken },
-            onNews = { frame ->
-                frame?.let(::answerOf)?.let(::onAnswer)
-                frame?.let(::parentModeNewsOf)?.let {
-                    Log.i(TAG, "parent mode: news active=${it.active}")
-                    StatusHub.parentModeNews.value = it
-                }
-                frame?.let(::sosNewsOf)?.let { news ->
-                    scope.launch {
-                        sos.onNews(news)
-                        report()
-                    }
-                }
-                syncWanted = true
-                wake.trySend(Unit)
-            },
+            onNews = ::onNews,
             log = { Log.i(TAG, "live: $it") },
         )
 
@@ -223,6 +214,8 @@ class KidService : Service() {
         registerReceiver(screen, filter, Context.RECEIVER_NOT_EXPORTED)
         getSystemService(ConnectivityManager::class.java).registerDefaultNetworkCallback(network)
         started = true
+        KidFirebase.start(this)
+        sendToken()
 
         scope.launch {
             // A segment left open by a crash, a reboot or an update ends where it was last seen.
@@ -275,6 +268,10 @@ class KidService : Service() {
                 syncWanted = true
                 wake.trySend(Unit)
             }
+            // A push frame (docs/SPEC.md §10, CARD-034b): the same news as a WebSocket frame.
+            ACTION_PUSH -> intent.getStringExtra(EXTRA_FRAME)?.let { Log.i(TAG, "push: news"); onNews(it) }
+            // The FCM token changed: send it to the server (docs/SPEC.md §10, CARD-034b).
+            ACTION_PUSH_TOKEN -> sendToken()
             ACTION_PARENT_CODE -> {
                 val minutes = intent.getIntExtra(EXTRA_MINUTES, 0).takeIf { it > 0 }
                 scope.launch { startWithCode(minutes) }
@@ -377,11 +374,51 @@ class KidService : Service() {
         if (!showing) CaughtActivity.show(this)
     }
 
+    /**
+     * News from the live channel or from FCM (docs/SPEC.md §10, CARD-034b): the same frame either way. A grant shows
+     * on the answers channel before the rest, so a parent's change of time is never missed while the socket is down.
+     */
+    private fun onNews(frame: String?) {
+        frame?.let(::grantNewsOf)?.let(::grantText)?.let(notifier::showGrant)
+        frame?.let(::answerOf)?.let(::onAnswer)
+        frame?.let(::parentModeNewsOf)?.let {
+            Log.i(TAG, "parent mode: news active=${it.active}")
+            StatusHub.parentModeNews.value = it
+        }
+        frame?.let(::sosNewsOf)?.let { news ->
+            scope.launch {
+                sos.onNews(news)
+                report()
+            }
+        }
+        syncWanted = true
+        wake.trySend(Unit)
+    }
+
     /** A parent answered "Ask for more time": the screens show it for 4 seconds, and a heads-up says it too. */
     private fun onAnswer(answer: Answer) {
         Log.i(TAG, "answer: approved=${answer.approved} minutes=${answer.minutes}")
         StatusHub.answer.value = answer
         notifier.showAnswer(answer)
+    }
+
+    /**
+     * Send this app's FCM token to the server (docs/SPEC.md §10, CARD-034b). A failure is logged (never the token)
+     * and dropped: the next start sends it again.
+     */
+    private fun sendToken() {
+        KidFirebase.token { token ->
+            scope.launch {
+                try {
+                    api?.putDevicePushToken(PushTokenPut(token))
+                    Log.i(TAG, "push: token sent")
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.w(TAG, "push: token not sent: ${e.javaClass.simpleName}")
+                }
+            }
+        }
     }
 
     /** The parent code was right and a parent picked how long (docs/SPEC.md §12.3): parent mode starts here and now. */
@@ -511,6 +548,9 @@ class KidService : Service() {
         private const val KEEP_DAYS = 30L
 
         private const val ACTION_SYNC = "au.screentime.kid.action.SYNC"
+        private const val ACTION_PUSH = "au.screentime.kid.action.PUSH"
+        private const val EXTRA_FRAME = "frame"
+        private const val ACTION_PUSH_TOKEN = "au.screentime.kid.action.PUSH_TOKEN"
         private const val ACTION_PARENT_CODE = "au.screentime.kid.action.PARENT_CODE"
         private const val EXTRA_MINUTES = "minutes"
 
@@ -528,6 +568,18 @@ class KidService : Service() {
         /** From a screen of the app, which is in front: sync as soon as the service can. */
         fun syncSoon(context: Context) {
             context.startService(Intent(context, KidService::class.java).setAction(ACTION_SYNC))
+        }
+
+        /** A push frame, handed to the service like a WebSocket frame (docs/SPEC.md §10, CARD-034b). */
+        fun push(context: Context, frame: String) {
+            context.startForegroundService(
+                Intent(context, KidService::class.java).setAction(ACTION_PUSH).putExtra(EXTRA_FRAME, frame),
+            )
+        }
+
+        /** The FCM token changed: send it to the server (docs/SPEC.md §10, CARD-034b). */
+        fun newToken(context: Context) {
+            context.startForegroundService(Intent(context, KidService::class.java).setAction(ACTION_PUSH_TOKEN))
         }
 
         /** After a right parent code: parent mode for [minutes], or until ended when null. */

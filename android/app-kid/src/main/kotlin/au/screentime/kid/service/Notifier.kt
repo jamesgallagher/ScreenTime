@@ -132,6 +132,23 @@ class Notifier(private val context: Context) {
         manager.notify(ANSWER_ID, notification)
     }
 
+    /**
+     * "Dad added 15 min of Phone time" on the answers channel, heads-up; it goes away by itself after a minute. One
+     * id for every grant: a newer grant replaces the last one, and the same grant from the socket and from FCM
+     * shows once (docs/SPEC.md §10, CARD-034b).
+     */
+    fun showGrant(text: String) {
+        val notification = Notification.Builder(context, ANSWER_CHANNEL)
+            .setSmallIcon(R.drawable.ic_status)
+            .setContentTitle(text)
+            .setCategory(Notification.CATEGORY_MESSAGE)
+            .setContentIntent(openApp)
+            .setAutoCancel(true)
+            .setTimeoutAfter(60_000L)
+            .build()
+        manager.notify(GRANT_ID, notification)
+    }
+
     fun cancelWarning() {
         manager.cancel(WARNING_ID)
     }
@@ -140,6 +157,7 @@ class Notifier(private val context: Context) {
         const val STATUS_ID = 1
         private const val WARNING_ID = 2
         private const val ANSWER_ID = 3
+        private const val GRANT_ID = 4
         private const val STATUS_CHANNEL = "status"
         private const val WARNING_CHANNEL = "warnings"
         private const val ANSWER_CHANNEL = "answers"
