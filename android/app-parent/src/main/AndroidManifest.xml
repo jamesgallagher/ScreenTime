@@ -22,7 +22,7 @@
         android:name=".ParentApp"
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
-        android:label="Screen Time Parent"
+        android:label="ST Parent"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
 
