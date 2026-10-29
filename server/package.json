@@ -10,7 +10,7 @@
     "start": "node dist/index.js",
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
-    "contract": "tsx scripts/export-openapi.ts && tsx scripts/kotlin-client.ts"
+    "contract": "tsx scripts/export-openapi.ts && tsx scripts/kotlin-client.ts && tsx scripts/csharp-client.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.19.0",
