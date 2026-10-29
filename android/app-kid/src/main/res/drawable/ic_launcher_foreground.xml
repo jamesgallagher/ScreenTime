@@ -1,16 +1,43 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Launcher icon foreground: the Screen Time hourglass with sand, inside the 66 dp safe zone of a 108 dp icon. -->
+<!-- Launcher icon foreground: the hourglass and "Kid", inside the 66 dp safe zone of a 108 dp icon. Made by a script from Inter Display Black (OFL); the word is drawn as paths. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <group android:translateX="25.2" android:translateY="25.2" android:scaleX="2.4" android:scaleY="2.4">
+    <group
+        android:pivotX="54"
+        android:pivotY="38.5"
+        android:scaleX="0.88"
+        android:scaleY="0.88"
+        android:translateY="2">
         <path
             android:fillColor="#FFFFFFFF"
-            android:pathData="M6,2h12v2h-1.2l-4.8,8l4.8,8h1.2v2h-12v-2h1.2l4.8,-8l-4.8,-8h-1.2z" />
+            android:pathData="M40,24.5H68C68,32.5 63.5,35.5 57.5,38.5C63.5,41.5 68,44.5 68,52.5H40C40,44.5 44.5,41.5 50.5,38.5C44.5,35.5 40,32.5 40,24.5Z" />
         <path
-            android:fillColor="#FF5EEAD4"
-            android:pathData="M9.4,6h5.2l-2.6,4.3z M12,15.2l3.4,4.8h-6.8z" />
+            android:fillColor="#FFCFE5FF"
+            android:pathData="M43,26.5H65C64.6,32 60.5,34.8 55.2,38.5C60.5,42.2 64.6,45 65,50.5H43C43.4,45 47.5,42.2 52.8,38.5C47.5,34.8 43.4,32 43,26.5Z" />
+        <path
+            android:fillColor="#FFFFC928"
+            android:pathData="M45.2,30.5H62.8C61.6,33.6 58.6,35.8 54,38.4C49.4,35.8 46.4,33.6 45.2,30.5Z" />
+        <path
+            android:fillColor="#FFFFC928"
+            android:pathData="M44.6,50.5C46.5,46.8 50.5,44.4 54,43.6C57.5,44.4 61.5,46.8 63.4,50.5Z" />
+        <path
+            android:fillColor="#FFF59E0B"
+            android:pathData="M54.0,38.4H54.0A0.7,0.7 0 0 1 54.7,39.1V43.9A0.7,0.7 0 0 1 54.0,44.6H54.0A0.7,0.7 0 0 1 53.3,43.9V39.1A0.7,0.7 0 0 1 54.0,38.4Z" />
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:fillAlpha="0.7"
+            android:pathData="M45.5,28.5H48.5C48.6,31 49.6,32.6 51,33.8C48.4,33.4 46,31.6 45.5,28.5Z" />
+        <path
+            android:fillColor="#FF8EC1FF"
+            android:pathData="M39.75,19H68.25A2.75,2.75 0 0 1 71,21.75V21.75A2.75,2.75 0 0 1 68.25,24.5H39.75A2.75,2.75 0 0 1 37,21.75V21.75A2.75,2.75 0 0 1 39.75,19Z" />
+        <path
+            android:fillColor="#FF8EC1FF"
+            android:pathData="M39.75,52.5H68.25A2.75,2.75 0 0 1 71,55.25V55.25A2.75,2.75 0 0 1 68.25,58H39.75A2.75,2.75 0 0 1 37,55.25V55.25A2.75,2.75 0 0 1 39.75,52.5Z" />
     </group>
+    <path
+        android:fillColor="#FFFFD43B"
+        android:pathData="M42.78 76H45.71V73.56L46.98 72L49.38 76H52.74L48.87 70.01L52.54 65.5H49.15L47.06 68.2C46.61 68.78 46.16 69.36 45.71 69.95V65.5H42.78ZM53.34 76H56.16V68.56H53.34ZM54.74 68.07C55.62 68.07 56.24 67.5 56.24 66.71C56.24 65.92 55.62 65.36 54.74 65.36C53.86 65.36 53.24 65.92 53.24 66.71C53.24 67.5 53.86 68.07 54.74 68.07ZM60.3 76.17C61.29 76.17 62.04 75.72 62.38 74.84H62.39V76H65.18V65.5H62.36V69.53H62.35C61.88 68.75 61.24 68.39 60.28 68.39C58.41 68.39 57.09 69.99 57.09 72.27C57.09 74.63 58.35 76.17 60.3 76.17ZM61.14 73.96C60.37 73.96 59.94 73.29 59.94 72.27C59.94 71.24 60.37 70.59 61.14 70.59C61.91 70.59 62.46 71.24 62.46 72.27C62.46 73.29 61.91 73.96 61.14 73.96Z" />
 </vector>

@@ -229,7 +229,7 @@ fun SosScreen(id: String, kidName: String, deviceName: String?, session: Session
         ) {
             Text(sosTitle(kidName), fontSize = 32.sp, fontWeight = FontWeight.Bold, color = Color.White)
             Spacer(Modifier.height(16.dp))
-            Text("Sign in to Screen Time Parent to see this SOS.", fontSize = 16.sp, color = Color.White)
+            Text("Sign in to ST Parent to see this SOS.", fontSize = 16.sp, color = Color.White)
             Spacer(Modifier.height(24.dp))
             Button(
                 onClick = onClose,
