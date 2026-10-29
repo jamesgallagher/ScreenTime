@@ -2,7 +2,6 @@ package au.screentime.parent.kids
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import au.screentime.core.model.api.Device
 import au.screentime.core.model.api.DeviceForm
 import au.screentime.core.model.api.EnrolmentCode
@@ -184,19 +184,14 @@ private fun KidsList(vm: KidsViewModel, state: KidsState, onOpen: (Kid) -> Unit)
     }
 }
 
-/** A kid card: the avatar and name, and the number of devices. */
+/** A kid card: the avatar and name, what devices they have, and a chevron. */
 @Composable
 private fun KidRowCard(kid: Kid, devices: List<Device>, onClick: () -> Unit) {
-    val count = devices.count { it.kidId == kid.id }
-    val countText = when (count) {
-        0 -> "No devices"
-        1 -> "1 device"
-        else -> "$count devices"
-    }
+    val countText = devicesSummary(devices.filter { it.kidId == kid.id })
     Card(
+        onClick = onClick,
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
             .border(1.dp, MaterialTheme.colorScheme.outline, MaterialTheme.shapes.medium),
         shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -217,6 +212,7 @@ private fun KidRowCard(kid: Kid, devices: List<Device>, onClick: () -> Unit) {
                     color = ScreenTimeTheme.colors.muted,
                 )
             }
+            Text("\u203A", fontSize = 28.sp, color = ScreenTimeTheme.colors.muted)
         }
     }
 }
