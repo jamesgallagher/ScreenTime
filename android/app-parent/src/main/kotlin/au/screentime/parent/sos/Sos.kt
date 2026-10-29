@@ -47,7 +47,8 @@ fun seenText(loc: SosLocation?, now: Instant): String {
     if (loc == null) return "Waiting for a location"
     val parts = mutableListOf("Updated ${agoText(Instant.parse(loc.at), now)}")
     val accuracy = loc.accuracyM
-    if (accuracy != null) parts.add("within ${Math.round(accuracy).toInt()} m")
+    // A no-break space keeps "20 m" on one line.
+    if (accuracy != null) parts.add("within ${Math.round(accuracy).toInt()}\u00A0m")
     if (loc.via == SosLocationVia.SMS) parts.add("by text")
     return parts.joinToString(" · ")
 }

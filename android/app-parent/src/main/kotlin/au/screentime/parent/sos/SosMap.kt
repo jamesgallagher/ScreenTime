@@ -18,8 +18,8 @@ import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polygon
 
-/** How close the map starts: about four streets across on a phone. */
-private const val ZOOM = 16.5
+/** How close the map starts: a few streets across. A whole zoom level keeps the tiles sharp. */
+private const val ZOOM = 17.0
 
 private const val PIN_RED = 0xFFDC2626.toInt()
 private const val ACCURACY_FILL = 0x33DC2626
@@ -65,7 +65,9 @@ private fun newMap(context: Context): MapView {
     }
     return MapView(context).apply {
         setTileSource(TileSourceFactory.MAPNIK)
-        isTilesScaledToDpi = true
+        // Tiles drawn 1.5x: big enough to read street names, not so blown up that they go soft.
+        isTilesScaledToDpi = false
+        tilesScaleFactor = 1.5f
         setMultiTouchControls(false)
         zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
         controller.setZoom(ZOOM)

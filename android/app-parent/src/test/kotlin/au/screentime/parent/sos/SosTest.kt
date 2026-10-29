@@ -56,7 +56,7 @@ class SosTest {
     fun locationWords() {
         assertEquals("Waiting for a location", seenText(null, now))
         val good = loc("2026-10-29T03:09:00Z", 19.6, 54, SosLocationVia.DATA)
-        assertEquals("Updated 1 min ago · within 20 m", seenText(good, now))
+        assertEquals("Updated 1 min ago · within 20\u00A0m", seenText(good, now))
         assertEquals("Battery 54%", batteryText(good))
         val text = loc("2026-10-29T03:00:00Z", null, null, SosLocationVia.SMS)
         assertEquals("Updated 10 min ago · by text", seenText(text, now))

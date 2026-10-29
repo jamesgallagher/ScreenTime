@@ -242,7 +242,8 @@ private fun Ring(s: KidStatus, left: Long) {
                     useCenter = false,
                     topLeft = topLeft,
                     size = arcSize,
-                    style = Stroke(stroke, cap = StrokeCap.Round),
+                    // Round ends overlap and leave a notch at the top when the ring is nearly full.
+                    style = Stroke(stroke, cap = if (fraction >= 0.97f) StrokeCap.Butt else StrokeCap.Round),
                 )
             }
         }

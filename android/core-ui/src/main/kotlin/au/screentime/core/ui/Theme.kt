@@ -72,6 +72,9 @@ private fun colorSchemeOf(c: ScreenTimeColors, dark: Boolean): ColorScheme {
         onSecondary = c.onPrimary,
         tertiary = c.primary,
         onTertiary = c.onPrimary,
+        // The clock picker's AM/PM and other tertiary bits: soft teal, not Material's pink.
+        tertiaryContainer = c.primarySoft,
+        onTertiaryContainer = c.onPrimarySoft,
         // Sheets, dialogs, menus, date and time pickers all draw on these. Material's defaults are lavender, which
         // fights the teal; ours are the plain neutrals (white sheets in light mode, warm charcoal in dark).
         surfaceTint = c.surface,
