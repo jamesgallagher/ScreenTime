@@ -38,6 +38,8 @@ import au.screentime.core.ui.ScreenTimeTheme
 import au.screentime.parent.R
 import au.screentime.parent.inbox.InboxScreen
 import au.screentime.parent.inbox.InboxViewModel
+import au.screentime.parent.kids.KidsScreen
+import au.screentime.parent.kids.KidsViewModel
 import au.screentime.parent.today.REFRESH_MS
 import au.screentime.parent.today.TodayScreen
 import au.screentime.parent.today.TodayViewModel
@@ -54,7 +56,7 @@ enum class Tab(val label: String, val icon: Int) {
 
 /** The home screen: the four tabs and the bottom navigation (docs/SPEC.md §16.4). */
 @Composable
-fun HomeScreen(me: Me, today: TodayViewModel, inbox: InboxViewModel, secure: Boolean, onSignOut: () -> Unit) {
+fun HomeScreen(me: Me, today: TodayViewModel, inbox: InboxViewModel, kids: KidsViewModel, secure: Boolean, onSignOut: () -> Unit) {
     // Poll the Inbox on every tab, so the badge on the Inbox icon is right.
     val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(lifecycle) {
@@ -93,7 +95,7 @@ fun HomeScreen(me: Me, today: TodayViewModel, inbox: InboxViewModel, secure: Boo
             when (tab) {
                 Tab.TODAY -> TodayScreen(today)
                 Tab.INBOX -> InboxScreen(inbox, runCatching { ZoneId.of(me.family!!.timezone) }.getOrElse { ZoneId.systemDefault() })
-                Tab.KIDS -> ComingSoonPage("Kids", "Schedules, devices and contacts will show here. Use the web app for now.")
+                Tab.KIDS -> KidsScreen(kids)
                 Tab.SETTINGS -> SettingsScreen(me, secure, onSignOut)
             }
         }
@@ -121,20 +123,6 @@ fun ScreenHeader(title: String, subtitle: String? = null) {
                 color = ScreenTimeTheme.colors.muted,
             )
         }
-    }
-}
-
-/** A coming-soon page: the title and a line of what will come. */
-@Composable
-private fun ComingSoonPage(title: String, line: String) {
-    Column(modifier = Modifier.fillMaxSize()) {
-        ScreenHeader(title)
-        Text(
-            text = line,
-            style = MaterialTheme.typography.bodyLarge,
-            color = ScreenTimeTheme.colors.muted,
-            modifier = Modifier.padding(horizontal = 16.dp),
-        )
     }
 }
 
