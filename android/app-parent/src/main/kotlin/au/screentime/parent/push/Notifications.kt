@@ -10,6 +10,9 @@ import au.screentime.core.model.api.EventItem
 import au.screentime.parent.MainActivity
 import au.screentime.parent.R
 import au.screentime.parent.inbox.eventView
+import au.screentime.parent.sos.SosActivity
+import au.screentime.parent.sos.SosAlarm
+import au.screentime.parent.sos.sosIdOf
 import java.time.Instant
 import java.time.ZoneId
 
@@ -41,11 +44,20 @@ private fun channel(id: String, name: String, description: String, importance: I
 /** Show one push as a notification with the same words as the Inbox (docs/SPEC.md §13). */
 fun show(context: Context, e: EventItem) {
     val v = eventView(e, ZoneId.systemDefault())
-    val intent = Intent(context, MainActivity::class.java)
-    if (requestIdOf(e) != null) {
-        intent.putExtra(EXTRA_REQUEST_ID, requestIdOf(e))
-        intent.putExtra(EXTRA_KID_NAME, e.kidName ?: "your kid")
-        intent.putExtra(EXTRA_DEVICE_NAME, e.deviceName)
+    val intent = if (sosIdOf(e) != null) {
+        // An SOS push opens the SOS page, not the app.
+        Intent(context, SosActivity::class.java)
+            .putExtra(SosAlarm.EXTRA_SOS_ID, sosIdOf(e))
+            .putExtra(SosAlarm.EXTRA_KID_NAME, e.kidName ?: "your kid")
+            .putExtra(SosAlarm.EXTRA_DEVICE_NAME, e.deviceName)
+    } else {
+        Intent(context, MainActivity::class.java).apply {
+            if (requestIdOf(e) != null) {
+                putExtra(EXTRA_REQUEST_ID, requestIdOf(e))
+                putExtra(EXTRA_KID_NAME, e.kidName ?: "your kid")
+                putExtra(EXTRA_DEVICE_NAME, e.deviceName)
+            }
+        }
     }
     val pending = PendingIntent.getActivity(
         context,

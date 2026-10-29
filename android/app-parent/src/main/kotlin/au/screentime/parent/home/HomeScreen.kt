@@ -1,9 +1,11 @@
 package au.screentime.parent.home
 
+import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -19,32 +21,43 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.repeatOnLifecycle
 import au.screentime.core.model.api.Me
+import au.screentime.core.model.api.Sos
 import au.screentime.core.ui.ScreenTimeTheme
 import au.screentime.parent.R
+import au.screentime.parent.auth.Session
 import au.screentime.parent.inbox.InboxScreen
 import au.screentime.parent.inbox.InboxViewModel
 import au.screentime.parent.kids.KidsScreen
 import au.screentime.parent.kids.KidsViewModel
+import au.screentime.parent.sos.SosAlarm
+import au.screentime.parent.sos.SosActivity
+import au.screentime.parent.sos.SosNews
 import au.screentime.parent.today.REFRESH_MS
 import au.screentime.parent.today.TodayScreen
 import au.screentime.parent.today.TodayViewModel
 import java.time.ZoneId
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /** The four tabs of the parent app (docs/SPEC.md §16.4). */
 enum class Tab(val label: String, val icon: Int) {
@@ -56,18 +69,49 @@ enum class Tab(val label: String, val icon: Int) {
 
 /** The home screen: the four tabs and the bottom navigation (docs/SPEC.md §16.4). */
 @Composable
-fun HomeScreen(me: Me, today: TodayViewModel, inbox: InboxViewModel, kids: KidsViewModel, secure: Boolean, onSignOut: () -> Unit) {
-    // Poll the Inbox on every tab, so the badge on the Inbox icon is right.
+fun HomeScreen(
+    me: Me,
+    today: TodayViewModel,
+    inbox: InboxViewModel,
+    kids: KidsViewModel,
+    session: Session,
+    secure: Boolean,
+    onSignOut: () -> Unit,
+) {
     val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var sosList by remember { mutableStateOf<List<Sos>?>(null) }
+    // Poll the Inbox and the active SOSes on every tab, so the Inbox badge and the SOS banner are right.
     LaunchedEffect(lifecycle) {
         lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
-            while (true) {
-                inbox.load()
-                delay(REFRESH_MS)
+            suspend fun loadSos() {
+                try {
+                    sosList = session.call { getSos(active = true) }
+                } catch (e: Exception) {
+                    // Ignore failures and keep the last list.
+                }
+            }
+            loadSos()
+            launch {
+                while (true) {
+                    inbox.load()
+                    delay(REFRESH_MS)
+                    loadSos()
+                }
+            }
+            SosNews.changed.collect {
+                loadSos()
             }
         }
     }
     var tab by rememberSaveable { mutableStateOf(Tab.TODAY) }
+    fun openSos(sos: Sos) {
+        val intent = Intent(context, SosActivity::class.java)
+            .putExtra(SosAlarm.EXTRA_SOS_ID, sos.id)
+            .putExtra(SosAlarm.EXTRA_KID_NAME, sos.kidName)
+            .putExtra(SosAlarm.EXTRA_DEVICE_NAME, sos.deviceName)
+        context.startActivity(intent)
+    }
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
@@ -91,12 +135,43 @@ fun HomeScreen(me: Me, today: TodayViewModel, inbox: InboxViewModel, kids: KidsV
             }
         },
     ) { padding ->
-        Box(modifier = Modifier.padding(padding)) {
-            when (tab) {
-                Tab.TODAY -> TodayScreen(today)
-                Tab.INBOX -> InboxScreen(inbox, runCatching { ZoneId.of(me.family!!.timezone) }.getOrElse { ZoneId.systemDefault() })
-                Tab.KIDS -> KidsScreen(kids)
-                Tab.SETTINGS -> SettingsScreen(me, secure, onSignOut)
+        Column(modifier = Modifier.padding(padding)) {
+            // A red banner at the very top while any SOS is on, newest first.
+            val activeSos = sosList
+            if (activeSos != null && activeSos.isNotEmpty()) {
+                for (sos in activeSos) {
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 56.dp)
+                            .padding(horizontal = 16.dp),
+                        color = ScreenTimeTheme.colors.danger,
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxSize(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = "SOS from ${sos.kidName} is on",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                                modifier = Modifier.weight(1f),
+                            )
+                            TextButton(onClick = { openSos(sos) }) {
+                                Text("See it", color = Color.White)
+                            }
+                        }
+                    }
+                }
+            }
+            Box(modifier = Modifier.weight(1f)) {
+                when (tab) {
+                    Tab.TODAY -> TodayScreen(today)
+                    Tab.INBOX -> InboxScreen(inbox, runCatching { ZoneId.of(me.family!!.timezone) }.getOrElse { ZoneId.systemDefault() })
+                    Tab.KIDS -> KidsScreen(kids)
+                    Tab.SETTINGS -> SettingsScreen(me, secure, onSignOut)
+                }
             }
         }
     }
