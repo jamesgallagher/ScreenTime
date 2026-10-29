@@ -287,7 +287,7 @@ describe.skipIf(!url)('device WebSocket', () => {
     for (const client of [pcClient, tabletClient]) {
       expect(await client?.next('grant_added')).toMatchObject({
         type: 'grant_added',
-        data: { grant: { id, minutes: 15, byName: 'Mum' }, byName: 'Mum' },
+        data: { grant: { id, pool: 'screens', minutes: 15, byName: 'Mum', requestId: null }, byName: 'Mum' },
       });
     }
     await settle();

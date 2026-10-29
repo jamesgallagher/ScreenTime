@@ -521,7 +521,7 @@ To kid devices:
 | type | data | Device shows |
 |---|---|---|
 | `state_changed` | `{}` | nothing, re-syncs (with `If-None-Match`, so an unchanged snapshot costs a 304) |
-| `grant_added` | `{ grant, byName }` | "Dad added 15 minutes" (or "Dad removed 15 minutes") |
+| `grant_added` | `{ grant: {id, pool, minutes, createdAt, byName, requestId}, byName }` | "Dad added 15 minutes" (or "Dad removed 15 minutes") |
 | `request_resolved` | `{ requestId, approved, minutes, byName, grant }` (`minutes` 0 and `grant` null for a no) | "Dad said yes: +15 min" / "Dad said not this time", then re-syncs |
 | `parent_mode` | `{ active, endsAt, byName, requestId }` (`requestId` set when it answers the device's request; `active: false` with a `requestId` is a no) | parent mode banner, or closes the "Hand to a parent" screen |
 | `sos_ack` | `{ sosId, byName }` | "Dad has seen your SOS" |
