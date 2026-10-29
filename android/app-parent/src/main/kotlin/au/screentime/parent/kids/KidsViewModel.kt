@@ -13,6 +13,9 @@ import au.screentime.core.model.api.DevicePatch
 import au.screentime.core.model.api.EnrolmentCode
 import au.screentime.core.model.api.EnrolmentCodeCreate
 import au.screentime.core.model.api.Kid
+import au.screentime.core.model.api.KidContact
+import au.screentime.core.model.api.Schedule
+import au.screentime.core.model.api.ScheduleInput
 import au.screentime.parent.ParentApp
 import au.screentime.parent.auth.SignedOutException
 import kotlinx.coroutines.CancellationException
@@ -99,6 +102,62 @@ class KidsViewModel(app: Application) : AndroidViewModel(app) {
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    /** Load a kid's current schedule; a failure is a [Result.failure] with the exception. */
+    suspend fun schedule(kidId: String): Result<Schedule> {
+        val deferred = viewModelScope.async {
+            try {
+                Result.success(session.call { getKidsSchedule(kidId) })
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+        return deferred.await()
+    }
+
+    /** Load a kid's always-callable numbers; a failure is a [Result.failure] with the exception. */
+    suspend fun contacts(kidId: String): Result<List<KidContact>> {
+        val deferred = viewModelScope.async {
+            try {
+                Result.success(session.call { getKidsContacts(kidId) })
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+        return deferred.await()
+    }
+
+    /** Save a new schedule; the server's answer, or a [Result.failure] with the exception. */
+    suspend fun saveSchedule(kidId: String, input: ScheduleInput): Result<Schedule> {
+        val deferred = viewModelScope.async {
+            try {
+                Result.success(session.call { putKidsSchedule(kidId, input) })
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+        return deferred.await()
+    }
+
+    /** Save the always-callable numbers; the server's answer, or a [Result.failure] with the exception. */
+    suspend fun saveContacts(kidId: String, rows: List<ContactRow>): Result<List<KidContact>> {
+        val deferred = viewModelScope.async {
+            try {
+                Result.success(session.call { putKidsContacts(kidId, contactsBody(rows)) })
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+        return deferred.await()
     }
 
     /** Refresh only the devices, for the add-device page's 3-second poll; any error is ignored (the next poll tries again). */
