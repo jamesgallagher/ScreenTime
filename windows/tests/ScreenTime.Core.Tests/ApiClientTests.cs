@@ -6,7 +6,7 @@ using Xunit;
 
 namespace ScreenTime.Core.Tests;
 
-/// <summary>CARD-046: the generated C# API client against a fake server. Copied verbatim from the card.</summary>
+/// <summary>CARD-046: the generated C# API client against a fake server. Every call passes the test's CancellationToken (xUnit1051).</summary>
 public class ApiClientTests
 {
     /// <summary>Answers every request with one canned response, and keeps the request it got.</summary>
@@ -46,7 +46,7 @@ public class ApiClientTests
             Model: "Dell XPS",
             OsVersion: "Windows 11 Pro 24H2",
             AppVersion: "0.1.0",
-            WindowsUserName: "Alex"));
+            WindowsUserName: "Alex"), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpMethod.Post, server.Request!.Method);
         Assert.Equal("https://st.example/v1/enrol", server.Request.RequestUri!.ToString());
@@ -74,7 +74,7 @@ public class ApiClientTests
         var server = new FakeServer(HttpStatusCode.OK, """{"received":1}""");
         var receipt = await ClientFor(server).PostDeviceUsageAsync(new UsageUpload([
             new UsageSegmentIn(Id: "s-1", StartedAt: "2026-10-29T08:00:00.000Z", EndedAt: null, RecordedOffline: false),
-        ]));
+        ]), TestContext.Current.CancellationToken);
 
         Assert.Equal("Bearer device-token", server.Request!.Headers.Authorization!.ToString());
         Assert.Equal("https://st.example/v1/device/usage", server.Request.RequestUri!.ToString());
@@ -92,7 +92,7 @@ public class ApiClientTests
             {"id":"r-1","kidId":"k-1","kidName":"Alex","deviceId":"d-1","deviceName":"Alex's PC","pool":"screens","minutes":30,"reason":null,"status":"pending","createdAt":"2026-10-29T08:00:00.000Z","resolvedAt":null,"resolvedByName":null,"grantId":null,"grantedMinutes":null}
             """;
         var server = new FakeServer(HttpStatusCode.Created, json);
-        var request = await ClientFor(server).PostDeviceTimeRequestsAsync(new TimeRequestCreate(Id: "r-1", Minutes: 30));
+        var request = await ClientFor(server).PostDeviceTimeRequestsAsync(new TimeRequestCreate(Id: "r-1", Minutes: 30), TestContext.Current.CancellationToken);
 
         using var sent = JsonDocument.Parse(server.Body!);
         Assert.Equal(30, sent.RootElement.GetProperty("minutes").GetInt32());
@@ -105,7 +105,7 @@ public class ApiClientTests
     public async Task StateSendsIfNoneMatchAndANotModifiedHasNoValue()
     {
         var server = new FakeServer(HttpStatusCode.NotModified, null, ("ETag", "\"v7\""), ("Date", "Thu, 29 Oct 2026 08:00:00 GMT"));
-        var state = await ClientFor(server).GetDeviceStateAsync(ifNoneMatch: "\"v7\"");
+        var state = await ClientFor(server).GetDeviceStateAsync(ifNoneMatch: "\"v7\"", cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpMethod.Get, server.Request!.Method);
         Assert.Equal("\"v7\"", server.Request.Headers.GetValues("If-None-Match").Single());
@@ -128,7 +128,7 @@ public class ApiClientTests
              "parentMode":{"active":false,"endsAt":null,"byName":null},"pendingRequest":null,"activeSos":null}
             """;
         var server = new FakeServer(HttpStatusCode.OK, json, ("ETag", "\"v8\""));
-        var state = await ClientFor(server).GetDeviceStateAsync();
+        var state = await ClientFor(server).GetDeviceStateAsync(cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.False(server.Request!.Headers.Contains("If-None-Match"));
         Assert.NotNull(state.Value);
@@ -149,7 +149,7 @@ public class ApiClientTests
         var server = new FakeServer(HttpStatusCode.Conflict, json);
 
         var e = await Assert.ThrowsAsync<ApiException>(() => ClientFor(server).PostEnrolAsync(new EnrolRequest(
-            Code: "123456", Platform: Platform.Windows, HasCellular: false, Model: "m", OsVersion: "o", AppVersion: "a")));
+            Code: "123456", Platform: Platform.Windows, HasCellular: false, Model: "m", OsVersion: "o", AppVersion: "a"), TestContext.Current.CancellationToken));
 
         Assert.Equal(409, e.Status);
         Assert.NotNull(e.Error);
@@ -164,14 +164,14 @@ public class ApiClientTests
         var server = new FakeServer(HttpStatusCode.OK, "{}");
         await Assert.ThrowsAsync<JsonException>(() => ClientFor(server).PostDeviceUsageAsync(new UsageUpload([
             new UsageSegmentIn(Id: "s-1", StartedAt: "2026-10-29T08:00:00.000Z", EndedAt: "2026-10-29T08:05:00.000Z", RecordedOffline: true),
-        ])));
+        ]), TestContext.Current.CancellationToken));
     }
 
     [Fact]
     public async Task AnErrorWithoutJsonStillHasItsStatus()
     {
         var server = new FakeServer(HttpStatusCode.BadGateway, null);
-        var e = await Assert.ThrowsAsync<ApiException>(() => ClientFor(server).GetDeviceMeAsync());
+        var e = await Assert.ThrowsAsync<ApiException>(() => ClientFor(server).GetDeviceMeAsync(TestContext.Current.CancellationToken));
         Assert.Equal(502, e.Status);
         Assert.Null(e.Error);
     }
@@ -180,7 +180,7 @@ public class ApiClientTests
     public async Task PathIdsAreEscapedAndNoContentCallsReturnNothing()
     {
         var server = new FakeServer(HttpStatusCode.NoContent, null);
-        await ClientFor(server).PostDeviceSosEndAsync("a b/c");
+        await ClientFor(server).PostDeviceSosEndAsync("a b/c", TestContext.Current.CancellationToken);
         Assert.Equal("/v1/device/sos/a%20b%2Fc/end", server.Request!.RequestUri!.AbsolutePath);
         Assert.Null(server.Body);
     }
