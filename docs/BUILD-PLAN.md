@@ -103,7 +103,8 @@ Spikes come early on purpose: Device Owner + Lock Task on the real phones, and a
 | 049b | Tray wiring: the service sends `view` and the toasts, the tray shows them, the tray exits when the service is gone | 049 | M | | 12.2, 16.3 |
 | 050 | Tray logic for Ask and Message: presets and pending ask in the status, `request_resolved` answers, `ask`/`message`/`reply`/`answer` pipe lines (front end by Claude, PR #130) | 018, 049b | S | | 16.2, 16.3 |
 | 050b | Tray wiring for Ask and Message: the service calls the server and relays answers, the tray pipe implements the sender; a dev `--session` flag so runs work over Remote Desktop; the run repeats the 049b checks | 050 | M | | 12.2, 16.3 |
-| 050c | Parent mode on Windows: request, parent code, duration, not counting, End now (front end by Claude first) | 019, 050b | M | | 12.3, 16.3 |
+| 050c | Parent mode logic: TOTP parent code, code sessions and the effective snapshot, `parent_mode` answers, parent pipe lines (front end by Claude, PR #136) | 019, 050b | M | | 12.3, 16.3 |
+| 050d | Parent mode wiring: the service checks the code, keeps and reports code sessions and End now, stops counting during parent mode, relays answers; the tray pipe implements the parent calls; run | 050c | M | | 12.3, 16.3 |
 | 051 | Tamper and hardening: time zone right, tray kill counter, Safe Mode registration | 021, 048 | M | | 12.2, 14 |
 | 052 | Installer (WiX MSI) | 049 | M | | 12.2 |
 
