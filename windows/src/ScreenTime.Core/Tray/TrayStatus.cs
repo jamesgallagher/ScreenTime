@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using ScreenTime.Core.Time;
 
 namespace ScreenTime.Core.Tray;
@@ -8,6 +9,7 @@ public enum TrayLevel { Plenty, Low, Critical, Offline, Locked }
 /// <summary>
 /// What the tray shows for one kid session (docs/SPEC.md §16.3): the service works it out after every sync and sends
 /// it to the tray, which counts down from it between updates. Instants are epoch milliseconds of the trusted clock.
+/// Its nulls are always written, so it can be read back where missing constructor parameters are an error.
 /// The same rules as the Android kid app's <c>KidStatus</c>.
 /// </summary>
 /// <param name="KidName">"Alex".</param>
@@ -28,20 +30,21 @@ public enum TrayLevel { Plenty, Low, Critical, Offline, Locked }
 public sealed record TrayStatus(
     string KidName,
     string PoolName,
-    LockReason? LockReason,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] LockReason? LockReason,
     long LeftSec,
     long UsedSec,
-    long? LockAtMs,
-    string? Bedtime,
-    string? BackAt,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] long? LockAtMs,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? Bedtime,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? BackAt,
     int Warn1Min,
     int Warn2Min,
     bool Online,
-    long? SyncedAtMs,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] long? SyncedAtMs,
     bool ParentMode,
-    string? ParentModeEnds,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? ParentModeEnds,
     IReadOnlyList<string> ParentNames)
 {
+    [JsonIgnore]
     public bool Locked => LockReason is not null;
 
     /// <summary><see cref="LeftSec"/> after <paramref name="elapsedMs"/> more of use, never below 0.</summary>
@@ -61,6 +64,7 @@ public sealed record TrayStatus(
     }
 
     /// <summary>The flyout's first line: "Alex · Screens".</summary>
+    [JsonIgnore]
     public string Title => $"{KidName} · {PoolName}";
 
     /// <summary>The icon's tooltip: "Screens · 1h 12m left", the lock headline, or the parent mode line.</summary>
@@ -120,6 +124,7 @@ public sealed record TrayStatus(
     public string ParentModeText() => "Parent mode · " + (ParentModeEnds is null ? "until you end it" : $"ends {ParentModeEnds}");
 
     /// <summary>"Mum or Dad", for "Message Mum or Dad"; "your parents" when there are none.</summary>
+    [JsonIgnore]
     public string ParentsOr => TrayText.Parents(ParentNames, "or");
 }
 
