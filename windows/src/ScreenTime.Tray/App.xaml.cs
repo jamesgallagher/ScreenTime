@@ -48,6 +48,12 @@ public partial class App : Application
         icon.NotificationClicked += () => ShowFlyoutNearTray(flyout);
         model.Changed += UpdateIcon;
         model.ToastRequested += toasts.Show;
+        model.QuitRequested += () =>
+        {
+            TrayLog.Write("tray: exiting");
+            icon.Dispose();
+            Exit();
+        };
         // The icon's dot and tooltip count down too, a little less often than the flyout.
         var iconTimer = ui.CreateTimer();
         iconTimer.Interval = TimeSpan.FromSeconds(15);

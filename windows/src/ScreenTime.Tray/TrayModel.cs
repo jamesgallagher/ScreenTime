@@ -5,8 +5,8 @@ namespace ScreenTime.Tray;
 
 /// <summary>
 /// The seam between the tray's front end and its pipe (docs/SPEC.md §16.3). The pipe (or the demo) calls
-/// <see cref="Update"/> and <see cref="Toast"/> from any thread; the icon, the flyout and the toasts listen on the UI
-/// thread. Between updates the UI counts down from the last status itself.
+/// <see cref="Update"/>, <see cref="Toast"/> and <see cref="Quit"/> from any thread; the icon, the flyout and the
+/// toasts listen on the UI thread. Between updates the UI counts down from the last status itself.
 /// </summary>
 internal sealed class TrayModel(DispatcherQueue ui)
 {
@@ -21,6 +21,9 @@ internal sealed class TrayModel(DispatcherQueue ui)
     /// <summary>A toast to show (UI thread).</summary>
     public event Action<string>? ToastRequested;
 
+    /// <summary>The tray should close: it removes its icon and exits (UI thread).</summary>
+    public event Action? QuitRequested;
+
     /// <summary>Called by the pipe on every <c>view</c> message.</summary>
     public void Update(TrayStatus status) => ui.TryEnqueue(() =>
     {
@@ -31,6 +34,9 @@ internal sealed class TrayModel(DispatcherQueue ui)
 
     /// <summary>Called by the pipe on every <c>toast</c> message.</summary>
     public void Toast(string text) => ui.TryEnqueue(() => ToastRequested?.Invoke(text));
+
+    /// <summary>Called by the pipe when the service has been gone too long: a new service starts a new tray.</summary>
+    public void Quit() => ui.TryEnqueue(() => QuitRequested?.Invoke());
 
     /// <summary>Seconds left now, counted down from the last status.</summary>
     public long LeftSecNow() => Status?.LeftSecAfter(Environment.TickCount64 - _statusTick) ?? 0;
