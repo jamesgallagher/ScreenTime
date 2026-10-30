@@ -63,6 +63,7 @@ public static class TrayStatusBuilder
         var parentNames = state.Parents.Select(p => p.DisplayName).ToList();
 
         return new TrayStatus(state.Kid.Name, poolName, lockReason, leftSec, result.UsedSec, lockAtMs, bedtime, backAt,
-            state.Schedule.Warn1Min, state.Schedule.Warn2Min, online, syncedAtMs, parentMode, parentModeEnds, parentNames);
+            state.Schedule.Warn1Min, state.Schedule.Warn2Min, online, syncedAtMs, parentMode, parentModeEnds, parentNames,
+            state.MessagePresets.Select(p => new TrayPreset(p.Id, p.Text)).ToList(), state.PendingRequest?.Minutes);
     }
 }
