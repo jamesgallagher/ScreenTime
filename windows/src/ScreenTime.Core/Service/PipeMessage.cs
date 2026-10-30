@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using ScreenTime.Core.Tray;
 
 namespace ScreenTime.Core.Service;
 
@@ -8,7 +9,7 @@ namespace ScreenTime.Core.Service;
 /// JSON order.
 /// </summary>
 public sealed record PipeMessage(string Type, string? Id = null, string? Text = null, int? Pid = null,
-    string? KidName = null, long? RemainingSec = null, [property: JsonPropertyName("locked")] bool? IsLocked = null, bool? Offline = null)
+    string? KidName = null, long? RemainingSec = null, [property: JsonPropertyName("locked")] bool? IsLocked = null, bool? Offline = null, TrayStatus? View = null)
 {
     /// <summary>Lock the PC now (service to tray).</summary>
     public static PipeMessage Lock(string id) => new("lock", Id: id);
@@ -25,6 +26,9 @@ public sealed record PipeMessage(string Type, string? Id = null, string? Text = 
     /// <summary>After every sync of that account (service to tray; the flyout uses it in CARD-049).</summary>
     public static PipeMessage Status(string kidName, long remainingSec, bool locked, bool offline) =>
         new("status", KidName: kidName, RemainingSec: remainingSec, IsLocked: locked, Offline: offline);
+
+    /// <summary>What the tray shows (service to tray, after every sync and on hello).</summary>
+    public static PipeMessage ViewOf(TrayStatus status) => new("view", View: status);
 
     /// <summary>One line, no newline at the end.</summary>
     public static string Encode(PipeMessage message) => JsonSerializer.Serialize(message, PipeJsonContext.Default.PipeMessage);
@@ -43,6 +47,6 @@ public sealed record PipeMessage(string Type, string? Id = null, string? Text = 
     }
 }
 
-[JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull, RespectNullableAnnotations = true, RespectRequiredConstructorParameters = true)]
+[JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull, RespectNullableAnnotations = true, RespectRequiredConstructorParameters = true, UseStringEnumConverter = true)]
 [JsonSerializable(typeof(PipeMessage))]
 internal sealed partial class PipeJsonContext : JsonSerializerContext;
