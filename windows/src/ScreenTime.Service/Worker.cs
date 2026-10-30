@@ -5,6 +5,7 @@ using ScreenTime.Core.Service;
 using ScreenTime.Core.Store;
 using ScreenTime.Core.Sync;
 using ScreenTime.Core.Time;
+using ScreenTime.Core.Tray;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
@@ -30,6 +31,8 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
     private readonly Dictionary<string, Task> _live = new();
     private readonly Channel<string> _syncRequests = Channel.CreateUnbounded<string>();
     private readonly SemaphoreSlim _sem = new(1, 1);
+    private readonly Dictionary<string, (bool Online, long? SyncedAtMs)> _lastSync = new();
+    private readonly Dictionary<string, GrantToasts> _grantToasts = new();
     private LocalStore _store = null!;
     private TrustedClock _clock = null!;
     private SessionTracker _tracker = null!;
@@ -44,6 +47,8 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
         public TrayHost Tray { get; } = tray;
         public CancellationTokenSource Cts { get; } = cts;
         public bool Unlocked { get; set; }
+        public WarningTracker Warnings { get; } = new();
+        public bool? SentLocked { get; set; }
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -156,6 +161,9 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
                         foreach (var s in _sessions.Values.Where(s => s.Unlocked).ToList())
                         {
                             await Apply(s, s.Keeper.Check(OutOfTime(s.Sid, now), now), now);
+                            if (View(s.Sid, now) is not { } view) continue;
+                            if (s.Warnings.Check(view) is { } warning) await SendToast(s, warning);
+                            if (s.SentLocked != view.Locked) await SendView(s, view);
                         }
                     }
                     finally
@@ -285,7 +293,7 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
                     }
                     break;
                 case LockStep.Toast:
-                    await s.Tray.SendAsync(PipeMessage.Toast(OutOfTimeToast));
+                    await SendToast(s, OutOfTimeToast);
                     break;
             }
         }
@@ -301,7 +309,7 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
             {
                 case "hello":
                     logger.LogInformation("tray {Session}: hello pid {Pid}", sessionId, m.Pid);
-                    if (Status(s.Sid, offline: false) is { } status) await s.Tray.SendAsync(status);
+                    if (View(s.Sid, _clock.NowMs()) is { } view) await SendView(s, view);
                     break;
                 case "locked":
                     s.Keeper.OnLockConfirmed();
@@ -330,14 +338,27 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
 
     private string KidName(string sid) => _store.GetDevice(sid)?.KidName ?? sid;
 
-    /// <summary>The <c>status</c> line for the tray, or null when nothing is cached for the SID.</summary>
-    private PipeMessage? Status(string sid, bool offline)
+    /// <summary>What the tray shows for the SID now, or null when nothing is cached for it.</summary>
+    private TrayStatus? View(string sid, long now)
     {
-        var device = _store.GetDevice(sid);
-        if (device is null || _store.LoadState(sid) is not { } c) return null;
-        var now = _clock.NowMs();
+        if (_store.LoadState(sid) is not { } c) return null;
         var result = Engine.Evaluate(TodayInput.For(c.State, _store.SegmentsSince(sid, TodayInput.DayStartMs(c.State, now)), now));
-        return PipeMessage.Status(device.KidName, result.RemainingSec, OutOfTime(sid, now), offline);
+        var last = _lastSync.GetValueOrDefault(sid, (true, null));
+        return TrayStatusBuilder.From(c.State, result, now, last.Online, last.SyncedAtMs);
+    }
+
+    /// <summary>Sends <paramref name="view"/> to the session's tray and remembers whether it said locked.</summary>
+    private async Task SendView(KidSession s, TrayStatus view)
+    {
+        s.SentLocked = view.Locked;
+        await s.Tray.SendAsync(PipeMessage.ViewOf(view));
+    }
+
+    /// <summary>Logs and sends a toast to the session's tray.</summary>
+    private async Task SendToast(KidSession s, string text)
+    {
+        logger.LogInformation("{Kid}: toast {Text}", KidName(s.Sid), text);
+        await s.Tray.SendAsync(PipeMessage.Toast(text));
     }
 
     private async Task SyncAccount(string sid, CancellationToken ct)
@@ -353,14 +374,22 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
         }
         var synced = await syncer.SyncAsync(ct);
         if (!synced) _tracker.MarkOffline(sid);
+        var previous = _lastSync.GetValueOrDefault(sid, (true, null));
+        _lastSync[sid] = (synced, synced ? _clock.NowMs() : previous.SyncedAtMs);
         var cached = _store.LoadState(sid);
         if (cached is { } c)
         {
             var now = _clock.NowMs();
             var result = Engine.Evaluate(TodayInput.For(c.State, _store.SegmentsSince(sid, TodayInput.DayStartMs(c.State, now)), now));
             logger.LogInformation("{Kid}: {Minutes} min left, locked {Locked}", device.KidName, result.RemainingSec / 60, result.Locked);
-            var status = PipeMessage.Status(device.KidName, result.RemainingSec, OutOfTime(sid, now), offline: !synced);
-            foreach (var s in _sessions.Values.Where(s => s.Sid == sid)) await s.Tray.SendAsync(status);
+            if (!_grantToasts.TryGetValue(sid, out var grants)) _grantToasts[sid] = grants = new GrantToasts();
+            var toasts = synced ? grants.Check(c.State) : [];
+            var view = View(sid, now)!;
+            foreach (var s in _sessions.Values.Where(s => s.Sid == sid).ToList())
+            {
+                await SendView(s, view);
+                foreach (var text in toasts) await SendToast(s, text);
+            }
         }
     }
 }

@@ -20,6 +20,7 @@ internal sealed partial class TrayPipe(string pipeName, bool dryLock, TrayModel 
 
     public async Task RunAsync()
     {
+        var lastSeen = Environment.TickCount64;
         while (true)
         {
             try
@@ -27,6 +28,7 @@ internal sealed partial class TrayPipe(string pipeName, bool dryLock, TrayModel 
                 using var pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
                 await pipe.ConnectAsync(5_000);
                 log("pipe: connected");
+                lastSeen = Environment.TickCount64;
                 using var reader = new StreamReader(pipe, Utf8, detectEncodingFromByteOrderMarks: false, bufferSize: 1024, leaveOpen: true);
                 using var writer = new StreamWriter(pipe, Utf8, bufferSize: 1024, leaveOpen: true);
                 await SendAsync(writer, PipeMessage.Hello(Environment.ProcessId));
@@ -54,17 +56,32 @@ internal sealed partial class TrayPipe(string pipeName, bool dryLock, TrayModel 
                         case "toast":
                             model.Toast(message.Text ?? "");
                             break;
+                        case "view":
+                            if (message.View is { } view)
+                            {
+                                log($"view: {view.Tooltip(view.LeftSec)}");
+                                model.Update(view);
+                            }
+                            break;
                         case "status":
                             log($"status: {message.RemainingSec / 60} min left, locked {message.IsLocked}, offline {message.Offline}");
                             break;
                     }
                 }
                 log("pipe: closed");
+                lastSeen = Environment.TickCount64;
             }
             catch (TimeoutException) { }
             catch (IOException)
             {
                 log("pipe: closed");
+                lastSeen = Environment.TickCount64;
+            }
+            if (Environment.TickCount64 - lastSeen >= 30_000)
+            {
+                log("pipe: no service for 30 s, exiting");
+                model.Quit();
+                return;
             }
             await Task.Delay(1_000);
         }
