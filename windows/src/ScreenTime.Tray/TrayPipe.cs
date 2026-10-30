@@ -8,9 +8,9 @@ namespace ScreenTime.Tray;
 
 /// <summary>
 /// The tray's end of the pipe to the service (docs/SPEC.md §12.2): says hello, locks the PC when asked and confirms it,
-/// and logs toasts and status lines (CARD-049 shows them). Reconnects for ever.
+/// passes toasts to the <see cref="TrayModel"/> and logs status lines. Reconnects for ever.
 /// </summary>
-internal sealed partial class TrayPipe(string pipeName, bool dryLock, Action<string> log)
+internal sealed partial class TrayPipe(string pipeName, bool dryLock, TrayModel model, Action<string> log)
 {
     private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
 
@@ -52,7 +52,7 @@ internal sealed partial class TrayPipe(string pipeName, bool dryLock, Action<str
                             await SendAsync(writer, PipeMessage.Locked(message.Id ?? ""));
                             break;
                         case "toast":
-                            log($"toast: {message.Text}");
+                            model.Toast(message.Text ?? "");
                             break;
                         case "status":
                             log($"status: {message.RemainingSec / 60} min left, locked {message.IsLocked}, offline {message.Offline}");

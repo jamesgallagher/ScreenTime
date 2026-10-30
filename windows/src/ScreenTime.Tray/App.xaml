@@ -8,6 +8,33 @@
             <ResourceDictionary.MergedDictionaries>
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
             </ResourceDictionary.MergedDictionaries>
+            <!-- docs/SPEC.md §16.1 design tokens. The accent (Ask button) is the primary teal. -->
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="StPlentyBrush" Color="#0F766E" />
+                    <SolidColorBrush x:Key="StLowBrush" Color="#D97706" />
+                    <SolidColorBrush x:Key="StCriticalBrush" Color="#EA580C" />
+                    <SolidColorBrush x:Key="StMutedBrush" Color="#57534E" />
+                    <SolidColorBrush x:Key="StOutlineBrush" Color="#D6D3D1" />
+                    <Color x:Key="SystemAccentColor">#0F766E</Color>
+                    <Color x:Key="SystemAccentColorLight1">#14857C</Color>
+                    <Color x:Key="SystemAccentColorLight2">#1A958B</Color>
+                    <Color x:Key="SystemAccentColorDark1">#0D665F</Color>
+                    <Color x:Key="SystemAccentColorDark2">#0B5751</Color>
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="StPlentyBrush" Color="#2DD4BF" />
+                    <SolidColorBrush x:Key="StLowBrush" Color="#FBBF24" />
+                    <SolidColorBrush x:Key="StCriticalBrush" Color="#FB923C" />
+                    <SolidColorBrush x:Key="StMutedBrush" Color="#A8A29E" />
+                    <SolidColorBrush x:Key="StOutlineBrush" Color="#44403C" />
+                    <Color x:Key="SystemAccentColor">#2DD4BF</Color>
+                    <Color x:Key="SystemAccentColorLight1">#4CDCCA</Color>
+                    <Color x:Key="SystemAccentColorLight2">#6BE3D4</Color>
+                    <Color x:Key="SystemAccentColorDark1">#26B5A3</Color>
+                    <Color x:Key="SystemAccentColorDark2">#1F9688</Color>
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
         </ResourceDictionary>
     </Application.Resources>
 </Application>
