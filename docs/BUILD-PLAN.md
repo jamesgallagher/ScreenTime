@@ -9,6 +9,7 @@ Ordered list of small cards. Each card is one pull request with one concern. The
 3. **Bob** creates branch `bob/card-NNN-<slug>` from the latest `main`, does the work, runs every acceptance command, commits, pushes and opens a PR titled `CARD-NNN: <title>`. Bob never merges.
 4. **Claude** reviews the PR on GitHub, asks for fixes or merges it.
 5. Cards are written a few at a time, just ahead of Bob, so later cards can use what earlier ones taught us.
+6. **UI is Claude's.** When a card has a user interface, Claude builds the front end first, in its own PR merged to `main`: the screens sit behind a small, named seam (a view model or interface) with fake data, so they build and run on their own, and Claude checks them on screen. The card then gives Bob the logic behind the seam, and lists the front-end files Bob must not change. A tiny piece of UI (one toast or dialog) may instead be a copied file in the card.
 
 Rules for sizing: a card should touch one area, change roughly 100 to 500 lines, and be checkable with commands. Anything bigger is split.
 
@@ -98,7 +99,8 @@ Spikes come early on purpose: Device Owner + Lock Task on the real phones, and a
 | 046 | `ScreenTime.Core`: generated C# client + SQLite store | 009, 006 | M | | 4.1 |
 | 047 | Service: enrolment CLI, session tracking per account, usage upload, state sync | 007, 013, 014, 045, 046 | M | | 12.2 |
 | 048 | Service: lock and relock, WebSocket, tray launcher, named pipe | 017, 047 | M | | 12.2 |
-| 049 | Tray: flyout and toasts | 048 | M | | 16.3 |
+| 049 | Tray logic: status for the flyout, warning and grant toasts, `view` pipe message (front end by Claude, PR #124) | 048 | M | | 16.3 |
+| 049b | Tray wiring: the service sends `view` and the toasts, the tray shows them, the tray exits when the service is gone | 049 | M | | 12.2, 16.3 |
 | 050 | Tray: ask, message, parent mode dialogs | 018, 019, 049 | M | | 16.3 |
 | 051 | Tamper and hardening: time zone right, tray kill counter, Safe Mode registration | 021, 048 | M | | 12.2, 14 |
 | 052 | Installer (WiX MSI) | 049 | M | | 12.2 |
