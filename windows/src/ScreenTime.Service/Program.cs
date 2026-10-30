@@ -13,6 +13,7 @@ using Microsoft.Extensions.Hosting.WindowsServices;
 var dataFolder = Win.DefaultDataFolder();
 var secure = true;
 var command = "";
+var dryLock = false;
 var flags = new Dictionary<string, string>();
 var i = 0;
 while (i < args.Length)
@@ -24,6 +25,11 @@ while (i < args.Length)
         dataFolder = args[i + 1];
         secure = dataFolder == Win.DefaultDataFolder();
         i += 2;
+    }
+    else if (arg == "--dry-lock")
+    {
+        dryLock = true;
+        i++;
     }
     else if (arg.StartsWith("--"))
     {
@@ -46,7 +52,10 @@ switch (command)
             var builder = Host.CreateApplicationBuilder(args);
             builder.Services.AddWindowsService(o => o.ServiceName = "ScreenTime");
             builder.Services.AddSingleton<SessionEvents>();
-            builder.Services.AddSingleton(new ServiceOptions(dataFolder, secure));
+            // --tray <path>: the tray exe. Without it, the one next to the service when it runs as a service; none in a console run.
+            var trayExe = flags.TryGetValue("tray", out var tray) ? tray
+                : WindowsServiceHelpers.IsWindowsService() ? Path.Combine(AppContext.BaseDirectory, "ScreenTime.Tray.exe") : null;
+            builder.Services.AddSingleton(new ServiceOptions(dataFolder, secure, trayExe, dryLock, WindowsServiceHelpers.IsWindowsService()));
             if (WindowsServiceHelpers.IsWindowsService())
             {
                 builder.Services.AddSingleton<IHostLifetime, SessionLifetime>();

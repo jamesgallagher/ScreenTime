@@ -1,48 +1,33 @@
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media;
-using ScreenTime.Core;
 
 namespace ScreenTime.Tray;
 
-/// <summary>Placeholder tray app: opens one small window. The real tray icon and flyout come later.</summary>
+/// <summary>
+/// CARD-048: the tray has no window yet (the flyout comes in CARD-049). It only keeps the pipe to the service, which
+/// starts it with <c>--pipe ScreenTime.&lt;sessionId&gt; [--dry-lock]</c>. Copied verbatim from the card.
+/// </summary>
 public partial class App : Application
 {
-    private Window? _window;
+    private TrayPipe? _pipe;
 
     public App()
     {
         InitializeComponent();
+        DispatcherShutdownMode = DispatcherShutdownMode.OnExplicitShutdown;
     }
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
-        _window = new Window
+        var argv = Environment.GetCommandLineArgs();
+        var at = Array.IndexOf(argv, "--pipe");
+        if (at < 0 || at + 1 >= argv.Length)
         {
-            Title = "Screen Time",
-            SystemBackdrop = new MicaBackdrop(),
-            Content = new StackPanel
-            {
-                VerticalAlignment = VerticalAlignment.Center,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                Spacing = 8,
-                Children =
-                {
-                    new TextBlock
-                    {
-                        Text = "Screen Time",
-                        Style = (Style)Current.Resources["SubtitleTextBlockStyle"],
-                        HorizontalAlignment = HorizontalAlignment.Center,
-                    },
-                    new TextBlock
-                    {
-                        Text = $"Tray app. Real flyout comes later. ({DurationFormat.Format(4320)} test)",
-                        HorizontalAlignment = HorizontalAlignment.Center,
-                    },
-                },
-            },
-        };
-        _window.AppWindow.Resize(new Windows.Graphics.SizeInt32(360, 440));
-        _window.Activate();
+            TrayLog.Write("no --pipe: exiting");
+            Exit();
+            return;
+        }
+        var dryLock = Array.IndexOf(argv, "--dry-lock") >= 0;
+        _pipe = new TrayPipe(argv[at + 1], dryLock, TrayLog.Write);
+        _ = _pipe.RunAsync();
     }
 }
