@@ -110,6 +110,14 @@ public class TrayStatusTests
     public void TimesAreTwelveHour(int hour, int minute, string expected) => Assert.Equal(expected, TrayText.Clock(hour, minute));
 
     [Fact]
+    public void AWaitingAskSaysWhoItWaitsFor()
+    {
+        Assert.Null(Open().WaitingText());
+        Assert.Equal("Waiting for Mum or Dad…", (Open() with { PendingMinutes = 15 }).WaitingText());
+        Assert.Equal("Mum and Dad", Open().ParentsAnd);
+    }
+
+    [Fact]
     public void ParentsAreJoinedTheKidsWay()
     {
         Assert.Equal("your parents", TrayText.Parents([], "or"));

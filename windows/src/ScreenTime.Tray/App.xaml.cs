@@ -7,7 +7,7 @@ namespace ScreenTime.Tray;
 /// <summary>
 /// The tray (docs/SPEC.md §16.3): the icon, the flyout and the toasts, fed by the pipe to the service. The service
 /// starts it with <c>--pipe ScreenTime.&lt;sessionId&gt; [--dry-lock]</c>. <c>--demo [state]</c> shows fake statuses
-/// without the service; <c>--open</c> also opens the flyout at once (for screenshots).
+/// without the service; <c>--open [ask|message]</c> also opens the flyout at once, on that panel (for screenshots).
 /// </summary>
 public partial class App : Application
 {
@@ -48,6 +48,7 @@ public partial class App : Application
         icon.NotificationClicked += () => ShowFlyoutNearTray(flyout);
         model.Changed += UpdateIcon;
         model.ToastRequested += toasts.Show;
+        model.AnswerReceived += (text, _) => toasts.Show(text);
         model.QuitRequested += () =>
         {
             TrayLog.Write("tray: exiting");
@@ -71,7 +72,9 @@ public partial class App : Application
             _pipe = new TrayPipe(argv[pipeAt + 1], dryLock, model, TrayLog.Write);
             _ = _pipe.RunAsync();
         }
-        if (Array.IndexOf(argv, "--open") >= 0) ShowFlyoutNearTray(flyout);
+        var openAt = Array.IndexOf(argv, "--open");
+        // Queued behind the demo's first status, which also arrives through the queue.
+        if (openAt >= 0) ui.TryEnqueue(() => ShowFlyoutNearTray(flyout, openAt + 1 < argv.Length ? argv[openAt + 1] : "main"));
     }
 
     private void UpdateIcon()
@@ -82,9 +85,9 @@ public partial class App : Application
     }
 
     /// <summary>Opens the flyout in the bottom-right corner, where the tray usually is (a toast click, or --open).</summary>
-    private static void ShowFlyoutNearTray(FlyoutWindow flyout)
+    private static void ShowFlyoutNearTray(FlyoutWindow flyout, string panel = "main")
     {
         var area = Microsoft.UI.Windowing.DisplayArea.Primary.WorkArea;
-        flyout.ShowAt(area.X + area.Width, area.Y + area.Height);
+        flyout.ShowAt(area.X + area.Width, area.Y + area.Height, panel);
     }
 }

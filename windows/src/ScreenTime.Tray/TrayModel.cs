@@ -5,7 +5,8 @@ namespace ScreenTime.Tray;
 
 /// <summary>
 /// The seam between the tray's front end and its pipe (docs/SPEC.md §16.3). The pipe (or the demo) calls
-/// <see cref="Update"/>, <see cref="Toast"/> and <see cref="Quit"/> from any thread; the icon, the flyout and the
+/// <see cref="Update"/>, <see cref="Toast"/>, <see cref="Answer"/> and <see cref="Quit"/> from any thread, and sets
+/// <see cref="Sender"/> for the flyout's Ask and Message panels; the icon, the flyout and the
 /// toasts listen on the UI thread. Between updates the UI counts down from the last status itself.
 /// </summary>
 internal sealed class TrayModel(DispatcherQueue ui)
@@ -23,6 +24,15 @@ internal sealed class TrayModel(DispatcherQueue ui)
 
     /// <summary>The tray should close: it removes its icon and exits (UI thread).</summary>
     public event Action? QuitRequested;
+
+    /// <summary>A parent answered the kid's ask: the text, and whether it was a yes (UI thread).</summary>
+    public event Action<string, bool>? AnswerReceived;
+
+    /// <summary>Sends asks and messages; set by the pipe (or the demo) before the flyout opens.</summary>
+    public ITraySender? Sender { get; set; }
+
+    /// <summary>Called by the pipe on every <c>answer</c> message: "Dad said yes! +30 min 🎉" or "Dad said not this time".</summary>
+    public void Answer(string text, bool approved) => ui.TryEnqueue(() => AnswerReceived?.Invoke(text, approved));
 
     /// <summary>Called by the pipe on every <c>view</c> message.</summary>
     public void Update(TrayStatus status) => ui.TryEnqueue(() =>

@@ -27,6 +27,8 @@ public enum TrayLevel { Plenty, Low, Critical, Offline, Locked }
 /// <param name="ParentMode">Parent mode is on (docs/SPEC.md §12.3): not locked, and nothing counts.</param>
 /// <param name="ParentModeEnds">When parent mode ends, "4:15 pm"; null while off or until a parent ends it.</param>
 /// <param name="ParentNames">The family's parents, oldest first: "Mum", "Dad".</param>
+/// <param name="Presets">The family's message presets, for the Message panel; null when none were sent.</param>
+/// <param name="PendingMinutes">Minutes of an "Ask for more time" no parent has answered yet; null when there is none.</param>
 public sealed record TrayStatus(
     string KidName,
     string PoolName,
@@ -42,7 +44,9 @@ public sealed record TrayStatus(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] long? SyncedAtMs,
     bool ParentMode,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? ParentModeEnds,
-    IReadOnlyList<string> ParentNames)
+    IReadOnlyList<string> ParentNames,
+    IReadOnlyList<TrayPreset>? Presets = null,
+    int? PendingMinutes = null)
 {
     [JsonIgnore]
     public bool Locked => LockReason is not null;
@@ -126,6 +130,13 @@ public sealed record TrayStatus(
     /// <summary>"Mum or Dad", for "Message Mum or Dad"; "your parents" when there are none.</summary>
     [JsonIgnore]
     public string ParentsOr => TrayText.Parents(ParentNames, "or");
+
+    /// <summary>"Mum and Dad", for "Message Mum and Dad"; "your parents" when there are none.</summary>
+    [JsonIgnore]
+    public string ParentsAnd => TrayText.Parents(ParentNames, "and");
+
+    /// <summary>"Waiting for Mum or Dad…" while a request waits for an answer, otherwise null.</summary>
+    public string? WaitingText() => PendingMinutes is null ? null : $"Waiting for {ParentsOr}…";
 }
 
 /// <summary>Words and times the en-AU way (docs/SPEC.md §16.1).</summary>
@@ -145,4 +156,20 @@ public static class TrayText
         1 => names[0],
         _ => string.Join(", ", names.Take(names.Count - 1)) + $" {word} " + names[^1],
     };
+}
+
+/// <summary>A ready-made message the kid can send with one tap (docs/SPEC.md §16.2, "Message sheet").</summary>
+public sealed record TrayPreset(string Id, string Text);
+
+/// <summary>How sending an ask or a message went, as the tray shows it.</summary>
+public enum SendResult
+{
+    /// <summary>The server has it.</summary>
+    Sent,
+
+    /// <summary>An ask is already waiting (HTTP 409): the panel closes as if it were sent.</summary>
+    AlreadyAsked,
+
+    /// <summary>No answer from the server: "Can't reach Mum or Dad right now. Check the internet and try again."</summary>
+    Offline,
 }
