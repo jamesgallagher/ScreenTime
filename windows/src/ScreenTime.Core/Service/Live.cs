@@ -107,4 +107,29 @@ public static class Live
             return null;
         }
     }
+
+    /// <summary>
+    /// The parent's answer in a <c>parent_mode</c> frame; null when the frame is not one (invalid JSON, another
+    /// type, or a <c>data</c> whose <c>active</c> is not true or false).
+    /// </summary>
+    public static ParentModeAnswer? ParentModeAnswer(string frame)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(frame);
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object) return null;
+            if (!root.TryGetProperty("type", out var type) || type.ValueKind != JsonValueKind.String || type.GetString() != "parent_mode") return null;
+            if (!root.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Object) return null;
+            if (!data.TryGetProperty("active", out var active) || active.ValueKind is not (JsonValueKind.True or JsonValueKind.False)) return null;
+            return new ParentModeAnswer(active.ValueKind == JsonValueKind.True, Str(data, "endsAt"), Str(data, "byName"), Str(data, "requestId"));
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static string? Str(JsonElement data, string name) =>
+        data.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
 }

@@ -43,6 +43,24 @@ public sealed record PipeMessage(string Type, string? Id = null, string? Text = 
     /// <summary>A parent's answer, already worded (service to tray).</summary>
     public static PipeMessage Answer(string text, bool approved) => new("answer", Text: text, Approved: approved);
 
+    /// <summary>"I'm the parent": ask every parent to approve parent mode (tray to service).</summary>
+    public static PipeMessage ParentAsk(string id) => new("parent-ask", Id: id);
+
+    /// <summary>Is this the parent code? (tray to service).</summary>
+    public static PipeMessage ParentCode(string id, string code) => new("parent-code", Id: id, Text: code);
+
+    /// <summary>Start parent mode for that long; null is "Until I end it" (tray to service).</summary>
+    public static PipeMessage ParentStart(string id, int? minutes) => new("parent-start", Id: id, Minutes: minutes);
+
+    /// <summary>"End now" (tray to service).</summary>
+    public static PipeMessage ParentEnd(string id) => new("parent-end", Id: id);
+
+    /// <summary>The answer to <c>parent-code</c>, <c>parent-start</c> or <c>parent-end</c> (service to tray).</summary>
+    public static PipeMessage Done(string id, bool ok) => new("done", Id: id, Approved: ok);
+
+    /// <summary>"Dad said no." (service to tray).</summary>
+    public static PipeMessage ParentNo(string text) => new("parent-no", Text: text);
+
     /// <summary>One line, no newline at the end.</summary>
     public static string Encode(PipeMessage message) => JsonSerializer.Serialize(message, PipeJsonContext.Default.PipeMessage);
 
