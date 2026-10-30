@@ -7,7 +7,7 @@ namespace ScreenTime.Tray;
 /// <summary>
 /// The tray (docs/SPEC.md §16.3): the icon, the flyout and the toasts, fed by the pipe to the service. The service
 /// starts it with <c>--pipe ScreenTime.&lt;sessionId&gt; [--dry-lock]</c>. <c>--demo [state]</c> shows fake statuses
-/// without the service; <c>--open [ask|message]</c> also opens the flyout at once, on that panel, and keeps it open
+/// without the service; <c>--open [ask|message|parent]</c> also opens the flyout at once, on that panel, and keeps it open
 /// (for screenshots and test runs).
 /// </summary>
 public partial class App : Application

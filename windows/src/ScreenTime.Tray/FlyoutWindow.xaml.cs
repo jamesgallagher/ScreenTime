@@ -13,8 +13,9 @@ namespace ScreenTime.Tray;
 /// <summary>
 /// The flyout (docs/SPEC.md §16.3): opens above the tray on a left click, hides when it loses focus, and counts down
 /// every second while it is open. Ask for more time and Message open as panels in the same window, with the same
-/// options as Android (§16.2), and send through <see cref="TrayModel.Sender"/>. I'm the parent stays disabled until
-/// parent mode (CARD-050c).
+/// options as Android (§16.2), and send through <see cref="TrayModel.Sender"/>. I'm the parent opens the parent mode
+/// panel (§12.3): ask the parents, or the parent code (checked by the service), then how long; while parent mode is
+/// on, End now replaces the kid's buttons.
 /// </summary>
 public sealed partial class FlyoutWindow : Window
 {
@@ -63,6 +64,7 @@ public sealed partial class FlyoutWindow : Window
         _answerTimer.Tick += (_, _) => AnswerCard.Visibility = Visibility.Collapsed;
         _model.Changed += Render;
         _model.AnswerReceived += ShowAnswer;
+        _model.ParentModeRefused += ShowParentNo;
         Render();
     }
 
@@ -83,7 +85,7 @@ public sealed partial class FlyoutWindow : Window
         ShowAt(x, y);
     }
 
-    /// <summary>Opens the flyout above (x, y) on the main panel, or on "ask" or "message" (for the demo's screenshots).</summary>
+    /// <summary>Opens the flyout above (x, y) on the main panel, or on "ask", "message" or "parent" (for screenshots and test runs).</summary>
     public void ShowAt(int x, int y, string panel = "main")
     {
         var area = DisplayArea.GetFromPoint(new PointInt32(x, y), DisplayAreaFallback.Nearest).WorkArea;
@@ -104,6 +106,7 @@ public sealed partial class FlyoutWindow : Window
         {
             case "ask": OpenAsk(); break;
             case "message": OpenMessage(); break;
+            case "parent": OpenParent(); break;
             default: ShowPanel(MainPanel); break;
         }
         AppWindow.Show();
@@ -151,6 +154,16 @@ public sealed partial class FlyoutWindow : Window
         AskButton.IsEnabled = canSend && waiting is null;
         MessageButton.IsEnabled = canSend;
         MessageButton.Content = $"Message {s.ParentsOr}";
+        ParentButton.IsEnabled = canSend;
+        // Parent mode: End now in place of the kid's buttons (§12.3, as on Android).
+        var kidButtons = s.ParentMode ? Visibility.Collapsed : Visibility.Visible;
+        AskButton.Visibility = kidButtons;
+        MessageButton.Visibility = kidButtons;
+        ParentButton.Visibility = kidButtons;
+        EndNowButton.Visibility = s.ParentMode ? Visibility.Visible : Visibility.Collapsed;
+        EndNowButton.IsEnabled = canSend;
+        // A parent said yes, or the code started it: the parent panel has done its job.
+        if (s.ParentMode && ParentPanel.Visibility == Visibility.Visible) ShowPanel(MainPanel);
     }
 
     private void ShowPanel(FrameworkElement panel)
@@ -158,6 +171,106 @@ public sealed partial class FlyoutWindow : Window
         MainPanel.Visibility = panel == MainPanel ? Visibility.Visible : Visibility.Collapsed;
         AskPanel.Visibility = panel == AskPanel ? Visibility.Visible : Visibility.Collapsed;
         MessagePanel.Visibility = panel == MessagePanel ? Visibility.Visible : Visibility.Collapsed;
+        ParentPanel.Visibility = panel == ParentPanel ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void OnParent(object sender, RoutedEventArgs e) => OpenParent();
+
+    // ---- I'm the parent: ask every parent at once; or the parent code; then how long. ----
+
+    private async void OpenParent()
+    {
+        ParentTitle.Text = "Hand to a parent";
+        ParentWaitPart.Visibility = Visibility.Visible;
+        ParentCodePart.Visibility = Visibility.Collapsed;
+        ParentDurationPart.Visibility = Visibility.Collapsed;
+        ParentSpinner.IsActive = true;
+        ParentSpinner.Visibility = Visibility.Visible;
+        var parents = _model.Status?.ParentsAnd ?? "your parents";
+        ParentWaitText.Text = $"Asking {parents}…";
+        ShowPanel(ParentPanel);
+        if (_model.Sender is not { } send) return;
+        var asked = await Safely(send.RequestParentModeAsync);
+        if (ParentPanel.Visibility != Visibility.Visible || ParentWaitPart.Visibility != Visibility.Visible) return;
+        if (asked == SendResult.Offline)
+        {
+            ParentSpinner.IsActive = false;
+            ParentSpinner.Visibility = Visibility.Collapsed;
+            ParentWaitText.Text = $"Can't reach {parents} right now. A parent can use the parent code.";
+            return;
+        }
+        ParentWaitText.Text = $"We've asked {parents} to approve.";
+    }
+
+    private void ShowParentNo(string text)
+    {
+        if (ParentPanel.Visibility != Visibility.Visible || ParentWaitPart.Visibility != Visibility.Visible) return;
+        ParentSpinner.IsActive = false;
+        ParentSpinner.Visibility = Visibility.Collapsed;
+        ParentWaitText.Text = text;
+    }
+
+    private void OnCodeInstead(object sender, RoutedEventArgs e)
+    {
+        ParentTitle.Text = "Parent code";
+        ParentWaitPart.Visibility = Visibility.Collapsed;
+        ParentCodePart.Visibility = Visibility.Visible;
+        CodeBox.Text = "";
+        CodeError.Visibility = Visibility.Collapsed;
+        CodeCheck.Content = "Check";
+        CodeBox.Focus(FocusState.Programmatic);
+    }
+
+    private void OnCodeChanged(object sender, TextChangedEventArgs e)
+    {
+        var digits = new string(CodeBox.Text.Where(char.IsAsciiDigit).ToArray());
+        if (digits != CodeBox.Text)
+        {
+            CodeBox.Text = digits;
+            CodeBox.SelectionStart = digits.Length;
+        }
+        // The error stays until the kid types again (clearing the box after a wrong code also lands here, later).
+        if (digits.Length > 0) CodeError.Visibility = Visibility.Collapsed;
+        CodeCheck.IsEnabled = digits.Length == 6;
+    }
+
+    private async void OnCodeCheck(object sender, RoutedEventArgs e)
+    {
+        if (_model.Sender is not { } send) return;
+        CodeCheck.IsEnabled = false;
+        CodeCheck.Content = "Checking…";
+        var right = await Safely(() => send.CheckParentCodeAsync(CodeBox.Text));
+        CodeCheck.Content = "Check";
+        if (!right)
+        {
+            CodeBox.Text = "";
+            CodeError.Visibility = Visibility.Visible;
+            return;
+        }
+        ParentTitle.Text = "How long?";
+        ParentCodePart.Visibility = Visibility.Collapsed;
+        ParentDurationPart.Visibility = Visibility.Visible;
+    }
+
+    private async void OnDuration(object sender, RoutedEventArgs e)
+    {
+        if (_model.Sender is not { } send) return;
+        var tag = (string)((Button)sender).Tag;
+        int? minutes = tag.Length == 0 ? null : int.Parse(tag, System.Globalization.CultureInfo.InvariantCulture);
+        ParentDurationPart.IsHitTestVisible = false;
+        var started = await Safely(() => send.StartParentModeAsync(minutes));
+        ParentDurationPart.IsHitTestVisible = true;
+        // Started: the next view says parent mode is on and Render closes this panel. Not started (the code got too
+        // old): back to the code.
+        if (!started) OnCodeInstead(sender, e);
+    }
+
+    private async void OnEndNow(object sender, RoutedEventArgs e)
+    {
+        if (_model.Sender is not { } send) return;
+        EndNowButton.IsEnabled = false;
+        await Safely(send.EndParentModeAsync);
+        EndNowButton.IsEnabled = true;
     }
 
     private void OnBack(object sender, RoutedEventArgs e) => ShowPanel(MainPanel);
@@ -304,6 +417,20 @@ public sealed partial class FlyoutWindow : Window
         {
             TrayLog.Write($"send: {e.Message}");
             return SendResult.Offline;
+        }
+    }
+
+    /// <summary>A yes-or-no call that throws counts as no.</summary>
+    private static async Task<bool> Safely(Func<Task<bool>> send)
+    {
+        try
+        {
+            return await send();
+        }
+        catch (Exception e)
+        {
+            TrayLog.Write($"send: {e.Message}");
+            return false;
         }
     }
 
