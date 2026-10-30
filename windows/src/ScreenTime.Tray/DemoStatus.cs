@@ -6,17 +6,25 @@ namespace ScreenTime.Tray;
 
 /// <summary>
 /// Fake statuses for <c>--demo [state]</c>, so the front end can be seen without the service. With a state name it
-/// shows that one; without, it moves through them all every 5 s and shows the toasts on the way.
+/// shows that one; without, it moves through them all every 5 s and shows the toasts on the way. Its
+/// <see cref="ITraySender"/> pretends to send: an ask waits 3 s and Dad says yes; "offline" fails every send.
 /// </summary>
 internal static class DemoStatus
 {
-    public static readonly string[] Names = ["plenty", "low", "critical", "offline", "parent", "out", "bedtime"];
+    public static readonly string[] Names = ["plenty", "low", "critical", "offline", "parent", "out", "bedtime", "waiting"];
+
+    private static readonly TrayPreset[] Presets =
+    [
+        new("p1", "Can I have 5 more minutes?"),
+        new("p2", "I've finished my homework"),
+        new("p3", "Can you come here please?"),
+    ];
 
     public static TrayStatus For(string name)
     {
         var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         TrayStatus open(long left) => new("Alex", "Screens", null, left, 7_200 - Math.Min(left, 7_200), now + left * 1000,
-            "8:30 pm", null, 15, 5, true, now - 20_000, false, null, ["Mum", "Dad"]);
+            "8:30 pm", null, 15, 5, true, now - 20_000, false, null, ["Mum", "Dad"], Presets);
         return name switch
         {
             "low" => open(14 * 60),
@@ -25,13 +33,15 @@ internal static class DemoStatus
             "parent" => open(52 * 60) with { ParentMode = true, LockAtMs = null, ParentModeEnds = "4:15 pm" },
             "out" => open(0) with { LockReason = LockReason.OutOfTime, LockAtMs = null, UsedSec = 7_200 },
             "bedtime" => open(0) with { LockReason = LockReason.Bedtime, LockAtMs = null, Bedtime = null, BackAt = "7:00 am" },
+            "waiting" => open(14 * 60) with { PendingMinutes = 30 },
             _ => open(72 * 60),
         };
     }
 
-    /// <summary>Feeds <paramref name="model"/> one state, or all of them in turn.</summary>
+    /// <summary>Feeds <paramref name="model"/> one state, or all of them in turn, and sets the fake sender.</summary>
     public static void Run(TrayModel model, DispatcherQueue ui, string? name)
     {
+        model.Sender = new Sender(model, ui, name);
         if (name is not null)
         {
             model.Update(For(name));
@@ -55,5 +65,33 @@ internal static class DemoStatus
         timer.Tick += (_, _) => Next();
         Next();
         timer.Start();
+    }
+
+    private sealed class Sender(TrayModel model, DispatcherQueue ui, string? state) : ITraySender
+    {
+        public async Task<SendResult> AskAsync(int minutes, string? reason)
+        {
+            TrayLog.Write($"demo: ask {minutes} min, reason {reason ?? "(none)"}");
+            await Task.Delay(600);
+            if (state == "offline") return SendResult.Offline;
+            model.Update(For(state ?? "plenty") with { PendingMinutes = minutes });
+            var answer = ui.CreateTimer();
+            answer.Interval = TimeSpan.FromSeconds(3);
+            answer.IsRepeating = false;
+            answer.Tick += (_, _) =>
+            {
+                model.Update(For(state ?? "plenty"));
+                model.Answer($"Dad said yes! +{(minutes < 60 ? $"{minutes} min" : "1h")} 🎉", true);
+            };
+            answer.Start();
+            return SendResult.Sent;
+        }
+
+        public async Task<SendResult> MessageAsync(string? presetId, string text)
+        {
+            TrayLog.Write($"demo: message {presetId ?? "(own words)"}: {text}");
+            await Task.Delay(600);
+            return state == "offline" ? SendResult.Offline : SendResult.Sent;
+        }
     }
 }
