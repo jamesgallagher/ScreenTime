@@ -10,6 +10,7 @@
         <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
         <AssemblyName>ScreenTime.Tray</AssemblyName>
         <RootNamespace>ScreenTime.Tray</RootNamespace>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     </PropertyGroup>
 
     <ItemGroup>
