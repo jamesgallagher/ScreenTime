@@ -19,6 +19,7 @@
                     <SolidColorBrush x:Key="StSurfaceVariantBrush" Color="#EFEFEB" />
                     <SolidColorBrush x:Key="StOnSurfaceBrush" Color="#1C1917" />
                     <SolidColorBrush x:Key="StOnPrimaryBrush" Color="#FFFFFF" />
+                    <SolidColorBrush x:Key="StOnCriticalBrush" Color="#FFFFFF" />
                     <Color x:Key="SystemAccentColor">#0F766E</Color>
                     <Color x:Key="SystemAccentColorLight1">#14857C</Color>
                     <Color x:Key="SystemAccentColorLight2">#1A958B</Color>
@@ -34,6 +35,7 @@
                     <SolidColorBrush x:Key="StSurfaceVariantBrush" Color="#292524" />
                     <SolidColorBrush x:Key="StOnSurfaceBrush" Color="#F5F5F4" />
                     <SolidColorBrush x:Key="StOnPrimaryBrush" Color="#042F2E" />
+                    <SolidColorBrush x:Key="StOnCriticalBrush" Color="#1C1917" />
                     <Color x:Key="SystemAccentColor">#2DD4BF</Color>
                     <Color x:Key="SystemAccentColorLight1">#4CDCCA</Color>
                     <Color x:Key="SystemAccentColorLight2">#6BE3D4</Color>

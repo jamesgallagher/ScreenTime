@@ -57,7 +57,7 @@ public sealed partial class FlyoutWindow : Window
         _timer = DispatcherQueue.CreateTimer();
         _timer.Interval = TimeSpan.FromSeconds(1);
         _timer.Tick += (_, _) => Render();
-        // An answer shows for 4 s (§16.2).
+        // An answer shows for 4 s (§16.2), a caught card for 8 s (§14).
         _answerTimer = DispatcherQueue.CreateTimer();
         _answerTimer.Interval = TimeSpan.FromSeconds(4);
         _answerTimer.IsRepeating = false;
@@ -65,6 +65,7 @@ public sealed partial class FlyoutWindow : Window
         _model.Changed += Render;
         _model.AnswerReceived += ShowAnswer;
         _model.ParentModeRefused += ShowParentNo;
+        _model.CaughtReceived += ShowCaught;
         Render();
     }
 
@@ -394,13 +395,24 @@ public sealed partial class FlyoutWindow : Window
 
     // ---- Answers ----
 
-    private void ShowAnswer(string text, bool approved)
+    private void ShowAnswer(string text, bool approved) =>
+        ShowCard(text, approved ? "StPlentyBrush" : "StSurfaceVariantBrush", approved ? "StOnPrimaryBrush" : "StOnSurfaceBrush", 4);
+
+    /// <summary>The caught card (docs/SPEC.md §14): orange, on the main panel, for 8 s.</summary>
+    private void ShowCaught(string text)
+    {
+        ShowPanel(MainPanel);
+        ShowCard(text, "StCriticalBrush", "StOnCriticalBrush", 8);
+    }
+
+    private void ShowCard(string text, string background, string foreground, int seconds)
     {
         AnswerText.Text = text;
-        AnswerCard.Background = Brush(approved ? "StPlentyBrush" : "StSurfaceVariantBrush");
-        AnswerText.Foreground = Brush(approved ? "StOnPrimaryBrush" : "StOnSurfaceBrush");
+        AnswerCard.Background = Brush(background);
+        AnswerText.Foreground = Brush(foreground);
         AnswerCard.Visibility = Visibility.Visible;
         _answerTimer.Stop();
+        _answerTimer.Interval = TimeSpan.FromSeconds(seconds);
         _answerTimer.Start();
     }
 

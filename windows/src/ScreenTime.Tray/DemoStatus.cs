@@ -6,7 +6,7 @@ namespace ScreenTime.Tray;
 
 /// <summary>
 /// Fake statuses for <c>--demo [state]</c>, so the front end can be seen without the service. With a state name it
-/// shows that one; without, it moves through them all every 5 s and shows the toasts on the way. Its
+/// shows that one; without, it moves through them all every 5 s and shows the toasts (and one caught) on the way. Its
 /// <see cref="ITraySender"/> pretends to send: an ask waits 3 s and Dad says yes; parent mode is refused after 4 s but
 /// the code 123456 works; "offline" fails every send.
 /// </summary>
@@ -61,6 +61,7 @@ internal static class DemoStatus
                 case "critical": model.Toast("5 minutes left. Save your work."); break;
                 case "out": model.Toast("Out of Screens time. Ask Mum or Dad."); break;
                 case "plenty" when i > 1: model.Toast("Dad added 15 minutes"); break;
+                case "offline": model.Caught(); break;
             }
         }
         timer.Tick += (_, _) => Next();

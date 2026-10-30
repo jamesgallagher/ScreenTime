@@ -149,6 +149,17 @@ public static class TrayText
         return $"{h}:{minute:00} {(hour < 12 ? "am" : "pm")}";
     }
 
+    /// <summary>
+    /// The caught line after a tamper attempt (docs/SPEC.md §14), cheesy on purpose; <paramref name="turn"/> picks one
+    /// of the three, in order, round and round.
+    /// </summary>
+    public static string Caught(string kidName, int turn) => (((turn % 3) + 3) % 3) switch
+    {
+        0 => $"Nice try, Agent {kidName}! 🕵️ Mum and Dad have been told.",
+        1 => "Busted! 🚨 The Time Police have filed a report.",
+        _ => "Whoa there, hacker! 💻 This attempt has been sent to HQ (Mum and Dad).",
+    };
+
     /// <summary>"Dad", "Mum or Dad", "Mum, Dad or Nan" with <paramref name="word"/> "or"; "your parents" when there are none.</summary>
     public static string Parents(IReadOnlyList<string> names, string word) => names.Count switch
     {

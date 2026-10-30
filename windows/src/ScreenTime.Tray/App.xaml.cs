@@ -50,6 +50,12 @@ public partial class App : Application
         model.Changed += UpdateIcon;
         model.ToastRequested += toasts.Show;
         model.AnswerReceived += (text, _) => toasts.Show(text);
+        // Caught (docs/SPEC.md §14): a toast, and the flyout opens with the caught card.
+        model.CaughtReceived += text =>
+        {
+            toasts.Show(text);
+            ShowFlyoutNearTray(flyout);
+        };
         model.QuitRequested += () =>
         {
             TrayLog.Write("tray: exiting");
