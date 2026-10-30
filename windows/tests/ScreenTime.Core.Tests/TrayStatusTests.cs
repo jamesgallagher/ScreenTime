@@ -110,6 +110,16 @@ public class TrayStatusTests
     public void TimesAreTwelveHour(int hour, int minute, string expected) => Assert.Equal(expected, TrayText.Clock(hour, minute));
 
     [Fact]
+    public void TheCaughtLinesTakeTurns()
+    {
+        Assert.Equal("Nice try, Agent Alex! 🕵️ Mum and Dad have been told.", TrayText.Caught("Alex", 0));
+        Assert.Equal("Busted! 🚨 The Time Police have filed a report.", TrayText.Caught("Alex", 1));
+        Assert.Equal("Whoa there, hacker! 💻 This attempt has been sent to HQ (Mum and Dad).", TrayText.Caught("Alex", 2));
+        Assert.Equal(TrayText.Caught("Alex", 0), TrayText.Caught("Alex", 3));
+        Assert.Equal(TrayText.Caught("Alex", 2), TrayText.Caught("Alex", -1));
+    }
+
+    [Fact]
     public void AWaitingAskSaysWhoItWaitsFor()
     {
         Assert.Null(Open().WaitingText());
