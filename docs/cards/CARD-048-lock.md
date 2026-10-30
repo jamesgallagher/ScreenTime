@@ -346,10 +346,10 @@ One `LockKeeper` per kid session. The service calls it; it only decides. Its sta
 
 ```csharp
 public sealed record PipeMessage(string Type, string? Id = null, string? Text = null, int? Pid = null,
-    string? KidName = null, long? RemainingSec = null, bool? Locked = null, bool? Offline = null)
+    string? KidName = null, long? RemainingSec = null, [property: JsonPropertyName("locked")] bool? IsLocked = null, bool? Offline = null)
 ```
 
-The parameters stay in this order: it is the JSON order. Factories (static): `Lock(string id)`, `Locked(string id)`, `Toast(string text)`, `Hello(int pid)`, `Status(string kidName, long remainingSec, bool locked, bool offline)`, with the types `lock`, `locked`, `toast`, `hello` and `status`.
+The parameters stay in this order: it is the JSON order. The record parameter is called `IsLocked`, not `Locked`, because `Locked` would clash with the static factory `Locked(string id)` (error CS0102); `[property: JsonPropertyName("locked")]` keeps the JSON field `locked`. Factories (static): `Lock(string id)`, `Locked(string id)`, `Toast(string text)`, `Hello(int pid)`, `Status(string kidName, long remainingSec, bool locked, bool offline)`, with the types `lock`, `locked`, `toast`, `hello` and `status`.
 
 - `public static string Encode(PipeMessage message)`: one line, no newline at the end.
 - `public static PipeMessage? Decode(string line)`: null when the line is not a JSON object with a string `type` (catch `JsonException` only).
