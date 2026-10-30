@@ -11,6 +11,10 @@
         <AssemblyName>ScreenTime.Tray</AssemblyName>
         <RootNamespace>ScreenTime.Tray</RootNamespace>
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <ApplicationIcon>Assets\tray-dark-plenty.ico</ApplicationIcon>
+        <!-- The name Windows shows on the tray's toasts. -->
+        <AssemblyTitle>Screen Time</AssemblyTitle>
+        <Product>Screen Time</Product>
     </PropertyGroup>
 
     <ItemGroup>
@@ -19,6 +23,10 @@
 
     <ItemGroup>
         <ProjectReference Include="..\ScreenTime.Core\ScreenTime.Core.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <Content Include="Assets\*.ico" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
 
 </Project>
