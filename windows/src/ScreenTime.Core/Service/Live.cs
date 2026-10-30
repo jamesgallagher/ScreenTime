@@ -87,4 +87,24 @@ public static class Live
             return null;
         }
     }
+
+    /// <summary>The id of the grant a "yes" in a <c>request_resolved</c> frame added; null for anything else.</summary>
+    public static string? AnswerGrantId(string frame)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(frame);
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object) return null;
+            if (!root.TryGetProperty("type", out var type) || type.ValueKind != JsonValueKind.String || type.GetString() != "request_resolved") return null;
+            if (!root.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Object) return null;
+            if (!data.TryGetProperty("grant", out var grant) || grant.ValueKind != JsonValueKind.Object) return null;
+            if (!grant.TryGetProperty("id", out var id) || id.ValueKind != JsonValueKind.String) return null;
+            return id.GetString();
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
 }

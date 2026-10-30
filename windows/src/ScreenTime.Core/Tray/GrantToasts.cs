@@ -32,6 +32,9 @@ public sealed class GrantToasts
         return toasts;
     }
 
+    /// <summary>Never toasts this grant: the "Dad said yes!" answer already showed it.</summary>
+    public void Skip(string grantId) => _seen.Add(grantId);
+
     /// <summary>How the minutes read: "1 minute", "45 minutes", "1 hour", "1h 30m", "2h".</summary>
     private static string MinutesText(int minutes) => minutes switch
     {

@@ -55,7 +55,21 @@ switch (command)
             // --tray <path>: the tray exe. Without it, the one next to the service when it runs as a service; none in a console run.
             var trayExe = flags.TryGetValue("tray", out var tray) ? tray
                 : WindowsServiceHelpers.IsWindowsService() ? Path.Combine(AppContext.BaseDirectory, "ScreenTime.Tray.exe") : null;
-            builder.Services.AddSingleton(new ServiceOptions(dataFolder, secure, trayExe, dryLock, WindowsServiceHelpers.IsWindowsService()));
+            // Dev only, for runs over Remote Desktop: --session <id> treats that session as the console, and
+            // --tray-open <main|ask|message> opens the tray's flyout at once. Both need --dry-lock.
+            uint? session = null;
+            if (flags.TryGetValue("session", out var sessionText))
+            {
+                if (!uint.TryParse(sessionText, out var id)) { Console.Error.WriteLine("Usage: --session <session id>"); return 2; }
+                session = id;
+            }
+            flags.TryGetValue("tray-open", out var trayOpen);
+            if ((session is not null || trayOpen is not null) && !dryLock)
+            {
+                Console.Error.WriteLine("--session and --tray-open are for testing and need --dry-lock.");
+                return 2;
+            }
+            builder.Services.AddSingleton(new ServiceOptions(dataFolder, secure, trayExe, dryLock, WindowsServiceHelpers.IsWindowsService(), session, trayOpen));
             if (WindowsServiceHelpers.IsWindowsService())
             {
                 builder.Services.AddSingleton<IHostLifetime, SessionLifetime>();
