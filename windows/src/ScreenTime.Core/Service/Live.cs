@@ -63,4 +63,28 @@ public static class Live
             return false;
         }
     }
+
+    /// <summary>
+    /// The parent's answer in a <c>request_resolved</c> frame; null when the frame is not one (invalid JSON, another
+    /// type, or a missing <c>data</c> field).
+    /// </summary>
+    public static RequestAnswer? Answer(string frame)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(frame);
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object) return null;
+            if (!root.TryGetProperty("type", out var type) || type.ValueKind != JsonValueKind.String || type.GetString() != "request_resolved") return null;
+            if (!root.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Object) return null;
+            if (!data.TryGetProperty("approved", out var approved) || approved.ValueKind is not (JsonValueKind.True or JsonValueKind.False)) return null;
+            if (!data.TryGetProperty("minutes", out var minutes) || minutes.ValueKind != JsonValueKind.Number) return null;
+            if (!data.TryGetProperty("byName", out var byName) || byName.ValueKind != JsonValueKind.String) return null;
+            return new RequestAnswer(approved.ValueKind == JsonValueKind.True, minutes.GetInt32(), byName.GetString()!);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
 }

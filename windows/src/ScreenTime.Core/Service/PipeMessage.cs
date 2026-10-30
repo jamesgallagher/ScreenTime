@@ -9,7 +9,8 @@ namespace ScreenTime.Core.Service;
 /// JSON order.
 /// </summary>
 public sealed record PipeMessage(string Type, string? Id = null, string? Text = null, int? Pid = null,
-    string? KidName = null, long? RemainingSec = null, [property: JsonPropertyName("locked")] bool? IsLocked = null, bool? Offline = null, TrayStatus? View = null)
+    string? KidName = null, long? RemainingSec = null, [property: JsonPropertyName("locked")] bool? IsLocked = null, bool? Offline = null, TrayStatus? View = null,
+    int? Minutes = null, string? Reason = null, string? PresetId = null, SendResult? Result = null, bool? Approved = null)
 {
     /// <summary>Lock the PC now (service to tray).</summary>
     public static PipeMessage Lock(string id) => new("lock", Id: id);
@@ -29,6 +30,18 @@ public sealed record PipeMessage(string Type, string? Id = null, string? Text = 
 
     /// <summary>What the tray shows (service to tray, after every sync and on hello).</summary>
     public static PipeMessage ViewOf(TrayStatus status) => new("view", View: status);
+
+    /// <summary>Ask for more time (tray to service).</summary>
+    public static PipeMessage Ask(string id, int minutes, string? reason) => new("ask", Id: id, Minutes: minutes, Reason: reason);
+
+    /// <summary>A message to the parents (tray to service).</summary>
+    public static PipeMessage Message(string id, string? presetId, string text) => new("message", Id: id, Text: text, PresetId: presetId);
+
+    /// <summary>How the <c>ask</c> or <c>message</c> with this id went (service to tray).</summary>
+    public static PipeMessage Reply(string id, SendResult result) => new("reply", Id: id, Result: result);
+
+    /// <summary>A parent's answer, already worded (service to tray).</summary>
+    public static PipeMessage Answer(string text, bool approved) => new("answer", Text: text, Approved: approved);
 
     /// <summary>One line, no newline at the end.</summary>
     public static string Encode(PipeMessage message) => JsonSerializer.Serialize(message, PipeJsonContext.Default.PipeMessage);
