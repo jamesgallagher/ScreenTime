@@ -7,7 +7,8 @@ namespace ScreenTime.Tray;
 /// <summary>
 /// The tray (docs/SPEC.md §16.3): the icon, the flyout and the toasts, fed by the pipe to the service. The service
 /// starts it with <c>--pipe ScreenTime.&lt;sessionId&gt; [--dry-lock]</c>. <c>--demo [state]</c> shows fake statuses
-/// without the service; <c>--open [ask|message]</c> also opens the flyout at once, on that panel (for screenshots).
+/// without the service; <c>--open [ask|message]</c> also opens the flyout at once, on that panel, and keeps it open
+/// (for screenshots and test runs).
 /// </summary>
 public partial class App : Application
 {
@@ -73,8 +74,13 @@ public partial class App : Application
             _ = _pipe.RunAsync();
         }
         var openAt = Array.IndexOf(argv, "--open");
-        // Queued behind the demo's first status, which also arrives through the queue.
-        if (openAt >= 0) ui.TryEnqueue(() => ShowFlyoutNearTray(flyout, openAt + 1 < argv.Length ? argv[openAt + 1] : "main"));
+        // Queued behind the demo's first status, which also arrives through the queue. Pinned: it stays open when it
+        // loses focus, so a test run can press its buttons through UI Automation.
+        if (openAt >= 0)
+        {
+            flyout.Pinned = true;
+            ui.TryEnqueue(() => ShowFlyoutNearTray(flyout, openAt + 1 < argv.Length ? argv[openAt + 1] : "main"));
+        }
     }
 
     private void UpdateIcon()

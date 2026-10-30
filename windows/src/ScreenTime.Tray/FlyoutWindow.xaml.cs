@@ -49,7 +49,7 @@ public sealed partial class FlyoutWindow : Window
         };
         Activated += (_, e) =>
         {
-            if (e.WindowActivationState == WindowActivationState.Deactivated) Hide();
+            if (e.WindowActivationState == WindowActivationState.Deactivated && !Pinned) Hide();
         };
 
         // Counts down every second, only while the flyout is open.
@@ -67,6 +67,9 @@ public sealed partial class FlyoutWindow : Window
     }
 
     public bool IsOpen => AppWindow.IsVisible;
+
+    /// <summary>Stays open when it loses focus: only for <c>--open</c>, so a test run can press its buttons.</summary>
+    public bool Pinned { get; set; }
 
     /// <summary>Opens the flyout above the point the tray gave (physical pixels), or closes it when it is open.</summary>
     public void Toggle(int x, int y)
