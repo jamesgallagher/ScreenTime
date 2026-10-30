@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text;
 using System.Threading.Channels;
 using ScreenTime.Core.Api;
@@ -13,9 +14,10 @@ namespace ScreenTime.Service;
 
 /// <summary>
 /// The service's options: the data folder, whether it is the secure default, the tray exe (null: no tray), dry-lock
-/// (log instead of locking or disconnecting) and whether it runs as a Windows service.
+/// (log instead of locking or disconnecting) and whether it runs as a Windows service. <c>Session</c> and <c>TrayOpen</c>
+/// are for test runs (<c>--session</c>, <c>--tray-open</c>).
 /// </summary>
-public sealed record ServiceOptions(string DataFolder, bool SecureFolder, string? TrayExe, bool DryLock, bool AsService);
+public sealed record ServiceOptions(string DataFolder, bool SecureFolder, string? TrayExe, bool DryLock, bool AsService, uint? Session = null, string? TrayOpen = null);
 
 /// <summary>
 /// The service's worker: it opens the store, the clock and the config, starts the tracker, and runs four loops (session
@@ -33,6 +35,8 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
     private readonly SemaphoreSlim _sem = new(1, 1);
     private readonly Dictionary<string, (bool Online, long? SyncedAtMs)> _lastSync = new();
     private readonly Dictionary<string, GrantToasts> _grantToasts = new();
+    private readonly Dictionary<string, ApiClient> _apis = new();
+    private readonly ConcurrentQueue<(string Sid, string GrantId)> _skipGrants = new();
     private LocalStore _store = null!;
     private TrustedClock _clock = null!;
     private SessionTracker _tracker = null!;
@@ -81,7 +85,7 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
         {
             // Only closes what a crash left open: counting starts with the keeper's StartCounting.
             tracker.OnServiceStart(null, false, clock.NowMs());
-            var console = Win.WTSGetActiveConsoleSessionId();
+            var console = ConsoleSession();
             if (Win.SessionSid(console) is { } consoleSid)
             {
                 lastSid[console] = consoleSid;
@@ -109,7 +113,7 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
                     {
                         lastSid[e.SessionId] = sid;
                     }
-                    var isConsole = e.SessionId == Win.WTSGetActiveConsoleSessionId();
+                    var isConsole = e.SessionId == ConsoleSession();
                     await sem.WaitAsync(stoppingToken);
                     try
                     {
@@ -246,7 +250,7 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
         if (_sessions.TryGetValue(sessionId, out var existing)) return existing;
         if (_store.GetDevice(sid) is null) return null;
         var cts = CancellationTokenSource.CreateLinkedTokenSource(_stopping);
-        var tray = new TrayHost(sessionId, sid, options.TrayExe, options.DryLock, options.AsService, m => OnTrayMessage(sessionId, m), logger);
+        var tray = new TrayHost(sessionId, sid, options.TrayExe, options.DryLock, options.AsService, m => OnTrayMessage(sessionId, m), logger, options.TrayOpen);
         var s = new KidSession(sessionId, sid, tray, cts);
         _sessions[sessionId] = s;
         _ = tray.RunAsync(cts.Token);
@@ -311,6 +315,10 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
                     logger.LogInformation("tray {Session}: hello pid {Pid}", sessionId, m.Pid);
                     if (View(s.Sid, _clock.NowMs()) is { } view) await SendView(s, view);
                     break;
+                case "ask" or "message" when m.Id is not null && Api(s.Sid) is { } api:
+                    // The server call can take up to 30 s: it must not hold up the pipe or the lock loop.
+                    _ = Task.Run(() => SendForTray(s, api, m));
+                    break;
                 case "locked":
                     s.Keeper.OnLockConfirmed();
                     logger.LogInformation("tray {Session}: locked", sessionId);
@@ -323,6 +331,30 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
         }
     }
 
+    /// <summary>Sends the tray's ask or message to the server and replies with how it went.</summary>
+    private async Task SendForTray(KidSession s, ApiClient api, PipeMessage m)
+    {
+        SendResult result;
+        try
+        {
+            if (m.Type == "ask") await api.PostDeviceTimeRequestsAsync(new TimeRequestCreate(m.Id!, m.Minutes ?? 15, m.Reason), _stopping);
+            else await api.PostDeviceMessagesAsync(new KidMessageCreate(m.Id!, m.Text ?? "", m.PresetId), _stopping);
+            result = SendResult.Sent;
+        }
+        catch (OperationCanceledException) when (_stopping.IsCancellationRequested)
+        {
+            return;
+        }
+        catch (Exception e)
+        {
+            result = SendResults.Of(e);
+        }
+        logger.LogInformation("{Kid}: {Type} sent, {Result}", KidName(s.Sid), m.Type, result);
+        await s.Tray.SendAsync(PipeMessage.Reply(m.Id!, result));
+        // The new pendingRequest ("Waiting for Dad…") comes with the next sync.
+        if (result != SendResult.Offline) _syncRequests.Writer.TryWrite(s.Sid);
+    }
+
     private void StartLiveChannels()
     {
         var config = ServiceFiles.LoadConfig(_configPath);
@@ -331,10 +363,36 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
         {
             var sid = device.Sid;
             if (_live.TryGetValue(sid, out var running) && !running.IsCompleted) continue;
-            var channel = new LiveChannel(Live.Url(config.ServerUrl), () => Encoding.UTF8.GetString(Win.Unprotect(device.Token)), () => _syncRequests.Writer.TryWrite(sid), logger, device.KidName);
+            var channel = new LiveChannel(Live.Url(config.ServerUrl), () => Encoding.UTF8.GetString(Win.Unprotect(device.Token)), () => _syncRequests.Writer.TryWrite(sid), logger, device.KidName, frame => OnFrame(sid, frame));
             _live[sid] = Task.Run(() => channel.RunAsync(_stopping));
         }
     }
+
+    /// <summary>Every live frame: a parent's answer goes to the trays of that SID, and its grant is not toasted again.</summary>
+    private void OnFrame(string sid, string frame)
+    {
+        if (Live.AnswerGrantId(frame) is { } grantId) _skipGrants.Enqueue((sid, grantId));
+        if (Live.Answer(frame) is { } answer) _ = Task.Run(() => SendAnswer(sid, answer));
+    }
+
+    /// <summary>Logs the answer and sends it to every tray of the SID.</summary>
+    private async Task SendAnswer(string sid, RequestAnswer answer)
+    {
+        await _sem.WaitAsync();
+        try
+        {
+            var text = answer.Text();
+            logger.LogInformation("{Kid}: answer {Text}", KidName(sid), text);
+            foreach (var s in _sessions.Values.Where(s => s.Sid == sid).ToList()) await s.Tray.SendAsync(PipeMessage.Answer(text, answer.Approved));
+        }
+        finally
+        {
+            _sem.Release();
+        }
+    }
+
+    /// <summary>The session that counts as the console: <c>--session</c> in a test run, otherwise the real console.</summary>
+    private uint ConsoleSession() => options.Session ?? Win.WTSGetActiveConsoleSessionId();
 
     private string KidName(string sid) => _store.GetDevice(sid)?.KidName ?? sid;
 
@@ -361,14 +419,25 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
         await s.Tray.SendAsync(PipeMessage.Toast(text));
     }
 
+    /// <summary>The API client for the SID, made once; null when it is not enrolled.</summary>
+    private ApiClient? Api(string sid)
+    {
+        if (_apis.TryGetValue(sid, out var api)) return api;
+        var device = _store.GetDevice(sid);
+        var config = ServiceFiles.LoadConfig(_configPath);
+        if (device is null || config is null) return null;
+        api = new ApiClient(new HttpClient { BaseAddress = new Uri(config.ServerUrl), Timeout = TimeSpan.FromSeconds(30) }, () => Encoding.UTF8.GetString(Win.Unprotect(device.Token)));
+        _apis[sid] = api;
+        return api;
+    }
+
     private async Task SyncAccount(string sid, CancellationToken ct)
     {
         var device = _store.GetDevice(sid);
         var config = ServiceFiles.LoadConfig(_configPath);
-        if (device is null || config is null) return;
+        if (device is null || config is null || Api(sid) is not { } api) return;
         if (!_syncers.TryGetValue(sid, out var syncer))
         {
-            var api = new ApiClient(new HttpClient { BaseAddress = new Uri(config.ServerUrl), Timeout = TimeSpan.FromSeconds(30) }, () => Encoding.UTF8.GetString(Win.Unprotect(device.Token)));
             syncer = new Syncer(api, _store, sid, _clock, m => logger.LogWarning("{Sid}: {Message}", sid, m));
             _syncers[sid] = syncer;
         }
@@ -382,6 +451,11 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
             var now = _clock.NowMs();
             var result = Engine.Evaluate(TodayInput.For(c.State, _store.SegmentsSince(sid, TodayInput.DayStartMs(c.State, now)), now));
             logger.LogInformation("{Kid}: {Minutes} min left, locked {Locked}", device.KidName, result.RemainingSec / 60, result.Locked);
+            while (_skipGrants.TryDequeue(out var skip))
+            {
+                if (!_grantToasts.TryGetValue(skip.Sid, out var skipper)) _grantToasts[skip.Sid] = skipper = new GrantToasts();
+                skipper.Skip(skip.GrantId);
+            }
             if (!_grantToasts.TryGetValue(sid, out var grants)) _grantToasts[sid] = grants = new GrantToasts();
             var toasts = synced ? grants.Check(c.State) : [];
             var view = View(sid, now)!;

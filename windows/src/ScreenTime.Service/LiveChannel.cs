@@ -9,7 +9,7 @@ namespace ScreenTime.Service;
 /// The live channel of one enrolled account (docs/SPEC.md §8.3, §10): a WebSocket to <c>/v1/device/ws</c> that only asks
 /// for syncs. It never syncs itself and never touches the store.
 /// </summary>
-public sealed class LiveChannel(string url, Func<string> token, Action requestSync, ILogger logger, string kidName)
+public sealed class LiveChannel(string url, Func<string> token, Action requestSync, ILogger logger, string kidName, Action<string> onFrame)
 {
     private static readonly TimeSpan ConnectTimeout = TimeSpan.FromSeconds(15);
     private static readonly TimeSpan PingEvery = TimeSpan.FromSeconds(30);
@@ -117,9 +117,11 @@ public sealed class LiveChannel(string url, Func<string> token, Action requestSy
                 logger.LogInformation("live {Kid}: closed {Code}", kidName, (int?)result.CloseStatus);
                 return $"closed {(int?)result.CloseStatus}";
             }
-            if (result.MessageType == WebSocketMessageType.Text && Live.AsksForSync(Encoding.UTF8.GetString(message.GetBuffer(), 0, (int)message.Length)))
+            if (result.MessageType == WebSocketMessageType.Text)
             {
-                requestSync();
+                var text = Encoding.UTF8.GetString(message.GetBuffer(), 0, (int)message.Length);
+                onFrame(text);
+                if (Live.AsksForSync(text)) requestSync();
             }
         }
         return "not open";

@@ -1,18 +1,23 @@
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.IO.Pipes;
 using System.Runtime.InteropServices;
 using System.Text;
 using ScreenTime.Core.Service;
+using ScreenTime.Core.Tray;
 
 namespace ScreenTime.Tray;
 
 /// <summary>
 /// The tray's end of the pipe to the service (docs/SPEC.md §12.2): says hello, locks the PC when asked and confirms it,
-/// passes toasts to the <see cref="TrayModel"/> and logs status lines. Reconnects for ever.
+/// passes toasts, views and answers to the <see cref="TrayModel"/>, and sends asks and messages for it (<see cref="ITraySender"/>). Reconnects for ever.
 /// </summary>
-internal sealed partial class TrayPipe(string pipeName, bool dryLock, TrayModel model, Action<string> log)
+internal sealed partial class TrayPipe(string pipeName, bool dryLock, TrayModel model, Action<string> log) : ITraySender
 {
     private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
+    private readonly SemaphoreSlim _write = new(1, 1);
+    private readonly ConcurrentDictionary<string, TaskCompletionSource<SendResult>> _waiting = new();
+    private StreamWriter? _writer;
 
     [LibraryImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -20,6 +25,7 @@ internal sealed partial class TrayPipe(string pipeName, bool dryLock, TrayModel 
 
     public async Task RunAsync()
     {
+        model.Sender = this;
         var lastSeen = Environment.TickCount64;
         while (true)
         {
@@ -31,7 +37,8 @@ internal sealed partial class TrayPipe(string pipeName, bool dryLock, TrayModel 
                 lastSeen = Environment.TickCount64;
                 using var reader = new StreamReader(pipe, Utf8, detectEncodingFromByteOrderMarks: false, bufferSize: 1024, leaveOpen: true);
                 using var writer = new StreamWriter(pipe, Utf8, bufferSize: 1024, leaveOpen: true);
-                await SendAsync(writer, PipeMessage.Hello(Environment.ProcessId));
+                _writer = writer;
+                await SendAsync(PipeMessage.Hello(Environment.ProcessId));
                 while (await reader.ReadLineAsync() is { } line)
                 {
                     var message = PipeMessage.Decode(line);
@@ -51,7 +58,7 @@ internal sealed partial class TrayPipe(string pipeName, bool dryLock, TrayModel 
                                 log($"lock: failed {Marshal.GetLastPInvokeError()}");
                                 break;
                             }
-                            await SendAsync(writer, PipeMessage.Locked(message.Id ?? ""));
+                            await SendAsync(PipeMessage.Locked(message.Id ?? ""));
                             break;
                         case "toast":
                             model.Toast(message.Text ?? "");
@@ -63,6 +70,14 @@ internal sealed partial class TrayPipe(string pipeName, bool dryLock, TrayModel 
                                 model.Update(view);
                             }
                             break;
+                        case "reply":
+                            log($"reply: {message.Result}");
+                            if (message.Id is { } id && _waiting.TryRemove(id, out var waiting)) waiting.TrySetResult(message.Result ?? SendResult.Offline);
+                            break;
+                        case "answer":
+                            log($"answer: {message.Text}");
+                            model.Answer(message.Text ?? "", message.Approved == true);
+                            break;
                         case "status":
                             log($"status: {message.RemainingSec / 60} min left, locked {message.IsLocked}, offline {message.Offline}");
                             break;
@@ -70,12 +85,14 @@ internal sealed partial class TrayPipe(string pipeName, bool dryLock, TrayModel 
                 }
                 log("pipe: closed");
                 lastSeen = Environment.TickCount64;
+                Disconnected();
             }
             catch (TimeoutException) { }
             catch (IOException)
             {
                 log("pipe: closed");
                 lastSeen = Environment.TickCount64;
+                Disconnected();
             }
             if (Environment.TickCount64 - lastSeen >= 30_000)
             {
@@ -87,10 +104,49 @@ internal sealed partial class TrayPipe(string pipeName, bool dryLock, TrayModel 
         }
     }
 
-    private static async Task SendAsync(StreamWriter writer, PipeMessage message)
+    /// <summary>"Ask for more time" through the service; Offline when the pipe is down or no reply comes.</summary>
+    public Task<SendResult> AskAsync(int minutes, string? reason) => RequestAsync(PipeMessage.Ask(Guid.NewGuid().ToString(), minutes, reason));
+
+    /// <summary>A message to the parents through the service; Offline when the pipe is down or no reply comes.</summary>
+    public Task<SendResult> MessageAsync(string? presetId, string text) => RequestAsync(PipeMessage.Message(Guid.NewGuid().ToString(), presetId, text));
+
+    private async Task<SendResult> RequestAsync(PipeMessage message)
     {
-        await writer.WriteAsync(PipeMessage.Encode(message) + "\n");
-        await writer.FlushAsync();
+        var waiting = new TaskCompletionSource<SendResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _waiting[message.Id!] = waiting;
+        if (!await SendAsync(message)) waiting.TrySetResult(SendResult.Offline);
+        // The service gives up on the server after 30 s; 40 s here covers that.
+        var done = await Task.WhenAny(waiting.Task, Task.Delay(40_000));
+        _waiting.TryRemove(message.Id!, out _);
+        return done == waiting.Task ? waiting.Task.Result : SendResult.Offline;
+    }
+
+    /// <summary>Writes one line to the service; false when the pipe is down. One writer at a time.</summary>
+    private async Task<bool> SendAsync(PipeMessage message)
+    {
+        await _write.WaitAsync();
+        try
+        {
+            if (_writer is not { } writer) return false;
+            await writer.WriteAsync(PipeMessage.Encode(message) + "\n");
+            await writer.FlushAsync();
+            return true;
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+        finally
+        {
+            _write.Release();
+        }
+    }
+
+    /// <summary>The pipe closed: nothing can be sent, and every waiting ask or message is Offline.</summary>
+    private void Disconnected()
+    {
+        _writer = null;
+        foreach (var id in _waiting.Keys) if (_waiting.TryRemove(id, out var waiting)) waiting.TrySetResult(SendResult.Offline);
     }
 }
 
