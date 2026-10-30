@@ -28,7 +28,13 @@ internal sealed class TrayModel(DispatcherQueue ui)
     /// <summary>A parent answered the kid's ask: the text, and whether it was a yes (UI thread).</summary>
     public event Action<string, bool>? AnswerReceived;
 
-    /// <summary>Sends asks and messages; set by the pipe (or the demo) before the flyout opens.</summary>
+    /// <summary>A parent said no to parent mode: "Dad said no." (UI thread).</summary>
+    public event Action<string>? ParentModeRefused;
+
+    /// <summary>Called by the pipe when a parent says no to the kid's parent mode request.</summary>
+    public void ParentModeNo(string text) => ui.TryEnqueue(() => ParentModeRefused?.Invoke(text));
+
+    /// <summary>Sends asks, messages and parent mode; set by the pipe (or the demo) before the flyout opens.</summary>
     public ITraySender? Sender { get; set; }
 
     /// <summary>Called by the pipe on every <c>answer</c> message: "Dad said yes! +30 min 🎉" or "Dad said not this time".</summary>

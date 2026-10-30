@@ -47,7 +47,9 @@
                         Content="Ask for more time" IsEnabled="False" Click="OnAsk" />
                 <Button x:Name="MessageButton" HorizontalAlignment="Stretch" MinHeight="40" CornerRadius="20"
                         Content="Message your parents" IsEnabled="False" Click="OnMessage" />
-                <HyperlinkButton x:Name="ParentButton" Content="I'm the parent" Padding="0,6" Margin="0,4,0,0" IsEnabled="False" />
+                <Button x:Name="EndNowButton" Style="{StaticResource AccentButtonStyle}" HorizontalAlignment="Stretch" MinHeight="40" CornerRadius="20"
+                        Content="End now" Visibility="Collapsed" Click="OnEndNow" />
+                <HyperlinkButton x:Name="ParentButton" Content="I'm the parent" Padding="0,6" Margin="0,4,0,0" IsEnabled="False" Click="OnParent" />
             </StackPanel>
 
             <Border Grid.Row="3" BorderThickness="0,1,0,0" BorderBrush="{ThemeResource StOutlineBrush}" Padding="0,10,0,0">
@@ -116,6 +118,62 @@
             <TextBlock x:Name="MessageError" Grid.Row="3" FontSize="14" TextWrapping="Wrap" Foreground="{ThemeResource StCriticalBrush}" Visibility="Collapsed" />
             <Button x:Name="MessageSend" Grid.Row="4" Style="{StaticResource AccentButtonStyle}" HorizontalAlignment="Stretch" MinHeight="44" CornerRadius="22"
                     Content="Send" IsEnabled="False" Margin="0,0,0,6" Click="OnMessageSend" />
+        </Grid>
+
+        <!-- I'm the parent (docs/SPEC.md §12.3): ask the parents, or the parent code, then how long. -->
+        <Grid x:Name="ParentPanel" Visibility="Collapsed" RowSpacing="12">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Click="OnBack" Padding="6" Background="Transparent" BorderThickness="0" ToolTipService.ToolTip="Back">
+                    <FontIcon Glyph="&#xE72B;" FontSize="14" />
+                </Button>
+                <TextBlock x:Name="ParentTitle" Text="Hand to a parent" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center" />
+            </StackPanel>
+
+            <!-- 1. Waiting for a parent's yes -->
+            <Grid x:Name="ParentWaitPart" Grid.Row="1">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,8,0,0">
+                    <ProgressRing x:Name="ParentSpinner" Width="20" Height="20" IsActive="True" />
+                    <TextBlock x:Name="ParentWaitText" FontSize="14" TextWrapping="Wrap" MaxWidth="260" VerticalAlignment="Center" />
+                </StackPanel>
+                <Button Grid.Row="2" x:Name="CodeInsteadButton" HorizontalAlignment="Stretch" MinHeight="44" CornerRadius="22"
+                        Content="Enter parent code instead" Margin="0,0,0,6" Click="OnCodeInstead" />
+            </Grid>
+
+            <!-- 2. The parent code -->
+            <Grid x:Name="ParentCodePart" Grid.Row="1" Visibility="Collapsed" RowSpacing="12">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <TextBlock Text="Type the 6 numbers from the Screen Time app on a parent's phone." FontSize="14" TextWrapping="Wrap" />
+                <TextBox x:Name="CodeBox" Grid.Row="1" MaxLength="6" FontSize="32" CharacterSpacing="400" TextAlignment="Center"
+                         InputScope="Number" PlaceholderText="······" TextChanged="OnCodeChanged" />
+                <TextBlock x:Name="CodeError" Grid.Row="2" FontSize="14" TextWrapping="Wrap" Foreground="{ThemeResource StCriticalBrush}"
+                           Text="That's not the code. Try the one on the phone now." Visibility="Collapsed" />
+                <Button Grid.Row="4" x:Name="CodeCheck" Style="{StaticResource AccentButtonStyle}" HorizontalAlignment="Stretch" MinHeight="44" CornerRadius="22"
+                        Content="Check" IsEnabled="False" Margin="0,0,0,6" Click="OnCodeCheck" />
+            </Grid>
+
+            <!-- 3. How long? A tap starts parent mode. -->
+            <StackPanel x:Name="ParentDurationPart" Grid.Row="1" Visibility="Collapsed" Spacing="8">
+                <Button Content="2 min" Tag="2" HorizontalAlignment="Stretch" MinHeight="44" CornerRadius="22" Click="OnDuration" />
+                <Button Content="5 min" Tag="5" HorizontalAlignment="Stretch" MinHeight="44" CornerRadius="22" Click="OnDuration" />
+                <Button Content="15 min" Tag="15" HorizontalAlignment="Stretch" MinHeight="44" CornerRadius="22" Click="OnDuration" />
+                <Button Content="1 hour" Tag="60" HorizontalAlignment="Stretch" MinHeight="44" CornerRadius="22" Click="OnDuration" />
+                <Button Content="Until I end it" Tag="" HorizontalAlignment="Stretch" MinHeight="44" CornerRadius="22" Click="OnDuration" />
+            </StackPanel>
         </Grid>
     </Grid>
 </Window>

@@ -7,7 +7,8 @@ namespace ScreenTime.Tray;
 /// <summary>
 /// Fake statuses for <c>--demo [state]</c>, so the front end can be seen without the service. With a state name it
 /// shows that one; without, it moves through them all every 5 s and shows the toasts on the way. Its
-/// <see cref="ITraySender"/> pretends to send: an ask waits 3 s and Dad says yes; "offline" fails every send.
+/// <see cref="ITraySender"/> pretends to send: an ask waits 3 s and Dad says yes; parent mode is refused after 4 s but
+/// the code 123456 works; "offline" fails every send.
 /// </summary>
 internal static class DemoStatus
 {
@@ -92,6 +93,43 @@ internal static class DemoStatus
             TrayLog.Write($"demo: message {presetId ?? "(own words)"}: {text}");
             await Task.Delay(600);
             return state == "offline" ? SendResult.Offline : SendResult.Sent;
+        }
+
+        /// <summary>Dad says no after 4 s; "offline" cannot reach anyone. The code is 123456.</summary>
+        public async Task<SendResult> RequestParentModeAsync()
+        {
+            TrayLog.Write("demo: parent mode asked");
+            await Task.Delay(600);
+            if (state == "offline") return SendResult.Offline;
+            var answer = ui.CreateTimer();
+            answer.Interval = TimeSpan.FromSeconds(4);
+            answer.IsRepeating = false;
+            answer.Tick += (_, _) => model.ParentModeNo("Dad said no.");
+            answer.Start();
+            return SendResult.Sent;
+        }
+
+        public async Task<bool> CheckParentCodeAsync(string code)
+        {
+            TrayLog.Write($"demo: code {code}");
+            await Task.Delay(300);
+            return code == "123456";
+        }
+
+        public async Task<bool> StartParentModeAsync(int? minutes)
+        {
+            TrayLog.Write($"demo: parent mode for {minutes?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "until ended"}");
+            await Task.Delay(300);
+            model.Update(For("parent") with { ParentModeEnds = minutes is null ? null : "4:15 pm" });
+            return true;
+        }
+
+        public async Task<bool> EndParentModeAsync()
+        {
+            TrayLog.Write("demo: parent mode ended");
+            await Task.Delay(300);
+            model.Update(For(state is null or "parent" ? "plenty" : state));
+            return true;
         }
     }
 }
