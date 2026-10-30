@@ -11,7 +11,7 @@ Ordered list of small cards. Each card is one pull request with one concern. The
 5. Cards are written a few at a time, just ahead of Bob, so later cards can use what earlier ones taught us.
 6. **UI is Claude's.** When a card has a user interface, Claude builds the front end first, in its own PR merged to `main`: the screens sit behind a small, named seam (a view model or interface) with fake data, so they build and run on their own, and Claude checks them on screen. The card then gives Bob the logic behind the seam, and lists the front-end files Bob must not change. A tiny piece of UI (one toast or dialog) may instead be a copied file in the card.
 
-Rules for sizing: a card should touch one area, change roughly 100 to 500 lines, and be checkable with commands. Anything bigger is split.
+Rules for sizing (James, 30 Oct 2026): a card is one whole feature, changing roughly 200 to 1,000 lines: its logic with the tests, its wiring and its run on a device, together. It must be checkable with commands. Claude rehearses every card before Bob gets it (the tests pass against a throwaway implementation, and the device run is done once with it), so a bigger card stays safe. Bob has about 400k tokens of context. Anything bigger than one feature is split.
 
 Legend: **Size** S (under an hour for Bob), M (a session), L (split if possible). **James** = needs James's hands (hardware, accounts, installs).
 
