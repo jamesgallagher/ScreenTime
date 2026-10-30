@@ -37,6 +37,8 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
     private readonly Dictionary<string, GrantToasts> _grantToasts = new();
     private readonly Dictionary<string, ApiClient> _apis = new();
     private readonly ConcurrentQueue<(string Sid, string GrantId)> _skipGrants = new();
+    private readonly Dictionary<string, LocalParentMode> _parentLocal = new();
+    private readonly Dictionary<string, string> _parentAsks = new();
     private LocalStore _store = null!;
     private TrustedClock _clock = null!;
     private SessionTracker _tracker = null!;
@@ -53,6 +55,9 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
         public bool Unlocked { get; set; }
         public WarningTracker Warnings { get; } = new();
         public bool? SentLocked { get; set; }
+        public bool? SentParentMode { get; set; }
+        public bool InParentMode { get; set; }
+        public long? CodeOkAt { get; set; }
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -162,12 +167,15 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
                     try
                     {
                         var now = clock.NowMs();
-                        foreach (var s in _sessions.Values.Where(s => s.Unlocked).ToList())
+                        foreach (var s in _sessions.Values.Where(s => s.Unlocked || s.InParentMode).ToList())
                         {
-                            await Apply(s, s.Keeper.Check(OutOfTime(s.Sid, now), now), now);
+                            var parentMode = ParentModeOn(s.Sid, now);
+                            if (s.Unlocked && parentMode) EnterParentMode(s, now);
+                            else if (s.InParentMode && !parentMode) LeaveParentMode(s);
+                            if (s.Unlocked) await Apply(s, s.Keeper.Check(OutOfTime(s.Sid, now), now), now);
                             if (View(s.Sid, now) is not { } view) continue;
                             if (s.Warnings.Check(view) is { } warning) await SendToast(s, warning);
-                            if (s.SentLocked != view.Locked) await SendView(s, view);
+                            if (s.SentLocked != view.Locked || s.SentParentMode != view.ParentMode) await SendView(s, view);
                         }
                     }
                     finally
@@ -222,6 +230,7 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
                 if (_sessions.TryGetValue(e.SessionId, out var s))
                 {
                     s.Unlocked = false;
+                    s.InParentMode = false;
                     s.Keeper.OnLocked();
                     if (e.Change == SessionChange.Logoff)
                     {
@@ -235,6 +244,7 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
                 foreach (var each in _sessions.Values)
                 {
                     each.Unlocked = false;
+                    each.InParentMode = false;
                     each.Keeper.OnLocked();
                 }
                 break;
@@ -260,16 +270,50 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
     private void Unlock(KidSession s)
     {
         var now = _clock.NowMs();
+        // Unlocked during parent mode: nothing counts and nothing locks until it ends (§12.3).
+        if (ParentModeOn(s.Sid, now))
+        {
+            s.InParentMode = true;
+            return;
+        }
         s.Unlocked = true;
         // Only StartCounting or Toast: neither waits on the pipe for long.
         _ = Apply(s, s.Keeper.OnUnlock(OutOfTime(s.Sid, now), now), now);
     }
 
+    /// <summary>Parent mode started while the session is in use: stop counting, as at a lock, and stop locking.</summary>
+    private void EnterParentMode(KidSession s, long now)
+    {
+        s.Unlocked = false;
+        s.InParentMode = true;
+        s.Keeper.OnLocked();
+        logger.LogInformation("{Kid}: parent mode on, not counting", KidName(s.Sid));
+        foreach (var sid in _tracker.OnChange(SessionChange.Lock, s.Sid, true, now)) _syncRequests.Writer.TryWrite(sid);
+    }
+
+    /// <summary>Parent mode ended: the session counts (or locks) again as if it had just been unlocked.</summary>
+    private void LeaveParentMode(KidSession s)
+    {
+        s.InParentMode = false;
+        logger.LogInformation("{Kid}: parent mode over", KidName(s.Sid));
+        if (Win.SessionUnlocked(s.SessionId)) Unlock(s);
+    }
+
+    /// <summary>The cached snapshot with parent mode as it is now (this PC's code session and End now included).</summary>
+    private DeviceState? StateNow(string sid, long now) =>
+        _store.LoadState(sid) is { } c ? ParentModes.Effective(c.State, Local(sid), now) : null;
+
+    /// <summary>What this PC did about parent mode for the SID; nothing yet when it did nothing.</summary>
+    private LocalParentMode Local(string sid) => _parentLocal.GetValueOrDefault(sid) ?? new LocalParentMode();
+
+    /// <summary>Whether parent mode is on for the SID now.</summary>
+    private bool ParentModeOn(string sid, long now) => StateNow(sid, now) is { } state && LockKeeper.ParentModeOn(state, now);
+
     private bool OutOfTime(string sid, long now)
     {
-        if (_store.LoadState(sid) is not { } c) return false;
-        var result = Engine.Evaluate(TodayInput.For(c.State, _store.SegmentsSince(sid, TodayInput.DayStartMs(c.State, now)), now));
-        return LockKeeper.OutOfTime(result, c.State, now);
+        if (StateNow(sid, now) is not { } state) return false;
+        var result = Engine.Evaluate(TodayInput.For(state, _store.SegmentsSince(sid, TodayInput.DayStartMs(state, now)), now));
+        return LockKeeper.OutOfTime(result, state, now);
     }
 
     private async Task Apply(KidSession s, IReadOnlyList<LockStep> steps, long now)
@@ -318,6 +362,41 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
                 case "ask" or "message" when m.Id is not null && Api(s.Sid) is { } api:
                     // The server call can take up to 30 s: it must not hold up the pipe or the lock loop.
                     _ = Task.Run(() => SendForTray(s, api, m));
+                    break;
+                case "parent-ask" when m.Id is not null && Api(s.Sid) is { } api:
+                    _parentAsks[s.Sid] = m.Id;
+                    _ = Task.Run(() => AskParents(s, api, m.Id));
+                    break;
+                case "parent-code" when m.Id is not null:
+                    {
+                        // The service checks the code: the family secret never goes to the tray (the kid's process).
+                        var now = _clock.NowMs();
+                        var right = _store.LoadState(s.Sid) is { } c && Totp.Ok(c.State.Family.ParentCodeSecret, m.Text ?? "", now);
+                        s.CodeOkAt = right ? now : null;
+                        logger.LogInformation("{Kid}: parent code {Right}", KidName(s.Sid), right ? "right" : "wrong");
+                        await s.Tray.SendAsync(PipeMessage.Done(m.Id, right));
+                        break;
+                    }
+                case "parent-start" when m.Id is not null:
+                    {
+                        // Only within 2 minutes of a right code: "How long?" comes straight after it.
+                        var now = _clock.NowMs();
+                        var ok = s.CodeOkAt is { } at && now - at <= 120_000;
+                        if (ok)
+                        {
+                            s.CodeOkAt = null;
+                            _parentLocal[s.Sid] = Local(s.Sid) with { Code = new CodeSession(Guid.NewGuid().ToString(), m.Minutes, now) };
+                            logger.LogInformation("{Kid}: parent mode on by code, {Minutes} min", KidName(s.Sid), m.Minutes?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "until ended");
+                            _syncRequests.Writer.TryWrite(s.Sid);
+                        }
+                        await s.Tray.SendAsync(PipeMessage.Done(m.Id, ok));
+                        break;
+                    }
+                case "parent-end" when m.Id is not null:
+                    _parentLocal[s.Sid] = Local(s.Sid) with { EndedAtMs = _clock.NowMs(), EndReported = false };
+                    logger.LogInformation("{Kid}: parent mode ended on this PC", KidName(s.Sid));
+                    await s.Tray.SendAsync(PipeMessage.Done(m.Id, true));
+                    _syncRequests.Writer.TryWrite(s.Sid);
                     break;
                 case "locked":
                     s.Keeper.OnLockConfirmed();
@@ -373,7 +452,96 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
     {
         if (Live.AnswerGrantId(frame) is { } grantId) _skipGrants.Enqueue((sid, grantId));
         if (Live.Answer(frame) is { } answer) _ = Task.Run(() => SendAnswer(sid, answer));
+        if (Live.ParentModeAnswer(frame) is { Active: false, RequestId: { } requestId } no) _ = Task.Run(() => SendParentNo(sid, requestId, no.ByName));
     }
+
+    /// <summary>"I'm the parent": asks every parent through the server and replies with how it went.</summary>
+    private async Task AskParents(KidSession s, ApiClient api, string id)
+    {
+        SendResult result;
+        try
+        {
+            await api.PostDeviceParentModeRequestsAsync(new ParentModeRequestCreate(id), _stopping);
+            result = SendResult.Sent;
+        }
+        catch (OperationCanceledException) when (_stopping.IsCancellationRequested)
+        {
+            return;
+        }
+        catch (Exception e)
+        {
+            // A 409 means parent mode is already on, which is what the kid wanted.
+            result = SendResults.Of(e);
+        }
+        logger.LogInformation("{Kid}: parent ask sent, {Result}", KidName(s.Sid), result);
+        await s.Tray.SendAsync(PipeMessage.Reply(id, result));
+    }
+
+    /// <summary>A parent said no to this PC's latest "I'm the parent": "Dad said no." to its trays.</summary>
+    private async Task SendParentNo(string sid, string requestId, string? byName)
+    {
+        await _sem.WaitAsync();
+        try
+        {
+            if (!_parentAsks.TryGetValue(sid, out var asked) || asked != requestId) return;
+            var names = _store.LoadState(sid)?.State.Parents.Select(p => p.DisplayName).ToList() ?? [];
+            var text = ParentModes.NoText(byName, names);
+            logger.LogInformation("{Kid}: parent mode {Text}", KidName(sid), text);
+            foreach (var s in _sessions.Values.Where(s => s.Sid == sid).ToList()) await s.Tray.SendAsync(PipeMessage.ParentNo(text));
+        }
+        finally
+        {
+            _sem.Release();
+        }
+    }
+
+    /// <summary>
+    /// Sends what the server does not have yet, before each sync: a code session, then an End now (§12.3). Any answer
+    /// from the server counts as sent; without a connection it stays for the next sync.
+    /// </summary>
+    private async Task ReportParentMode(string sid, ApiClient api, CancellationToken ct)
+    {
+        var local = Local(sid);
+        if (!local.Pending) return;
+        if (local.Code is { ReportedAtMs: null } code
+            && await Delivered(() => api.PostDeviceParentModeAsync(new ParentModeByCode(code.Id, code.DurationMin, Iso(code.StartedAtMs)), ct), ct))
+        {
+            local = local with { Code = code with { ReportedAtMs = _clock.NowMs() } };
+            logger.LogInformation("{Kid}: parent mode reported", KidName(sid));
+        }
+        if (!local.EndReported && await Delivered(() => api.PostDeviceParentModeEndAsync(ct), ct))
+        {
+            local = local with { EndReported = true };
+            logger.LogInformation("{Kid}: End now reported", KidName(sid));
+        }
+        _parentLocal[sid] = local;
+    }
+
+    /// <summary>True when the server answered (even with an error: sending again would get the same answer).</summary>
+    private static async Task<bool> Delivered(Func<Task> send, CancellationToken ct)
+    {
+        try
+        {
+            await send();
+            return true;
+        }
+        catch (ApiException)
+        {
+            return true;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>An instant as the API writes it: UTC, milliseconds, Z.</summary>
+    private static string Iso(long ms) =>
+        DateTimeOffset.FromUnixTimeMilliseconds(ms).UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", System.Globalization.CultureInfo.InvariantCulture);
 
     /// <summary>Logs the answer and sends it to every tray of the SID.</summary>
     private async Task SendAnswer(string sid, RequestAnswer answer)
@@ -399,16 +567,17 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
     /// <summary>What the tray shows for the SID now, or null when nothing is cached for it.</summary>
     private TrayStatus? View(string sid, long now)
     {
-        if (_store.LoadState(sid) is not { } c) return null;
-        var result = Engine.Evaluate(TodayInput.For(c.State, _store.SegmentsSince(sid, TodayInput.DayStartMs(c.State, now)), now));
+        if (StateNow(sid, now) is not { } state) return null;
+        var result = Engine.Evaluate(TodayInput.For(state, _store.SegmentsSince(sid, TodayInput.DayStartMs(state, now)), now));
         var last = _lastSync.GetValueOrDefault(sid, (true, null));
-        return TrayStatusBuilder.From(c.State, result, now, last.Online, last.SyncedAtMs);
+        return TrayStatusBuilder.From(state, result, now, last.Online, last.SyncedAtMs);
     }
 
-    /// <summary>Sends <paramref name="view"/> to the session's tray and remembers whether it said locked.</summary>
+    /// <summary>Sends <paramref name="view"/> to the session's tray and remembers whether it said locked or parent mode.</summary>
     private async Task SendView(KidSession s, TrayStatus view)
     {
         s.SentLocked = view.Locked;
+        s.SentParentMode = view.ParentMode;
         await s.Tray.SendAsync(PipeMessage.ViewOf(view));
     }
 
@@ -441,6 +610,7 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
             syncer = new Syncer(api, _store, sid, _clock, m => logger.LogWarning("{Sid}: {Message}", sid, m));
             _syncers[sid] = syncer;
         }
+        await ReportParentMode(sid, api, ct);
         var synced = await syncer.SyncAsync(ct);
         if (!synced) _tracker.MarkOffline(sid);
         var previous = _lastSync.GetValueOrDefault(sid, (true, null));

@@ -78,6 +78,14 @@ internal sealed partial class TrayPipe(string pipeName, bool dryLock, TrayModel 
                             log($"answer: {message.Text}");
                             model.Answer(message.Text ?? "", message.Approved == true);
                             break;
+                        case "done":
+                            log($"done: {(message.Approved == true ? "yes" : "no")}");
+                            if (message.Id is { } doneId && _waiting.TryRemove(doneId, out var done)) done.TrySetResult(message.Approved == true ? SendResult.Sent : SendResult.Offline);
+                            break;
+                        case "parent-no":
+                            log($"parent-no: {message.Text}");
+                            model.ParentModeNo(message.Text ?? "");
+                            break;
                         case "status":
                             log($"status: {message.RemainingSec / 60} min left, locked {message.IsLocked}, offline {message.Offline}");
                             break;
@@ -109,6 +117,21 @@ internal sealed partial class TrayPipe(string pipeName, bool dryLock, TrayModel 
 
     /// <summary>A message to the parents through the service; Offline when the pipe is down or no reply comes.</summary>
     public Task<SendResult> MessageAsync(string? presetId, string text) => RequestAsync(PipeMessage.Message(Guid.NewGuid().ToString(), presetId, text));
+
+    /// <summary>"I'm the parent" through the service; Offline when the pipe is down or no reply comes.</summary>
+    public Task<SendResult> RequestParentModeAsync() => RequestAsync(PipeMessage.ParentAsk(Guid.NewGuid().ToString()));
+
+    /// <summary>Whether the service says this is the parent code now; no when the pipe is down.</summary>
+    public async Task<bool> CheckParentCodeAsync(string code) =>
+        await RequestAsync(PipeMessage.ParentCode(Guid.NewGuid().ToString(), code)) == SendResult.Sent;
+
+    /// <summary>Starts parent mode after a right code; no when the code is too old or the pipe is down.</summary>
+    public async Task<bool> StartParentModeAsync(int? minutes) =>
+        await RequestAsync(PipeMessage.ParentStart(Guid.NewGuid().ToString(), minutes)) == SendResult.Sent;
+
+    /// <summary>End now; no when the pipe is down.</summary>
+    public async Task<bool> EndParentModeAsync() =>
+        await RequestAsync(PipeMessage.ParentEnd(Guid.NewGuid().ToString())) == SendResult.Sent;
 
     private async Task<SendResult> RequestAsync(PipeMessage message)
     {
