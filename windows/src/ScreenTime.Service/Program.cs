@@ -56,7 +56,8 @@ switch (command)
             var trayExe = flags.TryGetValue("tray", out var tray) ? tray
                 : WindowsServiceHelpers.IsWindowsService() ? Path.Combine(AppContext.BaseDirectory, "ScreenTime.Tray.exe") : null;
             // Dev only, for runs over Remote Desktop: --session <id> treats that session as the console, and
-            // --tray-open <main|ask|message> opens the tray's flyout at once. Both need --dry-lock.
+            // --tray-open <panel> opens the tray's flyout at once; --fake-clock-file and --fake-timezone-file read the wall
+            // clock's offset (minutes) and the time zone id from a file, to try tamper detection. All need --dry-lock.
             uint? session = null;
             if (flags.TryGetValue("session", out var sessionText))
             {
@@ -64,12 +65,14 @@ switch (command)
                 session = id;
             }
             flags.TryGetValue("tray-open", out var trayOpen);
-            if ((session is not null || trayOpen is not null) && !dryLock)
+            flags.TryGetValue("fake-clock-file", out var fakeClock);
+            flags.TryGetValue("fake-timezone-file", out var fakeZone);
+            if ((session is not null || trayOpen is not null || fakeClock is not null || fakeZone is not null) && !dryLock)
             {
-                Console.Error.WriteLine("--session and --tray-open are for testing and need --dry-lock.");
+                Console.Error.WriteLine("--session, --tray-open, --fake-clock-file and --fake-timezone-file are for testing and need --dry-lock.");
                 return 2;
             }
-            builder.Services.AddSingleton(new ServiceOptions(dataFolder, secure, trayExe, dryLock, WindowsServiceHelpers.IsWindowsService(), session, trayOpen));
+            builder.Services.AddSingleton(new ServiceOptions(dataFolder, secure, trayExe, dryLock, WindowsServiceHelpers.IsWindowsService(), session, trayOpen, fakeClock, fakeZone));
             if (WindowsServiceHelpers.IsWindowsService())
             {
                 builder.Services.AddSingleton<IHostLifetime, SessionLifetime>();

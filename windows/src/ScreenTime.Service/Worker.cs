@@ -15,9 +15,10 @@ namespace ScreenTime.Service;
 /// <summary>
 /// The service's options: the data folder, whether it is the secure default, the tray exe (null: no tray), dry-lock
 /// (log instead of locking or disconnecting) and whether it runs as a Windows service. <c>Session</c> and <c>TrayOpen</c>
-/// are for test runs (<c>--session</c>, <c>--tray-open</c>).
+/// are for test runs (<c>--session</c>, <c>--tray-open</c>). <c>FakeClockFile</c> and <c>FakeTimezoneFile</c> are for test runs too.
 /// </summary>
-public sealed record ServiceOptions(string DataFolder, bool SecureFolder, string? TrayExe, bool DryLock, bool AsService, uint? Session = null, string? TrayOpen = null);
+public sealed record ServiceOptions(string DataFolder, bool SecureFolder, string? TrayExe, bool DryLock, bool AsService, uint? Session = null,
+    string? TrayOpen = null, string? FakeClockFile = null, string? FakeTimezoneFile = null);
 
 /// <summary>
 /// The service's worker: it opens the store, the clock and the config, starts the tracker, and runs four loops (session
@@ -39,6 +40,8 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
     private readonly ConcurrentQueue<(string Sid, string GrantId)> _skipGrants = new();
     private readonly Dictionary<string, LocalParentMode> _parentLocal = new();
     private readonly Dictionary<string, string> _parentAsks = new();
+    private readonly ClockWatch _clockWatch = new();
+    private readonly TimeZoneWatch _zoneWatch = new();
     private LocalStore _store = null!;
     private TrustedClock _clock = null!;
     private SessionTracker _tracker = null!;
@@ -58,6 +61,8 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
         public bool? SentParentMode { get; set; }
         public bool InParentMode { get; set; }
         public long? CodeOkAt { get; set; }
+        public TrayKillWatch TrayKills { get; } = new();
+        public bool CaughtPending { get; set; }
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -167,6 +172,7 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
                     try
                     {
                         var now = clock.NowMs();
+                        await CheckTamper(now);
                         foreach (var s in _sessions.Values.Where(s => s.Unlocked || s.InParentMode).ToList())
                         {
                             var parentMode = ParentModeOn(s.Sid, now);
@@ -260,7 +266,7 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
         if (_sessions.TryGetValue(sessionId, out var existing)) return existing;
         if (_store.GetDevice(sid) is null) return null;
         var cts = CancellationTokenSource.CreateLinkedTokenSource(_stopping);
-        var tray = new TrayHost(sessionId, sid, options.TrayExe, options.DryLock, options.AsService, m => OnTrayMessage(sessionId, m), logger, options.TrayOpen);
+        var tray = new TrayHost(sessionId, sid, options.TrayExe, options.DryLock, options.AsService, m => OnTrayMessage(sessionId, m), logger, options.TrayOpen, () => OnTrayExit(sessionId));
         var s = new KidSession(sessionId, sid, tray, cts);
         _sessions[sessionId] = s;
         _ = tray.RunAsync(cts.Token);
@@ -303,8 +309,87 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
     private DeviceState? StateNow(string sid, long now) =>
         _store.LoadState(sid) is { } c ? ParentModes.Effective(c.State, Local(sid), now) : null;
 
-    /// <summary>What this PC did about parent mode for the SID; nothing yet when it did nothing.</summary>
-    private LocalParentMode Local(string sid) => _parentLocal.GetValueOrDefault(sid) ?? new LocalParentMode();
+    /// <summary>What this PC did about parent mode for the SID; after a restart, read back from the store (CARD-051).</summary>
+    private LocalParentMode Local(string sid)
+    {
+        if (!_parentLocal.TryGetValue(sid, out var local))
+        {
+            local = ParentModeJson.Decode(_store.GetValue(sid, "parent-mode"));
+            _parentLocal[sid] = local;
+        }
+        return local;
+    }
+
+    /// <summary>Keeps what this PC did about parent mode, in memory and in the store, so a restart keeps it.</summary>
+    private void SetLocal(string sid, LocalParentMode local)
+    {
+        _parentLocal[sid] = local;
+        _store.SetValue(sid, "parent-mode", ParentModeJson.Encode(local));
+    }
+
+    /// <summary>The wall clock, moved by <c>--fake-clock-file</c> minutes in a test run.</summary>
+    private long WallMs() => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + FakeMinutes(options.FakeClockFile) * 60_000L;
+
+    private static long FakeMinutes(string? file) =>
+        file is not null && File.Exists(file) && long.TryParse(File.ReadAllText(file).Trim(), out var minutes) ? minutes : 0;
+
+    /// <summary>The PC's time zone id, or the one in <c>--fake-timezone-file</c> in a test run.</summary>
+    private string ZoneId()
+    {
+        if (options.FakeTimezoneFile is { } file && File.Exists(file)) return File.ReadAllText(file).Trim();
+        TimeZoneInfo.ClearCachedData();
+        return TimeZoneInfo.Local.Id;
+    }
+
+    /// <summary>Every second: the wall clock against trusted time, and the time zone (docs/SPEC.md §14).</summary>
+    private async Task CheckTamper(long now)
+    {
+        if (_clockWatch.Check(WallMs(), now, _clock.IsAnchored, Guid.NewGuid().ToString()) is { } clock) await ReportTamper(clock);
+        if (_zoneWatch.Check(ZoneId(), now, Guid.NewGuid().ToString()) is { } zone) await ReportTamper(zone);
+    }
+
+    /// <summary>A machine-wide attempt (clock, time zone): queued for every enrolled account, and caught in every tray.</summary>
+    private async Task ReportTamper(DeviceEventIn e)
+    {
+        foreach (var device in _store.Devices()) Queue(device.Sid, e with { Id = Guid.NewGuid().ToString() });
+        foreach (var s in _sessions.Values.ToList()) await s.Tray.SendAsync(PipeMessage.Caught());
+    }
+
+    /// <summary>The tray of a session exited: three times in 10 minutes is an attempt, caught when the tray is back.</summary>
+    private void OnTrayExit(uint sessionId) => _ = Task.Run(async () =>
+    {
+        await _sem.WaitAsync();
+        try
+        {
+            if (!_sessions.TryGetValue(sessionId, out var s)) return;
+            if (s.TrayKills.OnExit(_clock.NowMs(), Guid.NewGuid().ToString()) is not { } e) return;
+            Queue(s.Sid, e);
+            s.CaughtPending = true;
+        }
+        finally
+        {
+            _sem.Release();
+        }
+    });
+
+    /// <summary>Puts a tamper event in the account's outbox (sent before the next sync, again until the server has it).</summary>
+    private void Queue(string sid, DeviceEventIn e)
+    {
+        _store.Enqueue(sid, "event", TamperEvents.Encode(e), _clock.NowMs());
+        logger.LogWarning("{Kid}: tamper {Kind}", KidName(sid), e.Kind);
+        _syncRequests.Writer.TryWrite(sid);
+    }
+
+    /// <summary>Sends the account's queued tamper events (docs/SPEC.md §14): any answer from the server counts as sent.</summary>
+    private async Task ReportEvents(string sid, ApiClient api, CancellationToken ct)
+    {
+        var items = _store.PeekOutbox(sid, 50).Where(i => i.Kind == "event").ToList();
+        if (items.Count == 0) return;
+        var events = items.Select(i => TamperEvents.Decode(i.Body)).OfType<DeviceEventIn>().ToList();
+        if (!await Delivered(() => api.PostDeviceEventsAsync(new DeviceEventUpload(events), ct), ct)) return;
+        foreach (var item in items) _store.RemoveOutbox(item.Id);
+        logger.LogInformation("{Kid}: {Count} tamper events sent", KidName(sid), events.Count);
+    }
 
     /// <summary>Whether parent mode is on for the SID now.</summary>
     private bool ParentModeOn(string sid, long now) => StateNow(sid, now) is { } state && LockKeeper.ParentModeOn(state, now);
@@ -358,6 +443,12 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
                 case "hello":
                     logger.LogInformation("tray {Session}: hello pid {Pid}", sessionId, m.Pid);
                     if (View(s.Sid, _clock.NowMs()) is { } view) await SendView(s, view);
+                    // A tray killed three times was dead when it was caught: it hears it now.
+                    if (s.CaughtPending)
+                    {
+                        s.CaughtPending = false;
+                        await s.Tray.SendAsync(PipeMessage.Caught());
+                    }
                     break;
                 case "ask" or "message" when m.Id is not null && Api(s.Sid) is { } api:
                     // The server call can take up to 30 s: it must not hold up the pipe or the lock loop.
@@ -385,7 +476,7 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
                         if (ok)
                         {
                             s.CodeOkAt = null;
-                            _parentLocal[s.Sid] = Local(s.Sid) with { Code = new CodeSession(Guid.NewGuid().ToString(), m.Minutes, now) };
+                            SetLocal(s.Sid, Local(s.Sid) with { Code = new CodeSession(Guid.NewGuid().ToString(), m.Minutes, now) });
                             logger.LogInformation("{Kid}: parent mode on by code, {Minutes} min", KidName(s.Sid), m.Minutes?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "until ended");
                             _syncRequests.Writer.TryWrite(s.Sid);
                         }
@@ -393,7 +484,7 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
                         break;
                     }
                 case "parent-end" when m.Id is not null:
-                    _parentLocal[s.Sid] = Local(s.Sid) with { EndedAtMs = _clock.NowMs(), EndReported = false };
+                    SetLocal(s.Sid, Local(s.Sid) with { EndedAtMs = _clock.NowMs(), EndReported = false });
                     logger.LogInformation("{Kid}: parent mode ended on this PC", KidName(s.Sid));
                     await s.Tray.SendAsync(PipeMessage.Done(m.Id, true));
                     _syncRequests.Writer.TryWrite(s.Sid);
@@ -514,7 +605,7 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
             local = local with { EndReported = true };
             logger.LogInformation("{Kid}: End now reported", KidName(sid));
         }
-        _parentLocal[sid] = local;
+        SetLocal(sid, local);
     }
 
     /// <summary>True when the server answered (even with an error: sending again would get the same answer).</summary>
@@ -611,6 +702,7 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
             _syncers[sid] = syncer;
         }
         await ReportParentMode(sid, api, ct);
+        await ReportEvents(sid, api, ct);
         var synced = await syncer.SyncAsync(ct);
         if (!synced) _tracker.MarkOffline(sid);
         var previous = _lastSync.GetValueOrDefault(sid, (true, null));

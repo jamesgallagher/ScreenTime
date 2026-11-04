@@ -59,6 +59,15 @@ CREATE TABLE outbox (
 CREATE INDEX outbox_sid_id ON outbox (sid, id);
 """;
 
+    private const string KvSql = """
+CREATE TABLE IF NOT EXISTS kv (
+    sid    TEXT NOT NULL,
+    key    TEXT NOT NULL,
+    value  TEXT NOT NULL,
+    PRIMARY KEY (sid, key)
+);
+""";
+
     private readonly SqliteConnection _connection;
     private readonly object _lock = new();
     private readonly int _schemaVersion;
@@ -93,6 +102,12 @@ CREATE INDEX outbox_sid_id ON outbox (sid, id);
         else if (version != 1)
         {
             throw new InvalidOperationException($"state.db has schema version {version}; this app knows 1.");
+        }
+        // Added in CARD-051 without a version bump: an older store gets it on its next open.
+        using (var cmd = _connection.CreateCommand())
+        {
+            cmd.CommandText = KvSql;
+            cmd.ExecuteNonQuery();
         }
         _schemaVersion = version;
     }
@@ -419,6 +434,46 @@ ON CONFLICT(id) DO UPDATE SET
             cmd.CommandText = "DELETE FROM outbox WHERE id = $id";
             cmd.Parameters.AddWithValue("$id", id);
             cmd.ExecuteNonQuery();
+        }
+    }
+
+    /// <summary>The account's key-value value, or null when absent.</summary>
+    public string? GetValue(string sid, string key)
+    {
+        lock (_lock)
+        {
+            using var cmd = _connection.CreateCommand();
+            cmd.CommandText = "SELECT value FROM kv WHERE sid = $sid AND key = $key";
+            cmd.Parameters.AddWithValue("$sid", sid);
+            cmd.Parameters.AddWithValue("$key", key);
+            using var reader = cmd.ExecuteReader();
+            if (!reader.Read()) return null;
+            return reader.GetString(0);
+        }
+    }
+
+    /// <summary>Sets the account's key-value value; null deletes the row.</summary>
+    public void SetValue(string sid, string key, string? value)
+    {
+        lock (_lock)
+        {
+            if (value is null)
+            {
+                using var cmd = _connection.CreateCommand();
+                cmd.CommandText = "DELETE FROM kv WHERE sid = $sid AND key = $key";
+                cmd.Parameters.AddWithValue("$sid", sid);
+                cmd.Parameters.AddWithValue("$key", key);
+                cmd.ExecuteNonQuery();
+            }
+            else
+            {
+                using var cmd = _connection.CreateCommand();
+                cmd.CommandText = "INSERT INTO kv (sid, key, value) VALUES ($sid, $key, $value) ON CONFLICT (sid, key) DO UPDATE SET value = excluded.value";
+                cmd.Parameters.AddWithValue("$sid", sid);
+                cmd.Parameters.AddWithValue("$key", key);
+                cmd.Parameters.AddWithValue("$value", value);
+                cmd.ExecuteNonQuery();
+            }
         }
     }
 

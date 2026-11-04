@@ -61,6 +61,9 @@ public sealed record PipeMessage(string Type, string? Id = null, string? Text = 
     /// <summary>"Dad said no." (service to tray).</summary>
     public static PipeMessage ParentNo(string text) => new("parent-no", Text: text);
 
+    /// <summary>A tamper attempt was caught: the tray shows the caught toast and card (service to tray).</summary>
+    public static PipeMessage Caught() => new("caught");
+
     /// <summary>One line, no newline at the end.</summary>
     public static string Encode(PipeMessage message) => JsonSerializer.Serialize(message, PipeJsonContext.Default.PipeMessage);
 

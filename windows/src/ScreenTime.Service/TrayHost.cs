@@ -12,7 +12,7 @@ namespace ScreenTime.Service;
 /// The tray of one kid session (docs/SPEC.md §12.2): the named pipe <c>ScreenTime.&lt;sessionId&gt;</c> with JSON lines,
 /// and, when <c>trayExe</c> is set, a loop that starts the tray in the session and starts it again when it exits.
 /// </summary>
-public sealed class TrayHost(uint sessionId, string kidSid, string? trayExe, bool dryLock, bool asService, Func<PipeMessage, Task> onMessage, ILogger logger, string? trayOpen = null)
+public sealed class TrayHost(uint sessionId, string kidSid, string? trayExe, bool dryLock, bool asService, Func<PipeMessage, Task> onMessage, ILogger logger, string? trayOpen = null, Action? onTrayExit = null)
 {
     private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
     private readonly SemaphoreSlim _write = new(1, 1);
@@ -119,6 +119,7 @@ public sealed class TrayHost(uint sessionId, string kidSid, string? trayExe, boo
                 }
                 catch (ArgumentException) { }
                 logger.LogInformation("tray {Session}: exited, starting again", sessionId);
+                onTrayExit?.Invoke();
                 await Task.Delay(TimeSpan.FromSeconds(1), ct);
             }
         }
