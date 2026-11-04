@@ -43,3 +43,6 @@ windows/**/obj/
 *.user
 *.suo
 *.msi
+
+# The installer build (windows/installer/build-msi.ps1)
+windows/out/

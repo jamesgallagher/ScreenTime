@@ -52,9 +52,10 @@ switch (command)
             var builder = Host.CreateApplicationBuilder(args);
             builder.Services.AddWindowsService(o => o.ServiceName = "ScreenTime");
             builder.Services.AddSingleton<SessionEvents>();
-            // --tray <path>: the tray exe. Without it, the one next to the service when it runs as a service; none in a console run.
+            // --tray <path>: the tray exe. Without it, Tray\ScreenTime.Tray.exe next to the service when it runs as a service (the
+            // installer's layout); none in a console run.
             var trayExe = flags.TryGetValue("tray", out var tray) ? tray
-                : WindowsServiceHelpers.IsWindowsService() ? Path.Combine(AppContext.BaseDirectory, "ScreenTime.Tray.exe") : null;
+                : WindowsServiceHelpers.IsWindowsService() ? Path.Combine(AppContext.BaseDirectory, "Tray", "ScreenTime.Tray.exe") : null;
             // Dev only, for runs over Remote Desktop: --session <id> treats that session as the console, and
             // --tray-open <panel> opens the tray's flyout at once; --fake-clock-file and --fake-timezone-file read the wall
             // clock's offset (minutes) and the time zone id from a file, to try tamper detection. All need --dry-lock.
@@ -114,6 +115,24 @@ switch (command)
                 return 1;
             }
             catch (Exception e)
+            {
+                Console.Error.WriteLine(e.Message);
+                return 1;
+            }
+        }
+    case "harden":
+    case "unharden":
+    case "harden-check":
+        {
+            // The installer runs harden (install) and unharden (uninstall) as administrator (docs/SPEC.md §12.2).
+            try
+            {
+                if (command == "harden") Hardening.TakeTimeZoneRight();
+                if (command == "unharden") Hardening.GiveTimeZoneRight();
+                Console.WriteLine($"Users can change the time zone: {(Hardening.UsersHaveTimeZoneRight() ? "yes" : "no")}");
+                return 0;
+            }
+            catch (InvalidOperationException e)
             {
                 Console.Error.WriteLine(e.Message);
                 return 1;
