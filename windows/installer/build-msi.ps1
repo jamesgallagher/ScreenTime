@@ -1,4 +1,4 @@
-# Builds the Screen Time MSI (docs/SPEC.md Â§12.2): publishes the service as native AOT and the tray self-contained,
+# Builds the Screen Time MSI (docs/SPEC.md §12.2): publishes the service as native AOT and the tray self-contained,
 # then builds src\ScreenTime.Installer. Run from windows\. CI's "installer" job runs it; native AOT needs the
 # "Desktop development with C++" tools, which GitHub's Windows runners have.
 #   -Version 0.1.7     the MSI's version (CI passes 0.1.<run number>)

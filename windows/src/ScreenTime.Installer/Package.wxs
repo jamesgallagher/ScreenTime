@@ -1,6 +1,6 @@
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
   <!--
-    Screen Time for Windows (docs/SPEC.md Â§12.2). Installs the service and the tray to Program Files\ScreenTime,
+    Screen Time for Windows (docs/SPEC.md §12.2). Installs the service and the tray to Program Files\ScreenTime,
     registers the service (automatic, LocalSystem, restart on failure after 0, 5 and 30 s, also in Safe Mode), and
     takes the "Change the time zone" right from the Users group ("ScreenTime.Service.exe harden"). Uninstalling
     removes all of it and gives the right back. Enrolling the kids' accounts is a separate step (the setup app, or
@@ -54,7 +54,7 @@
     </Component>
 
     <!--
-      Restart on failure after 0, 5 and 30 s (Â§12.2). MSI's own ServiceConfigFailureActions is documented not to work,
+      Restart on failure after 0, 5 and 30 s (§12.2). MSI's own ServiceConfigFailureActions is documented not to work,
       and WiX's util:ServiceConfig has one delay only, so sc.exe sets them, as SYSTEM, once the service is installed.
     -->
     <StandardDirectory Id="System64Folder" />

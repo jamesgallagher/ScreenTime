@@ -1,7 +1,7 @@
 <Project Sdk="WixToolset.Sdk/5.0.2">
 
     <!--
-      The Screen Time MSI (docs/SPEC.md Â§12.2). Built by windows/installer/build-msi.ps1 (CI's "installer" job), which
+      The Screen Time MSI (docs/SPEC.md §12.2). Built by windows/installer/build-msi.ps1 (CI's "installer" job), which
       publishes the service (native AOT) and the tray (self-contained) first and passes their folders in.
     -->
     <PropertyGroup>

@@ -4,7 +4,7 @@ using System.Security.Principal;
 namespace ScreenTime.Service;
 
 /// <summary>
-/// Hardening at install (docs/SPEC.md Â§12.2): kids must not change the PC's time zone. Windows gives the "Change the
+/// Hardening at install (docs/SPEC.md §12.2): kids must not change the PC's time zone. Windows gives the "Change the
 /// time zone" right (<c>SeTimeZonePrivilege</c>) to the Users group, so it is taken from Users; parents keep it as
 /// Administrators. Needs administrator rights (the installer runs it). Uninstalling gives it back.
 /// </summary>
