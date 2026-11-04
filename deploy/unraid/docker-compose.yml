@@ -37,9 +37,9 @@ services:
       SMTP_FROM_NAME: ${SMTP_FROM_NAME:-}
       FIREBASE_SERVICE_ACCOUNT_JSON: ${FIREBASE_SERVICE_ACCOUNT_JSON:-}
     ports:
-      # Only on Docker's bridge, where the cloudflared container reaches it (http://172.17.0.1:8086). Not on the
-      # LAN: everyone, at home or not, comes through https://screentime.gallagherhome.au.
-      - "172.17.0.1:8086:8080"
+      # Bridge networking, published on Unraid's port 8086: the tunnel route sends screentime.gallagherhome.au to
+      # http://192.168.0.148:8086. Port 8080 on Unraid belongs to qBittorrent.
+      - "8086:8080"
     depends_on:
       db:
         condition: service_healthy

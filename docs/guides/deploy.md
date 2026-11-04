@@ -6,8 +6,8 @@ How it fits together:
 
 - **The image** `ghcr.io/jamesgallagher/screentime-server` is built by GitHub Actions (`.github/workflows/server-image.yml`) on every push to `main` that changes the server, the web app or what they use. It is tagged `latest` and with the commit. Unraid pulls it; nothing is built on Unraid.
 - **The stack** lives in `/mnt/user/appdata/screentime/`: `docker-compose.yml`, `backup.sh` (both from `deploy/unraid/` in the repo) and `.env` (secrets, only on the server). Three containers: `db` (PostgreSQL 18, data in `/mnt/user/appdata/screentime/postgres`), `api`, and `backup`.
-- **The API listens only on Docker's bridge**, `172.17.0.1:8086`. The `cloudflared` container (on that bridge) reaches it there; the LAN does not. Port 8080 on Unraid belongs to qBittorrent.
-- **The tunnel route** `screentime.gallagherhome.au` → `http://172.17.0.1:8086` is set in the Cloudflare dashboard. Do **not** put Cloudflare Access in front of it: kid devices sign in with their own tokens on `/v1/*`.
+- **The API is published on Unraid's port 8086** (bridge networking, `8086:8080`). Port 8080 on Unraid belongs to qBittorrent.
+- **The tunnel route** `screentime.gallagherhome.au` → `http://192.168.0.148:8086` is set in the Cloudflare dashboard (it already exists). Do **not** put Cloudflare Access in front of it: kid devices sign in with their own tokens on `/v1/*`.
 - **Backups:** the `backup` container runs `pg_dump` every night at 02:30 (Sydney) into `/mnt/user/Backup/screentime/`, keeping 30 days.
 
 All commands below run on the Unraid server over SSH (`ssh root@192.168.0.148`) unless they say otherwise.
@@ -52,7 +52,7 @@ Then fill in, with `nano .env`:
 cd /mnt/user/appdata/screentime
 docker compose pull && docker compose up -d --wait
 docker compose ps
-curl -s http://172.17.0.1:8086/health
+curl -s http://localhost:8086/health
 docker compose logs api | grep "database migrations applied"
 ```
 
@@ -67,7 +67,7 @@ In the Cloudflare dashboard: **Zero Trust**, **Networks**, **Tunnels**, the tunn
 | Subdomain | `screentime` |
 | Domain | `gallagherhome.au` |
 | Path | (empty) |
-| Service | `HTTP` `172.17.0.1:8086` |
+| Service | `HTTP` `192.168.0.148:8086` |
 
 Saving it also makes the DNS record. Check from any PC: `curl https://screentime.gallagherhome.au/health`.
 
@@ -107,6 +107,6 @@ The `backup` container logs each one: `docker compose logs backup`. Files are `/
 ## Looking after it
 
 - **Logs:** `docker compose logs -f api` (sign-ins, enrolments, errors).
-- **Health:** `curl -s http://172.17.0.1:8086/health` on Unraid, or https://screentime.gallagherhome.au/health from anywhere. Uptime Kuma (already on Unraid) can watch the public one.
+- **Health:** `curl -s http://localhost:8086/health` on Unraid, or https://screentime.gallagherhome.au/health from anywhere. Uptime Kuma (already on Unraid) can watch the public one.
 - **A shell in the database:** `docker compose exec db psql -U screentime`.
 - **Stop or start everything:** `docker compose stop` / `docker compose up -d --wait`. `docker compose down` is fine too; the data is in `postgres/`, not in a Docker volume. Never delete that folder.
