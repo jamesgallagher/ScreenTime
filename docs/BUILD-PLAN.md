@@ -106,7 +106,8 @@ Spikes come early on purpose: Device Owner + Lock Task on the real phones, and a
 | 050c | Parent mode logic: TOTP parent code, code sessions and the effective snapshot, `parent_mode` answers, parent pipe lines (front end by Claude, PR #136) | 019, 050b | M | | 12.3, 16.3 |
 | 050d | Parent mode wiring: the service checks the code, keeps and reports code sessions and End now, stops counting during parent mode, relays answers; the tray pipe implements the parent calls; run | 050c | M | | 12.3, 16.3 |
 | 051 | Tamper detection (clock, time zone, tray killed) with the caught toast and card, the events outbox, and parent mode kept across a service restart (front end by Claude, PR #142) | 021, 050d | L | | 12.2, 14 |
-| 052 | Installer (WiX MSI), with the hardening that needs admin: remove "Change the time zone" (`SeTimeZonePrivilege`) from kid accounts, register for Safe Mode | 051 | L | | 12.2 |
+| 052 | Installer: WiX MSI built in CI (native AOT service), service registration with restart and Safe Mode, the time zone right taken from Users (`harden`), tried in Windows Sandbox | 051 | L | | 12.2 |
+| 052b | Setup app (front end by Claude): server address, the PC's standard accounts, an enrolment code each; run after the MSI | 052 | L | | 12.2 |
 
 ## Phase 6: deploy and rollout
 
