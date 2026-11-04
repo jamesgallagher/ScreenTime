@@ -144,6 +144,7 @@ Also decided in research (22 Oct 2026): the tech stack in section 4, the sync de
 - Web app at `/`, API at `/v1/*`, health at `/health`, device WebSocket at `/v1/device/ws`.
 - Cloudflare Access must **not** be put in front of `/v1/*`, because devices authenticate with their own tokens.
 - Nightly `pg_dump` to an Unraid share.
+- As built (CARD-053, `docs/guides/deploy.md`): GitHub Actions publishes `ghcr.io/jamesgallagher/screentime-server` (`latest` and the commit) on every push to `main`; Unraid runs `deploy/unraid/docker-compose.yml` from `/mnt/user/appdata/screentime/` with the database in `appdata/screentime/postgres`. The API listens only on Docker's bridge (`172.17.0.1:8086`), which the existing `cloudflared` container routes `screentime.gallagherhome.au` to. A `backup` container dumps the database at 02:30 Sydney time to `/mnt/user/Backup/screentime/` and keeps 30 days.
 - Firebase project `screentime-d307c` (free Spark plan) provides FCM for both Android apps. The service account JSON is passed as `FIREBASE_SERVICE_ACCOUNT_JSON`; `google-services.json` files are never committed.
 
 ## 5. Repository layout
