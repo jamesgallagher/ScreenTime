@@ -1,6 +1,7 @@
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using ScreenTime.Core.Tray;
+using ScreenTime.Tray.Setup;
 
 namespace ScreenTime.Tray;
 
@@ -8,7 +9,7 @@ namespace ScreenTime.Tray;
 /// The tray (docs/SPEC.md §16.3): the icon, the flyout and the toasts, fed by the pipe to the service. The service
 /// starts it with <c>--pipe ScreenTime.&lt;sessionId&gt; [--dry-lock]</c>. <c>--demo [state]</c> shows fake statuses
 /// without the service; <c>--open [ask|message|parent]</c> also opens the flyout at once, on that panel, and keeps it open
-/// (for screenshots and test runs).
+/// (for screenshots and test runs). <c>--setup [--demo]</c> shows the setup window instead (docs/SPEC.md §12.2).
 /// </summary>
 public partial class App : Application
 {
@@ -26,8 +27,17 @@ public partial class App : Application
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
         var argv = Environment.GetCommandLineArgs();
-        var pipeAt = Array.IndexOf(argv, "--pipe");
         var demoAt = Array.IndexOf(argv, "--demo");
+        // --setup: the setup window after the MSI (docs/SPEC.md §12.2), not the tray. With --demo, a fake backend.
+        if (Array.IndexOf(argv, "--setup") >= 0)
+        {
+            ISetupBackend backend = demoAt >= 0 ? new DemoSetupBackend() : new NotWiredSetupBackend();
+            var setup = new SetupWindow(backend);
+            setup.Closed += (_, _) => Exit();
+            setup.Start();
+            return;
+        }
+        var pipeAt = Array.IndexOf(argv, "--pipe");
         var hasPipe = pipeAt >= 0 && pipeAt + 1 < argv.Length;
         if (!hasPipe && demoAt < 0)
         {
