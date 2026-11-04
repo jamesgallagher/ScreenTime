@@ -1,0 +1,16 @@
+<Project Sdk="WixToolset.Sdk/5.0.2">
+
+    <!--
+      The Screen Time MSI (docs/SPEC.md Â§12.2). Built by windows/installer/build-msi.ps1 (CI's "installer" job), which
+      publishes the service (native AOT) and the tray (self-contained) first and passes their folders in.
+    -->
+    <PropertyGroup>
+        <OutputName>ScreenTime</OutputName>
+        <InstallerPlatform>x64</InstallerPlatform>
+        <Version Condition="'$(Version)' == ''">0.1.0</Version>
+        <DefineConstants>ServiceDir=$(ServiceDir);TrayDir=$(TrayDir);Version=$(Version)</DefineConstants>
+        <!-- ICE03 and ICE60: Windows App SDK DLLs list more languages in their version than MSI's Language column holds. Harmless. -->
+        <SuppressIces>ICE03;ICE60</SuppressIces>
+    </PropertyGroup>
+
+</Project>

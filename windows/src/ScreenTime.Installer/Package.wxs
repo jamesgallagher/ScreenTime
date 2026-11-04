@@ -1,0 +1,73 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <!--
+    Screen Time for Windows (docs/SPEC.md Â§12.2). Installs the service and the tray to Program Files\ScreenTime,
+    registers the service (automatic, LocalSystem, restart on failure after 0, 5 and 30 s, also in Safe Mode), and
+    takes the "Change the time zone" right from the Users group ("ScreenTime.Service.exe harden"). Uninstalling
+    removes all of it and gives the right back. Enrolling the kids' accounts is a separate step (the setup app, or
+    "ScreenTime.Service.exe enrol").
+  -->
+  <Package Name="Screen Time" Manufacturer="Screen Time" Version="$(var.Version)"
+           UpgradeCode="D01A007C-1681-4161-B29F-DE7197D4E3D4" Scope="perMachine">
+    <MajorUpgrade DowngradeErrorMessage="A newer Screen Time is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="ScreenTime">
+        <Directory Id="TRAYFOLDER" Name="Tray" />
+      </Directory>
+    </StandardDirectory>
+
+    <Feature Id="Main">
+      <ComponentGroupRef Id="Service" />
+      <ComponentGroupRef Id="Tray" />
+      <ComponentRef Id="SafeBoot" />
+    </Feature>
+
+    <ComponentGroup Id="Service" Directory="INSTALLFOLDER">
+      <Component Id="ServiceExe">
+        <File Id="ServiceExe" Source="$(var.ServiceDir)\ScreenTime.Service.exe" KeyPath="yes" />
+        <ServiceInstall Id="ScreenTime" Name="ScreenTime" DisplayName="Screen Time"
+                        Description="Keeps the family's screen time limits on this PC."
+                        Type="ownProcess" Start="auto" ErrorControl="normal" Account="LocalSystem" Vital="yes" />
+        <ServiceControl Id="ScreenTime" Name="ScreenTime" Start="install" Stop="both" Remove="uninstall" Wait="yes" />
+      </Component>
+      <Files Include="$(var.ServiceDir)\**">
+        <Exclude Files="$(var.ServiceDir)\ScreenTime.Service.exe" />
+        <Exclude Files="$(var.ServiceDir)\**\*.pdb" />
+      </Files>
+    </ComponentGroup>
+
+    <ComponentGroup Id="Tray" Directory="TRAYFOLDER">
+      <Files Include="$(var.TrayDir)\**">
+        <Exclude Files="$(var.TrayDir)\**\*.pdb" />
+      </Files>
+    </ComponentGroup>
+
+    <!-- The service also runs in Safe Mode (minimal and with networking). -->
+    <Component Id="SafeBoot" Directory="INSTALLFOLDER">
+      <RegistryKey Root="HKLM" Key="SYSTEM\CurrentControlSet\Control\SafeBoot\Minimal\ScreenTime">
+        <RegistryValue Type="string" Value="Service" KeyPath="yes" />
+      </RegistryKey>
+      <RegistryKey Root="HKLM" Key="SYSTEM\CurrentControlSet\Control\SafeBoot\Network\ScreenTime">
+        <RegistryValue Type="string" Value="Service" />
+      </RegistryKey>
+    </Component>
+
+    <!--
+      Restart on failure after 0, 5 and 30 s (Â§12.2). MSI's own ServiceConfigFailureActions is documented not to work,
+      and WiX's util:ServiceConfig has one delay only, so sc.exe sets them, as SYSTEM, once the service is installed.
+    -->
+    <StandardDirectory Id="System64Folder" />
+    <CustomAction Id="Recovery" Directory="System64Folder" Execute="deferred" Impersonate="no" Return="check"
+                  ExeCommand="&quot;[System64Folder]sc.exe&quot; failure ScreenTime reset= 86400 actions= restart/0/restart/5000/restart/30000" />
+
+    <!-- Hardening: run as SYSTEM after the files are in place; undone before they are removed. -->
+    <CustomAction Id="Harden" FileRef="ServiceExe" ExeCommand="harden" Execute="deferred" Impersonate="no" Return="check" />
+    <CustomAction Id="Unharden" FileRef="ServiceExe" ExeCommand="unharden" Execute="deferred" Impersonate="no" Return="ignore" />
+    <InstallExecuteSequence>
+      <Custom Action="Recovery" After="InstallServices" Condition="NOT REMOVE" />
+      <Custom Action="Harden" After="InstallFiles" Condition="NOT REMOVE" />
+      <Custom Action="Unharden" Before="RemoveFiles" Condition="REMOVE=&quot;ALL&quot;" />
+    </InstallExecuteSequence>
+  </Package>
+</Wix>

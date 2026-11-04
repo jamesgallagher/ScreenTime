@@ -42,3 +42,33 @@ jobs:
 
       - name: Test
         run: dotnet test --solution ScreenTime.slnx -c Release --no-build
+
+  installer:
+    name: installer
+    needs: build
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: windows
+    steps:
+      - name: Check out
+        uses: actions/checkout@v5
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: windows/global.json
+
+      # The service is native AOT, which needs the C++ tools that GitHub's Windows runners have (docs/SPEC.md §12.2).
+      - name: Build the MSI
+        shell: pwsh
+        run: ./installer/build-msi.ps1 -Version 0.1.${{ github.run_number }}
+
+      - name: Upload the MSI
+        uses: actions/upload-artifact@v7
+        with:
+          name: ScreenTime-msi
+          path: windows/out/msi/ScreenTime.msi
+          retention-days: 14
+          if-no-files-found: error
