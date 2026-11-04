@@ -82,6 +82,10 @@ internal sealed partial class TrayPipe(string pipeName, bool dryLock, TrayModel 
                             log($"done: {(message.Approved == true ? "yes" : "no")}");
                             if (message.Id is { } doneId && _waiting.TryRemove(doneId, out var done)) done.TrySetResult(message.Approved == true ? SendResult.Sent : SendResult.Offline);
                             break;
+                        case "caught":
+                            log("caught");
+                            model.Caught();
+                            break;
                         case "parent-no":
                             log($"parent-no: {message.Text}");
                             model.ParentModeNo(message.Text ?? "");
