@@ -105,8 +105,8 @@ Spikes come early on purpose: Device Owner + Lock Task on the real phones, and a
 | 050b | Tray wiring for Ask and Message: the service calls the server and relays answers, the tray pipe implements the sender; a dev `--session` flag so runs work over Remote Desktop; the run repeats the 049b checks | 050 | M | | 12.2, 16.3 |
 | 050c | Parent mode logic: TOTP parent code, code sessions and the effective snapshot, `parent_mode` answers, parent pipe lines (front end by Claude, PR #136) | 019, 050b | M | | 12.3, 16.3 |
 | 050d | Parent mode wiring: the service checks the code, keeps and reports code sessions and End now, stops counting during parent mode, relays answers; the tray pipe implements the parent calls; run | 050c | M | | 12.3, 16.3 |
-| 051 | Tamper and hardening: time zone right, tray kill counter, Safe Mode registration; keep an unreported parent mode code session across a service restart (050d keeps it in memory) | 021, 048 | M | | 12.2, 14 |
-| 052 | Installer (WiX MSI) | 049 | M | | 12.2 |
+| 051 | Tamper detection (clock, time zone, tray killed) with the caught toast and card, the events outbox, and parent mode kept across a service restart (front end by Claude, PR #142) | 021, 050d | L | | 12.2, 14 |
+| 052 | Installer (WiX MSI), with the hardening that needs admin: remove "Change the time zone" (`SeTimeZonePrivilege`) from kid accounts, register for Safe Mode | 051 | L | | 12.2 |
 
 ## Phase 6: deploy and rollout
 
