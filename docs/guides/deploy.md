@@ -38,10 +38,10 @@ Then fill in, with `nano .env`:
 
 - `SUPER_ADMIN_EMAIL`: the email that creates the family (step 5).
 - `SMTP_USER` and `SMTP_PASS`: Brevo's SMTP login and SMTP key (Brevo, SMTP & API, SMTP). Without them sign-in codes are only written to the `api` log.
-- `FIREBASE_SERVICE_ACCOUNT_JSON`: the Firebase service account key of project `screentime-d307c` as one line in single quotes. From a PC with the key file:
-  ```powershell
-  $json = Get-Content firebase-service-account.json -Raw | ConvertFrom-Json | ConvertTo-Json -Compress -Depth 5
-  "FIREBASE_SERVICE_ACCOUNT_JSON='$json'" | ssh root@192.168.0.148 "cd /mnt/user/appdata/screentime && sed -i '/^FIREBASE_SERVICE_ACCOUNT_JSON=/d' .env && cat >> .env"
+- `FIREBASE_SERVICE_ACCOUNT_JSON`: the Firebase service account key of project `screentime-d307c` as one line in single quotes. From a PC with the key file and Node, in Git Bash, from the folder with the file (it never prints the key):
+  ```sh
+  node -e 'process.stdout.write("FIREBASE_SERVICE_ACCOUNT_JSON=\x27" + JSON.stringify(require("./firebase-service-account.json")) + "\x27\n")' \
+    | ssh root@192.168.0.148 'cd /mnt/user/appdata/screentime && sed -i "/^FIREBASE_SERVICE_ACCOUNT_JSON=/d" .env && cat >> .env'
   ```
 
 `POSTGRES_PASSWORD` is only read when the database is first created: changing it later needs `ALTER USER` in the database as well.
