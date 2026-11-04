@@ -658,7 +658,7 @@ Messages and requests are sent through the server. If the phone has no data, the
 
 **Locked PC (Q32):** the Windows lock screen cannot show our buttons. The kid asks in person or from their phone; a parent grants time or starts parent mode remotely from the parent app, and the kid can then unlock normally.
 
-**Hardening at install** (PCs are Windows 11 Pro): remove the "Change the time zone" right (`SeTimeZonePrivilege`) from kid accounts via `LsaRemoveAccountRights` (works on any edition, no Group Policy needed); the guide also recommends a BIOS password and disabling USB boot. Pro also allows Local Group Policy and AppLocker, which the future app-allowlist feature can use.
+**Hardening at install** (PCs are Windows 11 Pro): remove the "Change the time zone" right (`SeTimeZonePrivilege`) from the **Users** group via `LsaRemoveAccountRights` (works on any edition, no Group Policy needed). Windows grants it to Users, not to accounts one by one, so it cannot be taken from kid accounts alone; parents keep it as Administrators. As built (CARD-052): the service's `harden` command does it during install and `unharden` gives it back on uninstall, both run by the MSI as SYSTEM; the guide also recommends a BIOS password and disabling USB boot. Pro also allows Local Group Policy and AppLocker, which the future app-allowlist feature can use.
 
 ### 12.3 Parent mode (Q15, Q24)
 
