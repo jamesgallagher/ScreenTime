@@ -109,12 +109,22 @@ Spikes come early on purpose: Device Owner + Lock Task on the real phones, and a
 | 052 | Installer: WiX MSI built in CI (native AOT service), service registration with restart and Safe Mode, the time zone right taken from Users (`harden`), tried in Windows Sandbox | 051 | L | | 12.2 |
 | 052b | Setup app (front end by Claude): server address, the PC's standard accounts, an enrolment code each; run after the MSI | 052 | L | | 12.2 |
 
+## Phase 5b: Android app control
+
+Android phones and tablets only. These come before cards 054 and 055, although their numbers are higher, because setup gains an adb step and the guides and the rollout should include it. Each card has a front-end PR by Claude first.
+
+| Card | Title | Depends on | Size | James | Spec |
+|---|---|---|---|---|---|
+| 056 | App list and alerts: `device_apps`, `PUT /v1/device/apps`, `GET /v1/kids/{kidId}/apps`, the first list as a silent baseline, install and first-use detection with usage access, `app.installed` and `app.first_used`, the Apps page without rules (front end by Claude) | 039, 042, 043b | L | | 6, 9, 12.4, 13, 16.4, 16.5 |
+| 057 | Blocking: `app_rules`, the rule route and the snapshot, suspend with hide as the fallback for Play Store, the never-block list, parent mode releasing blocks, new app approval with `app.approval` (front end by Claude) | 056 | L | | 6, 8.2, 9, 12.4, 13, 16.4, 16.5 |
+| 058 | Daily limits: `app_usage_daily`, `POST /v1/device/app-usage`, the Kotlin sum with tests, warning and block at the limit, sharing across the kid's devices, the usage access tamper check, the kid's limits list (front end by Claude) | 057 | L | | 6, 8.2, 9, 12.4, 14, 16.2, 16.4 |
+
 ## Phase 6: deploy and rollout
 
 | Card | Title | Depends on | Size | James | Spec |
 |---|---|---|---|---|---|
 | 053 | Deploy to Unraid: compose, tunnel route, backups, `docs/guides/deploy.md` | 027 | M | Unraid, Cloudflare | 4.2 |
-| 054 | Guides: Android provisioning, Windows install | 038, 052 | S | | 12 |
+| 054 | Guides: Android provisioning (with the usage access step), Windows install | 038, 052, 056 | S | | 12 |
 | 055 | Household rollout and end-to-end acceptance checklist | all | S | All devices | all |
 
 ## Pending decisions that block cards
