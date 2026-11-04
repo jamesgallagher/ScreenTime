@@ -1,0 +1,71 @@
+# Screen Time in production on Unraid (docs/SPEC.md §4.2, docs/guides/deploy.md).
+# Lives in /mnt/user/appdata/screentime/ on the server, next to its .env (from .env.example) and backup.sh.
+# Run there:  docker compose up -d --wait
+name: screentime
+
+services:
+  db:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: screentime
+      POSTGRES_USER: screentime
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      # PostgreSQL 18 images keep data under /var/lib/postgresql/18/docker, so mount the parent.
+      - /mnt/user/appdata/screentime/postgres:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U screentime -d screentime"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    # Built and published by .github/workflows/server-image.yml on every push to main.
+    image: ghcr.io/jamesgallagher/screentime-server:${API_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      PORT: "8080"
+      DATABASE_URL: postgres://screentime:${POSTGRES_PASSWORD}@db:5432/screentime
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      SUPER_ADMIN_EMAIL: ${SUPER_ADMIN_EMAIL:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${FIREBASE_SERVICE_ACCOUNT_JSON:-}
+    ports:
+      # Bridge networking, published on Unraid's port 8086: the tunnel route sends screentime.gallagherhome.au to
+      # http://192.168.0.148:8086. Port 8080 on Unraid belongs to qBittorrent.
+      - "8086:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:8080/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+  backup:
+    # A nightly pg_dump to the Backup share (backup.sh): 02:30 Sydney time, kept 30 days.
+    image: postgres:18
+    restart: unless-stopped
+    entrypoint: ["sh", "/backup.sh"]
+    environment:
+      TZ: Australia/Sydney
+      PGHOST: db
+      PGUSER: screentime
+      PGDATABASE: screentime
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      BACKUP_AT: "02:30"
+      KEEP_DAYS: "30"
+    volumes:
+      - ./backup.sh:/backup.sh:ro
+      - /mnt/user/Backup/screentime:/backups
+    depends_on:
+      db:
+        condition: service_healthy

@@ -1,6 +1,6 @@
 # deploy
 
-Docker Compose for the Screen Time server (`api`) and PostgreSQL 18 (`db`). On Unraid this sits behind a Cloudflare Tunnel; the full deployment guide comes in CARD-053.
+Docker Compose for the Screen Time server (`api`) and PostgreSQL 18 (`db`) for **development** on this PC. Production on Unraid uses `deploy/unraid/` (the published image, the tunnel and nightly backups): see `docs/guides/deploy.md`.
 
 All commands run from the **repo root** in PowerShell.
 
