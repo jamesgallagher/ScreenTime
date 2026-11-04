@@ -31,7 +31,14 @@ public partial class App : Application
         // --setup: the setup window after the MSI (docs/SPEC.md §12.2), not the tray. With --demo, a fake backend.
         if (Array.IndexOf(argv, "--setup") >= 0)
         {
-            ISetupBackend backend = demoAt >= 0 ? new DemoSetupBackend() : new NotWiredSetupBackend();
+            if (demoAt < 0 && !Elevation.IsAdmin())
+            {
+                // From the Start menu a parent runs it unelevated: Windows asks for an administrator, then it starts again.
+                Elevation.RestartAsAdmin();
+                Exit();
+                return;
+            }
+            ISetupBackend backend = demoAt >= 0 ? new DemoSetupBackend() : new SetupBackend();
             var setup = new SetupWindow(backend);
             setup.Closed += (_, _) => Exit();
             setup.Start();

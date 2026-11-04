@@ -3,8 +3,8 @@
     Screen Time for Windows (docs/SPEC.md §12.2). Installs the service and the tray to Program Files\ScreenTime,
     registers the service (automatic, LocalSystem, restart on failure after 0, 5 and 30 s, also in Safe Mode), and
     takes the "Change the time zone" right from the Users group ("ScreenTime.Service.exe harden"). Uninstalling
-    removes all of it and gives the right back. Enrolling the kids' accounts is a separate step (the setup app, or
-    "ScreenTime.Service.exe enrol").
+    removes all of it and gives the right back. Enrolling the kids' accounts is a separate step: the Start menu's
+    "Screen Time Setup" (the tray's setup window, CARD-052b), or "ScreenTime.Service.exe enrol".
   -->
   <Package Name="Screen Time" Manufacturer="Screen Time" Version="$(var.Version)"
            UpgradeCode="D01A007C-1681-4161-B29F-DE7197D4E3D4" Scope="perMachine">
@@ -21,6 +21,7 @@
       <ComponentGroupRef Id="Service" />
       <ComponentGroupRef Id="Tray" />
       <ComponentRef Id="SafeBoot" />
+      <ComponentRef Id="SetupShortcut" />
     </Feature>
 
     <ComponentGroup Id="Service" Directory="INSTALLFOLDER">
@@ -42,6 +43,14 @@
         <Exclude Files="$(var.TrayDir)\**\*.pdb" />
       </Files>
     </ComponentGroup>
+
+    <!-- The setup window (CARD-052b): a parent opens it from the Start menu, and it asks Windows for an administrator. -->
+    <StandardDirectory Id="ProgramMenuFolder" />
+    <Component Id="SetupShortcut" Directory="ProgramMenuFolder">
+      <Shortcut Id="SetupShortcut" Name="Screen Time Setup" Description="Connect this PC and the kids' accounts to Screen Time"
+                Target="[TRAYFOLDER]ScreenTime.Tray.exe" Arguments="--setup" WorkingDirectory="TRAYFOLDER" />
+      <RegistryValue Root="HKLM" Key="Software\ScreenTime" Name="SetupShortcut" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
 
     <!-- The service also runs in Safe Mode (minimal and with networking). -->
     <Component Id="SafeBoot" Directory="INSTALLFOLDER">

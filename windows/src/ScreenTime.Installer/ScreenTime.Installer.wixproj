@@ -10,7 +10,9 @@
         <Version Condition="'$(Version)' == ''">0.1.0</Version>
         <DefineConstants>ServiceDir=$(ServiceDir);TrayDir=$(TrayDir);Version=$(Version)</DefineConstants>
         <!-- ICE03 and ICE60: Windows App SDK DLLs list more languages in their version than MSI's Language column holds. Harmless. -->
-        <SuppressIces>ICE03;ICE60</SuppressIces>
+        <!-- ICE38, ICE43 and ICE57: they take the Start menu shortcut (CARD-052b) for a per-user one. The package is
+             per-machine, so it goes to the all-users Start menu. -->
+        <SuppressIces>ICE03;ICE60;ICE38;ICE43;ICE57</SuppressIces>
     </PropertyGroup>
 
 </Project>
