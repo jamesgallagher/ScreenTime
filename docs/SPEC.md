@@ -645,7 +645,7 @@ Messages and requests are sent through the server. If the phone has no data, the
 
 ### 12.2 Windows kid enforcer
 
-**Install** (documented in `docs/guides/windows-install.md`): kids use **standard** accounts, parents use admin accounts. A parent runs the MSI as admin. The installer asks for the server hostname, then lists local standard accounts; for each kid account the parent enters an enrolment code. The service is registered for automatic start, restart on failure (0 s, 5 s, 30 s) and Safe Mode (`SafeBoot\Minimal` and `Network` registry keys).
+**Install** (documented in `docs/guides/windows-install.md`): kids use **standard** accounts, parents use admin accounts. A parent runs the MSI as admin. The installer asks for the server hostname, then lists local standard accounts; for each kid account the parent enters an enrolment code. The service is registered for automatic start, restart on failure (0 s, 5 s, 30 s) and Safe Mode (`SafeBoot\Minimal` and `Network` registry keys). As built (CARD-052b): the asking is a setup window in the tray program (`Tray\ScreenTime.Tray.exe --setup`, Start menu "Screen Time Setup"), which restarts itself as administrator (UAC). It checks the server (`GET /health`), lists the enabled local accounts without Windows' built-in ones (administrators show as parents, never limited), enrols each with `ScreenTime.Service.exe enrol`, and Finish restarts the service.
 
 **ScreenTime.Service** (LocalSystem, Native AOT):
 
