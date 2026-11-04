@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.sp
 import au.screentime.core.model.api.Device
 import au.screentime.core.model.api.DeviceForm
 import au.screentime.core.model.api.Kid
+import au.screentime.core.model.api.Platform
 import au.screentime.core.ui.AvatarColors
 import au.screentime.core.ui.ScreenTimeTheme
 import au.screentime.parent.R
@@ -65,7 +66,7 @@ import kotlinx.coroutines.launch
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun KidScreen(kid: Kid, vm: KidsViewModel, onBack: () -> Unit, onAdd: (DeviceForm) -> Unit, error: String?, onSchedule: () -> Unit, onContacts: () -> Unit) {
+fun KidScreen(kid: Kid, vm: KidsViewModel, onBack: () -> Unit, onAdd: (DeviceForm) -> Unit, error: String?, onSchedule: () -> Unit, onContacts: () -> Unit, onApps: () -> Unit) {
     BackHandler(onBack = onBack)
     val state = vm.state
     val scope = rememberCoroutineScope()
@@ -217,6 +218,28 @@ fun KidScreen(kid: Kid, vm: KidsViewModel, onBack: () -> Unit, onAdd: (DeviceFor
                                     style = MaterialTheme.typography.bodySmall,
                                     color = ScreenTimeTheme.colors.muted,
                                 )
+                            }
+                            // Apps are Android only (docs/SPEC.md §12.4).
+                            if (devices.any { it.platform == Platform.ANDROID }) {
+                                HorizontalDivider(color = ScreenTimeTheme.colors.outline)
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { onApps() }
+                                        .padding(16.dp),
+                                ) {
+                                    Text(
+                                        text = "Apps",
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                    )
+                                    Text(
+                                        text = "What's installed and what's been used.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = ScreenTimeTheme.colors.muted,
+                                    )
+                                }
                             }
                         }
                     }

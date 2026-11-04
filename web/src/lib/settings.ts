@@ -1,7 +1,7 @@
 import type { NotificationKind } from '@screentime/schemas';
 
 /** What each notification switch means, in the words of docs/SPEC.md §13. The server sends the order. */
-export const NOTIFICATION_TEXT: Record<NotificationKind, { title: string; detail: string }> = {
+export const NOTIFICATION_TEXT: Record<NotificationKind | 'app.installed' | 'app.first_used', { title: string; detail: string }> = {
   sos: { title: 'SOS', detail: 'When a kid presses SOS on their phone, and every update after.' },
   'parent_mode.request': { title: 'Parent mode requests', detail: 'When a kid asks a parent to unlock a device.' },
   time_request: { title: 'Requests for more time', detail: 'When a kid asks for more time.' },
@@ -13,6 +13,8 @@ export const NOTIFICATION_TEXT: Record<NotificationKind, { title: string; detail
   'parent_mode.used': { title: 'Parent mode started', detail: 'Each time parent mode starts on a device.' },
   overspend: { title: 'Went over while offline', detail: 'When an offline device used more time than was left.' },
   'device.offline': { title: 'Device offline', detail: "When a kid's device has not been seen for 6 hours." },
+  'app.installed': { title: 'New apps', detail: 'When an app is installed on an Android device.' },
+  'app.first_used': { title: 'Apps used for the first time', detail: 'When an app is opened for the first time on an Android device.' },
   'device.enrolled': { title: 'Device added', detail: 'When a new device is added for a kid.' },
   'grant.by_other_parent': { title: 'Time changed by another parent', detail: 'When another parent adds or takes away time.' },
 };

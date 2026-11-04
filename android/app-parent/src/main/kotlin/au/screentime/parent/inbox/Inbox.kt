@@ -127,6 +127,15 @@ fun eventView(e: EventItem, zone: ZoneId): EventView {
             val lastSeenAt = text(p, "lastSeenAt")
             EventView("$device is offline", lastSeenAt?.let { "Last seen at ${timeOfDay(Instant.parse(it), zone)}" }, EventTone.INFO)
         }
+        "app.installed" -> {
+            val from = when (text(p, "source")) {
+                "play" -> "From Play Store"
+                "preinstalled" -> "Came with the device"
+                else -> "Installed another way"
+            }
+            EventView("$kid installed ${text(p, "label") ?: "an app"}", "$from on $device", EventTone.INFO)
+        }
+        "app.first_used" -> EventView("$kid opened ${text(p, "label") ?: "an app"} for the first time", "On $device", EventTone.INFO)
         "device.enrolled" -> EventView("${text(p, "name") ?: device} was added for $kid", null, EventTone.INFO)
         else -> if (e.kind.startsWith("tamper.")) {
             val what = when (e.kind) {

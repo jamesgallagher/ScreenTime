@@ -166,4 +166,19 @@ class InboxTest {
         assertEquals("Something went wrong on the server. Try again soon.", answerError(ApiException(500, null)))
         assertEquals("Can't reach Screen Time. Check the internet connection and try again.", answerError(IOException("x")))
     }
+
+    @Test
+    fun appEventsReadAsOneLine() {
+        assertEquals(
+            EventView("Alex installed Block Blast", "From Play Store on Pixel 7", EventTone.INFO),
+            view("app.installed", "label" to "Block Blast", "source" to "play"),
+        )
+        assertEquals("Installed another way on Pixel 7", view("app.installed", "label" to "X", "source" to "other").detail)
+        assertEquals(
+            EventView("Alex opened Gemini for the first time", "On Pixel 7", EventTone.INFO),
+            view("app.first_used", "label" to "Gemini"),
+        )
+        assertEquals("Alex installed an app", view("app.installed").text)
+        assertEquals("Alex opened an app for the first time", view("app.first_used").text)
+    }
 }
