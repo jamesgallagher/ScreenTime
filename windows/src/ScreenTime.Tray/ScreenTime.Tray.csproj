@@ -7,6 +7,8 @@
         <RuntimeIdentifier>win-x64</RuntimeIdentifier>
         <UseWinUI>true</UseWinUI>
         <WindowsPackageType>None</WindowsPackageType>
+        <!-- Unpackaged, but published with the MSIX tooling, so dotnet publish copies the app's .pri (with its XAML). -->
+        <EnableMsixTooling>true</EnableMsixTooling>
         <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
         <AssemblyName>ScreenTime.Tray</AssemblyName>
         <RootNamespace>ScreenTime.Tray</RootNamespace>
