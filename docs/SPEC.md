@@ -15,7 +15,7 @@ Markers used below:
 
 1. Product summary
 2. Household and devices (v1)
-3. Requirements decisions (interview log Q1 to Q33)
+3. Requirements decisions (interview log Q1 to Q38)
 4. System architecture
 5. Repository layout
 6. Data model
@@ -41,6 +41,7 @@ A self-hosted parental screen-time limiter for one family (multi-tenant undernea
 - Each kid has two **pools** of time per day: **Screens** (tablets and PCs, shared) and **Phone**.
 - **Kid devices** run an enforcer app that counts usage and locks the device when the pool is empty, at bedtime, or before wake-up. Enforcement happens on the device, so it keeps working offline.
 - **Parents** use a web app and a basic Android parent app to see today's usage, add or remove time, answer requests, receive messages and SOS alerts, and edit schedules.
+- On **Android kid devices**, parents also see which apps are installed and first used, and can block an app or give it a daily limit (section 12.4).
 - A **server** on James's Unraid box (Docker, behind a Cloudflare Tunnel) holds the shared ledger and relays pushes.
 
 Platforms in v1: Android kid app (one APK for phone and tablet), Windows 11 kid enforcer, Android parent app, parent web app. The REST API is platform agnostic so an iOS app can be added later.
@@ -75,7 +76,7 @@ These are James's answers from the requirements interview (22 Oct 2026). Section
 | Q10 | On Windows, enforcement is per **Windows user account** (each kid account maps to a kid). | 6, 12.2 |
 | Q11 | Each Android device is dedicated to one kid. | 6 |
 | Q12 | Offline first: each device enforces locally from a cached schedule. | 8 |
-| Q13 / Q30 | No app allowlists in v1. | 18 |
+| Q13 / Q30 | No app allowlists in v1. Choosing apps to block on Android was added later (Q35); allowing only listed apps is still future. | 12.4, 18 |
 | Q14 | Parent auth by email + one-time code. The parent phone app is unlocked with biometrics or PIN. A super admin is set by a Docker environment variable. Families contain parents and kids. Multi-tenant. | 6, 11 |
 | Q15 | "Parent mode" on a kid device: the parent approves by push and picks 2 min, 5 min, 15 min, 1 h or indefinite, and the device is unlocked and not counting. If the kid device is offline, a rotating code from the parent app works instead. All parents are notified. | 12.3 |
 | Q16 | Multi-family: v1 serves only James's family, but is multi-tenant from day one with strict per-family isolation (Postgres row-level security), so other families can be added later. Self sign-up and the 20-device sideload limit are later concerns. | 6, 11.4, 18 |
@@ -95,6 +96,11 @@ These are James's answers from the requirements interview (22 Oct 2026). Section
 | Q31 | SOS: phone only, goes to all parents, triggered by press-and-hold then a 5-second countdown, sends SMS and a critical alert, shares live location every 30 s, parents can acknowledge, and the child or a parent can end it. | 15 |
 | Q32 | A locked Windows PC has no buttons. The kid asks a parent in person (or from their phone). | 12.2 |
 | Q33 | Each kid has an "always callable" contact list managed in the parent app. Calls use the phone's native dialer. | 12.1 |
+| Q34 | (5 Nov 2026) A parent is told each time an app is installed on an Android kid device, and the first time each app is used on that device, so pre-installed apps show up too. Android phones and tablets only. | 12.4, 13 |
+| Q35 | (5 Nov 2026) A parent can see the apps on an Android kid device and block any of them, for example Play Store, Gemini or Chrome. | 12.4 |
+| Q36 | (5 Nov 2026) A parent can give an app a daily limit, for example 30 minutes of YouTube. The limit is per kid and shared across the kid's Android devices. App time still counts towards the pool. | 12.4 |
+| Q37 | (5 Nov 2026) Per kid switch: new apps stay blocked until a parent approves them. Off by default. Waiting for an answer makes this notification essential, as Q17's rule says. | 12.4, 13 |
+| Q38 | (5 Nov 2026) A kid cannot ask for more time on one app yet. A parent can change the limit at any time. | 12.4, 18 |
 | Future | School-hours blocks, a cooldown between time requests, app allowlists. | 18 |
 
 Also decided in research (22 Oct 2026): the tech stack in section 4, the sync design in section 8, Device Owner with Lock Task for Android, and a LocalSystem service plus tray helper for Windows.
@@ -240,6 +246,14 @@ A Windows device row is one PC **plus** one Windows user account (Q10). Pools an
 
 **events** (audit and notification feed): `id` (client or server generated), `family_id`, `kid_id`, `device_id`, `kind`, `at`, `payload` (jsonb), `created_at`. Kinds are listed in sections 13 and 14.
 
+**App control (Android only, section 12.4).** `kids` also has `new_app_approval` (bool, default false).
+
+**device_apps** (Q34, one row per device and package): `family_id`, `kid_id`, `device_id`, `package`, `label` (max 80), `source` (`preinstalled` | `play` | `other`), `installer` (nullable), `blockable` (bool), `installed_at`, `first_seen_at`, `first_used_at` (nullable), `removed_at` (nullable; cleared if it comes back), `baseline` (bool: it was in the device's first list, so it raised no alert).
+
+**app_rules** (Q35 to Q37, one row per kid and package): `family_id`, `kid_id`, `package`, `mode` (`allowed` | `held` | `blocked` | `limit`), `daily_minutes` (only for `limit`: 5 to 480 in steps of 5), `updated_at`, `updated_by` (null when the server wrote `held`). No row means allowed.
+
+**app_usage_daily** (one row per device, package and day): `family_id`, `kid_id`, `device_id`, `package`, `day`, `seconds`. Upsert keeps the larger value, so a repeat or an older upload never lowers it.
+
 ### 6.2 Super admin
 
 The super admin is not a table row. The Docker env var `SUPER_ADMIN_EMAIL` names one email. Signing in with that email (normal OTP flow) gives the `superadmin` role, which can list, create and disable families and add the first parent to a family. Creating a family also creates its first parent, the default message presets and a parent-code secret, in one transaction. Disabling a family signs out every parent session in it at once. Removing `SUPER_ADMIN_EMAIL` takes the role away at once, without waiting for tokens to expire. The admin routes use the owner connection, not `withFamily`. A super admin who is also a parent in a family sees that family normally.
@@ -354,6 +368,7 @@ Details:
 - `today.grants` holds only grants for this device's pool. `today.poolSegments` holds the segments of every device of this kid in this pool, this device's own too, that overlap today. The device merges them with its unsent segments by id.
 - An open segment (no `endedAt`) of a device that has not been heard from for 10 minutes is shown as ending at that device's `last_seen_at`, so a phone that died while in use does not keep using up the pool. Devices upload at least every 5 minutes while in use (8.3), so a working device never looks stale. The stored segment is not changed.
 - `parents` lists every enabled parent, oldest first, with `phoneE164` null when the parent has no phone. `pendingRequest` is the newest pending time request for this kid and pool made today, as `{ id, minutes, createdAt }`. `activeSos` is the kid's newest SOS that has not ended or auto-stopped, as `{ id, startedAt }`.
+- `apps` (section 12.4) holds the kid's `newAppApproval` switch and every rule, `allowed` ones too, so a second device does not hold an app a parent has already approved. `today.appUsage` holds today's seconds per package from the kid's **other** Android devices, only for packages with a `limit` rule, so an upload only changes another device's snapshot when it matters. On a Windows device both are empty.
 
 ### 8.3 When devices sync
 
@@ -464,6 +479,14 @@ Rules for the kid routes:
 - Schedule PUT takes `{ warn1Min, warn2Min, days }` with exactly 7 days in order Monday (1) to Sunday (7) and the rules in 6.1, and stores the next version. Two saves at the same moment: the second gets 409 and tries again.
 - Contacts: at most 10, each with a label of 1 to 40 characters and an E.164 number. PUT replaces the whole list, in the order given.
 
+App control routes (Android only, section 12.4):
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/v1/kids/{kidId}/apps` | `{ newAppApproval, apps: [{ package, label, source, blockable, todaySeconds, rule: { mode, dailyMinutes } \| null, devices: [{ deviceId, deviceName, installedAt, firstUsedAt, removedAt }] }] }`, across the kid's Android devices. An app gone from every device is still listed, with `removedAt` set |
+| PUT | `/v1/kids/{kidId}/apps/{package}/rule` | `{ mode, dailyMinutes? }` → the app's rule. `mode` is `allowed`, `blocked` or `limit`; `held` is only written by the server (422). `dailyMinutes` 5 to 480 in steps of 5, required for `limit` and refused otherwise (422). A package not on any of the kid's devices → 404; one that is not `blockable` on any of them → 409 |
+| PUT | `/v1/kids/{kidId}/app-settings` | `{ newAppApproval }` → 204 |
+
 ### 9.3 Device
 
 | Method | Path | Purpose |
@@ -481,6 +504,8 @@ Rules for the kid routes:
 | POST | `/v1/device/sos` | `{ id, startedAt, location? }` → 201 SOS (shape of `/v1/sos`). Phones only (else 409). Stored from `least(startedAt, now())`, auto stop 2 h later. While the kid has an active SOS → 409. Same `id` again → 200. Writes `sos.started` (critical push) and emails every enabled parent |
 | POST | `/v1/device/sos/{id}/locations` | `{ locations: [{ at, lat, lng, accuracyM?, batteryPct?, via }] }` 1 to 100 → 204. Also after the end (queued positions). A position with the same `at` as a stored one is skipped. Another device's SOS → 404 |
 | POST | `/v1/device/sos/{id}/end` | kid held "I'm safe" → 204, writes `sos.ended`. Already ended is fine |
+| PUT | `/v1/device/apps` | `{ apps: [{ package, label, source, installer?, blockable, installedAt, firstUsedAt? }] }` 1 to 500, the device's **whole** list → 204. Android only (a PC → 409). What it stores and raises is in 12.4 |
+| POST | `/v1/device/app-usage` | `{ days: [{ day, apps: [{ package, seconds }] }] }` at most 8 days and 500 apps a day → 204. Android only (a PC → 409). Upsert keeps the larger value |
 | GET | `/v1/device/ws` | WebSocket upgrade, `Authorization: Bearer <deviceToken>`. A wrong or revoked token gets 401 and no socket; a request that is not an upgrade gets 422. Details in section 10 |
 
 Device state snapshot:
@@ -499,7 +524,12 @@ Device state snapshot:
   "today": {
     "date": "2026-10-22",
     "grants": [ { "id": "…", "minutes": 15, "createdAt": "…", "byName": "Dad" } ],
-    "poolSegments": [ { "id": "…", "deviceId": "…", "startedAt": "…", "endedAt": "…" } ]
+    "poolSegments": [ { "id": "…", "deviceId": "…", "startedAt": "…", "endedAt": "…" } ],
+    "appUsage": [ { "package": "com.google.android.youtube", "deviceId": "…", "seconds": 720 } ]
+  },
+  "apps": {
+    "newAppApproval": false,
+    "rules": [ { "package": "com.google.android.youtube", "mode": "limit", "dailyMinutes": 30 } ]
   },
   "parentMode": { "active": false, "endsAt": null, "byName": null },
   "pendingRequest": null,
@@ -549,6 +579,8 @@ When the server sends to kid devices (CARD-017). Every message goes by WebSocket
 | A parent answers a time request (CARD-018) | `request_resolved` | the kid's devices in the request's pool | high priority, time to live until local midnight |
 | A parent approves or denies parent mode, or starts or ends it from the app (CARD-019) | `parent_mode` | that device | high priority; time to live until it ends (24 h for "until ended", 1 h for an end or a no) |
 | Usage uploaded | `state_changed` | the kid's other devices in that pool | none (uploads come every minute; Android counts the others' use at its next sync) |
+| A parent changes an app rule or the approval switch, or an install is held (section 12.4) | `state_changed` | the kid's Android devices | normal, 24 h |
+| App usage uploaded for a package with a `limit` rule | `state_changed` | the kid's other Android devices | none (as usage uploads) |
 | Device revoked, kid archived, or a PC account enrolled again | the socket is closed with code 4401 | those devices | none |
 
 Messages are sent after the change commits; a failure is logged and dropped.
@@ -604,7 +636,7 @@ Each kid device gets an opaque 32-byte token at enrolment, stored hashed on the 
 **Setup (Q6/Q9, no wipe)**, documented in `docs/guides/android-provisioning.md`:
 
 1. On the kid device: temporarily remove every account (Settings › Accounts), extra users and guest, and any work profile. Turn on USB debugging.
-2. From James's PC: `adb install app-kid.apk`, then `adb shell dpm set-device-owner au.screentime.kid/.admin.KidDeviceAdminReceiver`, and on a phone with a SIM `adb shell cmd role add-role-holder android.app.role.CALL_REDIRECTION au.screentime.kid` (an app cannot give itself the call redirection role, CARD-036).
+2. From James's PC: `adb install app-kid.apk`, then `adb shell dpm set-device-owner au.screentime.kid/.admin.KidDeviceAdminReceiver`, and on a phone with a SIM `adb shell cmd role add-role-holder android.app.role.CALL_REDIRECTION au.screentime.kid` (an app cannot give itself the call redirection role, CARD-036). On every Android device also `adb shell cmd appops set au.screentime.kid GET_USAGE_STATS allow` (Device Owner cannot grant usage access, section 12.4).
 3. Re-add the Google account. Open the app, scan the enrolment QR.
 4. The app then applies restrictions, and USB debugging is turned off by `DISALLOW_DEBUGGING_FEATURES`.
 5. Also turn on Android's own Emergency SOS with the parents as emergency contacts.
@@ -675,6 +707,56 @@ Parent mode makes one kid device unlocked and not counting for a chosen time. It
 
 As built (CARD-037), on the Android kid app: **I'm the parent** is a quiet text button at the bottom of the main screen and the block screen. It opens "Hand to a parent", which at once sends `POST /v1/device/parent-mode-requests` (one id each time it opens; a 409 means parent mode is already on) and says "We've asked Mum and Dad to approve." with a spinner; while it is open the live channel stays open, so a parent's yes unlocks within seconds and a no shows "Dad said no.". **Enter parent code instead** asks for the 6 digits (number keypad), checks them on the device against the family secret from the state snapshot (`family.parentCodeSecret`) and the trusted clock, and then asks "How long?" (2 min, 5 min, 15 min, 1 hour, Until I end it). The service keeps a code session and an **End now** in SharedPreferences (`parent_mode`) until the server has them, and sends them before each sync (`POST /v1/device/parent-mode`, then `POST /v1/device/parent-mode/end`). Parent mode is on when the snapshot's `parentMode` says so (until its `endsAt`), or when a code session the latest snapshot cannot know about yet is still running; an **End now** on the device beats any snapshot made before it. While it is on, the block screen closes, nothing is recorded, the notification says "Parent mode · ends 4:15 pm" / "Time isn't counting" with an **End now** action, the main screen shows the same line with **End now** in place of the kid's buttons, and the live channel stays open while the screen is on so a parent can end it from the app. When it ends (its time runs out, **End now**, or a parent ends it) the device is blocked again at once if it is out of time or bedtime. `server/scripts/dev-parent-mode.ts` answers yes or no, prints the parent code, or ends parent mode as the family's first parent, for trying it on the emulator.
 
+### 12.4 App control (Android phones and tablets only: Q34 to Q38)
+
+Windows has none of this. Everything is enforced on the device from the snapshot, so it keeps working offline.
+
+**What Android allows.** Tried as Device Owner on the API 37 Play Store emulator, 5 Nov 2026, with throwaway code:
+
+| Thing tried | Result |
+|---|---|
+| `setPackagesSuspended` on Chrome, YouTube, Gemini, Google | Works. The icon greys out and the app will not open. YouTube closed at once when suspended in front |
+| The same on Play Store | Refused: "required for package verification" |
+| The same on Settings, the default dialer, the launcher, our app | Refused |
+| The same on Google Play services (`com.google.android.gms`) | **Accepted, and would break FCM.** Android does not protect it, so we must |
+| `setApplicationHidden` on Play Store | Works. No launcher activity, and `market://` links stop resolving |
+| Opening a suspended app | Android's own dialog: "Blocked by work policy. For more info, contact your IT admin" |
+| `setPermissionGrantState` for `PACKAGE_USAGE_STATS` | Refused, so setup uses adb (12.1) |
+| `getInstalledPackages` plus a launcher query | 266 packages, 22 with an icon |
+| `getInstallSourceInfo` | Pre-installed: no installer. adb: initiated by `com.android.shell` |
+| `UsageStatsManager.queryEvents` with usage access | Gives each app's `ACTIVITY_RESUMED` and `ACTIVITY_PAUSED` with times |
+| `PACKAGE_ADDED` and `PACKAGE_REMOVED`, registered in code | Delivered to a running app, on a reinstall |
+| `pm suspend` from the adb shell | Refused because of `DISALLOW_APPS_CONTROL`, so tests must go through `DevicePolicyManager` |
+
+Not tried yet, so **each card's rehearsal must prove it**: a real Play Store install (expected installer `com.android.vending`) and a brand new package's broadcast; `setShortSupportMessage` changing the blocked dialog; audio from a blocked app stopping; whether a kid can turn off usage access; whether hiding Play Store stops updates; `DISALLOW_ADD_PRIVATE_PROFILE`; and all of it on the real Pixel and XPPen tablet, since makers can change these rules.
+
+**Permissions and policies.** The manifest adds `QUERY_ALL_PACKAGES` and `PACKAGE_USAGE_STATS`. `Policies` adds `DISALLOW_ADD_PRIVATE_PROFILE` on Android 15 and later, because apps in a private space cannot be listed or blocked. A device set up before this card has USB debugging off, so a parent turns usage access on in Settings during parent mode instead of using adb.
+
+**The app list (Q34).** The list holds apps with a launcher icon; other packages cannot be opened by a kid. `source` is `preinstalled` for a system app, even one updated later, `play` when the installer is `com.android.vending`, and `other` for the rest. `blockable` is false for the never-block list below. The service registers for `PACKAGE_ADDED` and `PACKAGE_REMOVED` while it runs and also compares against its last list at every start and sync, so an install made while it was down is still found. An app the device itself hid (below) stays on the list as installed. It sends the whole list with `PUT /v1/device/apps` when the list changes, and retries until the server has it.
+
+**What the server does with a list.**
+
+- The device's first list is the baseline: rows get `baseline = true` and raise nothing. `firstUsedAt` in that list comes from the usage history Android still holds, so apps already in use never raise a first-use alert.
+- After that, a package new to the device, or back after being removed, writes `app.installed` (payload `{ package, label, source, deviceName }`). With `new_app_approval` on and no rule for the kid, the server also writes a `held` rule, and the event's kind is `app.approval` instead, with the same payload.
+- The first non-null `firstUsedAt` for a row writes `app.first_used` (payload `{ package, label, deviceName }`), per device and only once, even after a reinstall. The earliest time wins.
+- A package missing from the list gets `removed_at`. That raises no event.
+
+**First use.** While the screen is on, the service reads usage events at least every 30 s. The first `ACTIVITY_RESUMED` of a package on the list sets its `firstUsedAt`. Our own app and the launcher are never reported.
+
+**Blocking (Q35).** After every sync, every list change and every end of parent mode, the service works out which packages should be blocked from the snapshot, and makes the device match: blocked if the rule is `blocked` or `held`, or `limit` with the time used up. It first tries `setPackagesSuspended`. A package Android refuses is hidden with `setApplicationHidden`, which is how Play Store is blocked. A package that is no longer meant to be blocked is released. The service keeps what it applied in SharedPreferences, so it can release packages after a restart and keep hidden apps on the list.
+
+**Never blocked,** whatever the snapshot says, and reported with `blockable: false`: our own app, Google Play services (`com.google.android.gms`, `com.google.android.gsf`), Settings, the launcher, the default dialer and the system dialer, the default SMS app (SOS texts need it, section 15) and the permission controller.
+
+**New apps (Q37).** With `newAppApproval` on, a package the device has not seen before and has no rule for is suspended by the device at once, without waiting for the server. Apps already on the device when the switch is turned on are not touched. A parent answers from the inbox or the Apps page: **Allow** writes `allowed`, **Block** writes `blocked`. Rules outlive an uninstall, so reinstalling a blocked app blocks it again.
+
+**Daily limits (Q36).** The service adds up each package's time since local midnight in the family time zone from the usage events (resumed to paused, and ending at screen off), leaving out parent mode. Used time is that number plus `today.appUsage` from the kid's other devices. Two devices using one app at the same time count twice, which is simple and errs on the short side. Totals go up with `POST /v1/device/app-usage` at each sync, for every app, so parents see them. While a limited app is in front, the service's loop also wakes when its time should run out. A warning shows at 5 minutes left. At the limit the app is blocked and a notification says "That's all your YouTube for today", on the "Time warnings" channel. Limits reset at the first check after local midnight; with the screen off, that is the next unlock. A device offline can run over; this is not reported, and nothing carries over. The sum is a small pure Kotlin function with JUnit tests. It is not part of the time engine, which is unchanged: app time keeps counting towards the pool as before.
+
+**Parent mode and locks.** Parent mode releases every blocked app, including hidden ones, so a parent can use the Play Store and it can run updates; its end blocks them again. App time does not count during parent mode. When the device is locked by the engine, Lock Task still decides what can open. App blocks do not change during an SOS.
+
+**Tamper.** Usage access is checked at each read. If it is off when it used to be on, the device raises `tamper.policy` with `missing: usage_access` and shows the caught screen. Blocks stay, since they do not need usage access. Until it is back, apps with a `limit` rule are blocked and first use is not detected. A package that should be blocked but is not, found at the check after a sync, is applied again without an event.
+
+**Known gaps, accepted.** Blocking an app does not block its website: youtube.com still works in Chrome. Parents who mean it should block browsers too, and turn on new app approval so a new browser cannot arrive. The in-app browsers of allowed apps stay open. The blocked dialog's title is Android's. Blocking Play Store may also stop app updates outside parent mode.
+
 ## 13. Notifications
 
 Parent notifications go to the Android parent app by FCM. The web app shows the same items in its inbox and as banners while open (polling `/v1/events` every 30 s), and sends no browser push in v1.
@@ -688,15 +770,18 @@ Parent notifications go to the Android parent app by FCM. The web app shows the 
 | `time_request` | Kid asks for more time | Yes (James, 25 Oct 2026) |
 | `kid_message` | Kid sends a message | No |
 | `overspend` | Offline overspend detected | No |
+| `app.approval` | A new app is held until a parent answers (Android, 12.4) | Yes |
+| `app.installed` | A new app was installed (Android, 12.4) | No |
+| `app.first_used` | An app was used for the first time on that device (Android, 12.4) | No |
 | `device.offline` | Not seen for 6 h during allowed hours | No |
 | `device.enrolled` | New device added | No |
 | `grant.by_other_parent` | The other parent changed time (from the `grant.added` event every grant writes, payload `{ grantId, pool, minutes, byName, lockNow }`) | No |
 
-Rule (James, 22 Oct 2026, confirmed 25 Oct for "ask for more time"): SOS and every request that waits for a parent's answer (`parent_mode.request`, `time_request`) are essential; every informational kind can be switched off per parent. Sign-in code emails are always sent. Tamper and parent-mode-used are informational (confirmed). Muting only stops the push: **every** kind is always written to `events` and always shown in the event history (Inbox) in the parent app and web app.
+Rule (James, 22 Oct 2026, confirmed 25 Oct for "ask for more time"): SOS and every request that waits for a parent's answer (`parent_mode.request`, `time_request`, `app.approval`) are essential; every informational kind can be switched off per parent. Sign-in code emails are always sent. Tamper and parent-mode-used are informational (confirmed). Muting only stops the push: **every** kind is always written to `events` and always shown in the event history (Inbox) in the parent app and web app.
 
 Who gets a push: every signed-in parent app (an unrevoked parent session with a push token) of an enabled parent in the family, unless that parent turned the kind off. `sos` covers every `sos.*` event and `tamper` every `tamper.*` event. `grant.by_other_parent` is not sent to the parent who made the grant. Event kinds without a notification kind are history only: `time_request.resolved` (payload `{ requestId, approved, minutes, byName }`, written when a parent answers; a yes also writes `grant.added`, so the other parent hears about it as `grant.by_other_parent`). Payloads (CARD-018): `time_request` `{ requestId, pool, minutes, reason }`, `kid_message` `{ messageId, body }`. Parent mode (CARD-019): `parent_mode.request` `{ requestId }`; `parent_mode.used` `{ sessionId, method, durationMin, endsAt, byName }` (every start, `byName` null for the code; all parents get it, the one who started it too); history only: `parent_mode.denied` and `parent_mode.ended` `{ sessionId, byName }` (`byName` null when the device ended it). SOS (CARD-020): `sos.started` `{ sosId, startedAt, location }` (`location` as in `/v1/sos`, or null), `sos.acked` `{ sosId, byName }`, `sos.extended` `{ sosId, autoStopAt, byName }`, `sos.ended` `{ sosId, endedBy, byName }` (`endedBy` `kid` with `byName` null, or `parent`); every parent gets each, the one who acted too, and the parent app only rings the alarm for `sos.started`. Tamper (CARD-019b), suggested payloads from the device: `tamper.clock` `{ deviceTime, trustedTime, skewSec }`, `tamper.timezone` `{ from, to }`, `tamper.tray_killed` `{ exits }`, `tamper.policy` `{ policy }`, `tamper.call_blocked` `{ number }`.
 
-Android parent app channels: `critical` (SOS: high importance, bypass Do Not Disturb, full-screen intent, alarm sound on the alarm stream looping until acknowledged), `alerts` (tamper, parent mode: high importance), `requests` (time requests, messages: default importance), `info` (the rest: low). First-run setup asks the parent to allow notifications, Do Not Disturb access and full-screen intents.
+Android parent app channels: `critical` (SOS: high importance, bypass Do Not Disturb, full-screen intent, alarm sound on the alarm stream looping until acknowledged), `alerts` (tamper, parent mode: high importance), `requests` (time requests, messages, the `app.*` kinds: default importance), `info` (the rest: low). First-run setup asks the parent to allow notifications, Do Not Disturb access and full-screen intents.
 
 Kid device notifications: persistent status (silent), warnings at `warn1Min` and `warn2Min` before `nextLockAt` (heads-up with vibration, "15 minutes of Phone left"), time changes ("Dad added 15 minutes"), request answers, parent mode.
 
@@ -819,6 +904,8 @@ Tablet or landscape (window width ≥ 600 dp): ring on the left half, buttons in
 
 As built (CARD-030 and CARD-030b): not Device Owner → "Ask a parent to finish setup", the guide path and **Check again**. Device Owner, not enrolled → "Connect to your family", **Scan QR code**, "or type the code", 6 code boxes, **Connect**, and under it "Server: screentime.gallagherhome.au **Change**" (debug builds start at `http://10.0.2.2:8080`, the PC as seen from the emulator, and also accept `http://`). **Scan QR code** grants the camera through Device Owner (asks only if that fails) and shows the back camera full screen with a white 260 dp frame, "Point the camera at the QR code on Mum or Dad's phone" and **Cancel**. The first QR code seen is read with `parseEnrolLink`: a `screentime://enrol` link fills the server and code and connects at once; anything else goes back with "That QR code isn't from Screen Time." The app also opens `screentime://enrol` links itself (the phone's camera app, or `adb shell am start` on the emulator), which do the same as a scan. The QR host is reached over `https://`; debug builds use `http://` for a host with a port, like `10.0.2.2:8080`. Errors are short sentences, never codes (401 wrong or expired code, 409 a PC code, 429 too many tries, no connection). After `POST /v1/enrol` the token is stored at once and the kid sees "This phone belongs to Alex. Correct?" **Yes** / **No, that's not me**. **No** forgets the token (the device stays listed until a parent removes it). **Yes** applies the Device Owner policies and shows "All set, Alex"; the main screen replaces that in CARD-032.
 
+**App limits (12.4):** when the kid has apps with a limit, the main screen has a small list under the ring: "YouTube · 12m left" or "YouTube · done for today". Warnings and the "That's all your YouTube for today" notification use the "Time warnings" channel. A blocked app shows Android's own dialog, with "Ask Mum or Dad" in place of the IT admin line if the rehearsal proves it can be changed.
+
 ### 16.3 Windows tray
 
 **Tray icon:** hourglass glyph, with a small dot: teal (plenty), amber (≤ 15 min), orange (≤ 5 min), grey (offline, still counting). Tooltip "Screens · 1h 12m left".
@@ -865,6 +952,8 @@ Status chips under each kid: "Using PC now", "Parent mode on Pixel 7 · 10 min",
 
 **Kids › kid:** today summary, devices (name, form icon, last seen, **Parent mode**, rename, remove), **Schedule** editor (7 rows: day, Screens, Phone, Wake, Bedtime as tappable time chips; **Copy Monday to weekdays** and **Copy Saturday to weekend**; warnings 15/5 steppers), **Always callable** contacts list (add from phone contacts or type), **Add device** (pick Phone, Tablet, PC → full-screen QR code plus the 6 digits in 48 sp and a 10-minute countdown).
 
+**Kids › kid › Apps (12.4):** only for a kid with an Android device. A **New apps need approval** switch, then the apps, newest install first, with waiting apps at the top. A row has a circle with the app's initial (no icons), the name, a line such as "From Play Store · 3 Nov on Pixel 7", then "First used 4 Nov" or "Never opened", and today's time. **Allowed | Blocked | Limit** sets the rule, and Limit shows − and + in 5-minute steps, default 30 minutes. An app that cannot be blocked shows "Always allowed" instead, and a removed app shows "Removed" and stays until its rule is cleared. The inbox shows `app.approval` as a card with **Allow** and **Block**, and the other `app.*` events as plain rows.
+
 **Parent code:** reachable from Settings and from the parent mode notification: the 6-digit code in 48 sp with a circular 30-second countdown.
 
 **SOS alert:** full-screen red activity (shown over the lock screen), as in section 15.
@@ -885,7 +974,7 @@ As planned (CARD-042): the parent app starts Firebase itself from four `BuildCon
 
 ### 16.5 Parent web app
 
-Same functions as the parent app except SOS alarms (the web shows a red banner at the top of every page while an SOS is active, with the map link) and parent code (also shown in Settings).
+Kid detail has an **Apps** tab with the same content as 16.4. Same functions as the parent app except SOS alarms (the web shows a red banner at the top of every page while an SOS is active, with the map link) and parent code (also shown in Settings).
 
 Development (CARD-022): `pnpm dev:web` serves the app on http://localhost:5173 and passes `/v1/*` and `/health` to the API on :8080, so the browser sees one origin (in production the server serves the build, CARD-027). Routes are defined in code (TanStack Router, no generator); components are shadcn/ui-style files in `web/src/components/ui` with our tokens, not the shadcn defaults.
 
@@ -911,13 +1000,15 @@ Pages: Sign in (email, then 6-digit code boxes), Today (kid cards as 16.4 in a r
 
 - School-hours blocks.
 - Cooldown between time requests.
-- App allowlists / always-allowed apps (Lock Task allowlist or app suspension on Android; restricted mode with exe and URL allowlists on Windows).
+- App allowlists / always-allowed apps (Lock Task allowlist on Android; restricted mode with exe and URL allowlists on Windows). Blocking chosen apps on Android is section 12.4.
+- App alerts, blocks and limits on Windows.
+- A kid asking for more time on one app (Q38), and app icons in the parent's list.
 - iOS kid and parent apps (the API is ready).
 - Windows credential provider so the lock screen can show Ask / Message / Parent buttons.
 - Offline unlock codes for extra time (not just parent mode).
 - Offline cap: a device unsynced for 30 minutes may only use half of what was left.
 - History and weekly reports.
-- MDM extras: app inventory, install/remove apps, location outside SOS, remote wipe.
+- MDM extras: install/remove apps, location outside SOS, remote wipe.
 - Accessibility-service fallback for devices that cannot be Device Owner.
 - Browser push for the web app.
 - Self sign-up for other families (super admin creates families in v1).
