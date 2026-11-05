@@ -13,7 +13,7 @@ import java.util.Locale
 enum class AppSource { PREINSTALLED, PLAY, OTHER }
 
 /** A parent's rule for an app (docs/SPEC.md §12.4). HELD is written by the server while a new app waits. */
-enum class AppRule { ALLOWED, HELD, BLOCKED }
+enum class AppRule { ALLOWED, HELD, BLOCKED, LIMIT }
 
 /** One of the kid's devices an app is or was on. Times are the API's ISO 8601 strings. */
 data class KidAppDevice(
@@ -32,19 +32,35 @@ data class KidApp(
     val devices: List<KidAppDevice>,
     val blockable: Boolean = true,
     val rule: AppRule? = null,
+    val dailyMinutes: Int? = null,
 )
 
 /** What the Apps page shows. */
 data class KidAppsView(val newAppApproval: Boolean, val apps: List<KidApp>)
 
 /** What the row's control shows: nothing to choose, waiting for an answer, or the choice. */
-enum class AppChoice { FIXED, WAITING, ALLOWED, BLOCKED }
+enum class AppChoice { FIXED, WAITING, ALLOWED, BLOCKED, LIMIT }
 
 fun appChoice(app: KidApp): AppChoice = when {
     !app.blockable -> AppChoice.FIXED
     app.rule == AppRule.HELD -> AppChoice.WAITING
     app.rule == AppRule.BLOCKED -> AppChoice.BLOCKED
+    app.rule == AppRule.LIMIT -> AppChoice.LIMIT
     else -> AppChoice.ALLOWED
+}
+
+/** A new limit starts here, and the buttons move it in these steps (docs/SPEC.md §16.4). */
+const val DEFAULT_LIMIT_MINUTES = 30
+private const val LIMIT_STEP_MINUTES = 5
+private const val MAX_LIMIT_MINUTES = 480
+
+/** One step up or down, never below one step or above the server's limit. */
+fun stepLimit(minutes: Int, up: Boolean): Int =
+    (minutes + if (up) LIMIT_STEP_MINUTES else -LIMIT_STEP_MINUTES).coerceIn(LIMIT_STEP_MINUTES, MAX_LIMIT_MINUTES)
+
+/** The seam: CARD-058 replaces this with the server, in `KidsViewModel`. */
+internal object FakeLimits {
+    val minutes = mutableMapOf<String, Int>()
 }
 
 /** Gone from every device. */
@@ -85,9 +101,13 @@ fun firstUsedLine(app: KidApp, zone: ZoneId): String {
     return if (first != null) "First used ${shortDate(first, zone)}" else "Never opened"
 }
 
-/** "Today 12m", or null before it has been used today. */
-fun todayLine(app: KidApp): String? =
-    if (app.todaySeconds >= 60) "Today ${formatDuration(app.todaySeconds.toLong())}" else null
+/** "Today 12m", or with a limit "Today 12m of 30m"; without a limit, null before it has been used today. */
+fun todayLine(app: KidApp): String? {
+    val used = if (app.todaySeconds >= 60) formatDuration(app.todaySeconds.toLong()) else null
+    val limit = app.dailyMinutes.takeIf { app.rule == AppRule.LIMIT }
+    if (limit != null) return "Today ${used ?: "0m"} of ${formatDuration(limit * 60L)}"
+    return used?.let { "Today $it" }
+}
 
 /**
  * The page's order (docs/SPEC.md §16.4): apps waiting for an answer, then installed apps newest first, then pre-installed ones by name, then removed

@@ -28,6 +28,9 @@ object StatusHub {
      */
     val sosCountdown = MutableStateFlow<Long?>(null)
 
+    /** The kid's apps with a daily limit (docs/SPEC.md §12.4, §16.2). CARD-058 fills it; until then it is empty. */
+    val appLimits = MutableStateFlow<List<AppLimitView>>(emptyList())
+
     /** What the caught screen says while it is up (docs/SPEC.md §14); it sets it back to null when it closes. */
     val caught = MutableStateFlow<CaughtLine?>(null)
 }

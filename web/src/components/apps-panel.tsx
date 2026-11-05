@@ -1,12 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AppWindow, Loader2, RefreshCw } from 'lucide-react';
+import { AppWindow, Loader2, Minus, Plus, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { ApiError } from '@/lib/api';
 import {
+  APP_LIMITS_READY,
   type AppChoice,
   appChoice,
+  DEFAULT_LIMIT_MINUTES,
   fetchKidApps,
   firstUsedLine,
   installedLine,
@@ -15,6 +17,7 @@ import {
   saveAppRule,
   saveNewAppApproval,
   sortApps,
+  stepLimit,
   todayLine,
 } from '@/lib/apps';
 import { useAuth } from '@/lib/auth';
@@ -24,27 +27,31 @@ function messageOf(err: unknown): string {
   return err instanceof ApiError ? err.message : 'Something went wrong. Try again.';
 }
 
-const MODES: { value: 'allowed' | 'blocked'; label: string }[] = [
+type Mode = 'allowed' | 'blocked' | 'limit';
+
+const MODES: { value: Mode; label: string }[] = [
   { value: 'allowed', label: 'Allowed' },
   { value: 'blocked', label: 'Blocked' },
+  ...(APP_LIMITS_READY ? [{ value: 'limit' as const, label: 'Limit' }] : []),
 ];
 
 function RuleControl({ app, choice, kidId }: { app: KidApp; choice: AppChoice; kidId: string }) {
   const queryClient = useQueryClient();
   const save = useMutation({
-    mutationFn: (mode: 'allowed' | 'blocked') => saveAppRule(kidId, app.package, mode),
+    mutationFn: ({ mode, minutes }: { mode: Mode; minutes?: number }) => saveAppRule(kidId, app.package, mode, minutes ?? null),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['kid-apps', kidId] }),
   });
+  const minutes = app.rule?.dailyMinutes ?? DEFAULT_LIMIT_MINUTES;
   if (choice === 'fixed') return <p className="text-sm text-muted">Always allowed</p>;
   if (choice === 'waiting') {
     return (
       <div className="flex flex-col items-start gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">Waiting for you</span>
-          <Button variant="outline" size="sm" disabled={save.isPending} onClick={() => save.mutate('blocked')}>
+          <Button variant="outline" size="sm" disabled={save.isPending} onClick={() => save.mutate({ mode: 'blocked' })}>
             Block
           </Button>
-          <Button size="sm" disabled={save.isPending} onClick={() => save.mutate('allowed')}>
+          <Button size="sm" disabled={save.isPending} onClick={() => save.mutate({ mode: 'allowed' })}>
             {save.isPending && <Loader2 className="animate-spin" />}
             Allow
           </Button>
@@ -59,7 +66,7 @@ function RuleControl({ app, choice, kidId }: { app: KidApp; choice: AppChoice; k
   }
   return (
     <div className="flex flex-col items-start gap-2">
-      <div role="radiogroup" aria-label={`${app.label}: allowed or blocked`} className="flex gap-2">
+      <div role="radiogroup" aria-label={`${app.label}: allowed, blocked or limit`} className="flex flex-wrap gap-2">
         {MODES.map((m) => (
           <button
             key={m.value}
@@ -67,17 +74,41 @@ function RuleControl({ app, choice, kidId }: { app: KidApp; choice: AppChoice; k
             role="radio"
             aria-checked={choice === m.value}
             disabled={save.isPending}
-            onClick={() => choice !== m.value && save.mutate(m.value)}
+            onClick={() => choice !== m.value && save.mutate({ mode: m.value, minutes: m.value === 'limit' ? minutes : undefined })}
             className={cn(
               'h-9 rounded-full border border-outline px-3 text-sm font-medium transition-colors outline-none hover:bg-surface-variant focus-visible:ring-2 focus-visible:ring-primary',
               choice === m.value && m.value === 'allowed' && 'border-primary bg-primary/10 text-primary',
               choice === m.value && m.value === 'blocked' && 'border-danger bg-danger/10 text-danger',
+              choice === m.value && m.value === 'limit' && 'border-warning bg-warning/10 text-warning',
             )}
           >
             {m.label}
           </button>
         ))}
       </div>
+      {choice === 'limit' && (
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label={`${app.label}: 5 minutes less`}
+            disabled={save.isPending || minutes <= 5}
+            onClick={() => save.mutate({ mode: 'limit', minutes: stepLimit(minutes, -1) })}
+          >
+            <Minus />
+          </Button>
+          <span className="min-w-24 text-center text-sm font-medium tabular-nums">{minutes} min a day</span>
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label={`${app.label}: 5 minutes more`}
+            disabled={save.isPending || minutes >= 480}
+            onClick={() => save.mutate({ mode: 'limit', minutes: stepLimit(minutes, 1) })}
+          >
+            <Plus />
+          </Button>
+        </div>
+      )}
       {save.error && (
         <p role="alert" className="text-sm text-danger">
           {messageOf(save.error)}

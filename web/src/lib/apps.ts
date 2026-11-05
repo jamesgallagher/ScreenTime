@@ -1,16 +1,60 @@
-import type { KidApp, KidAppDevice, KidApps } from '@screentime/schemas';
+import type { KidApp as ServerApp, KidAppDevice, KidApps as ServerApps } from '@screentime/schemas';
 import { api } from '@/lib/auth';
 import { formatDuration } from '@/lib/format';
 
-export type { KidApp, KidAppDevice, KidApps };
+export type { KidAppDevice };
 
-/** GET /v1/kids/{kidId}/apps (docs/SPEC.md §12.4). */
-export function fetchKidApps(kidId: string): Promise<KidApps> {
-  return api.get<KidApps>(`/v1/kids/${kidId}/apps`);
+export interface KidAppRule {
+  mode: 'allowed' | 'held' | 'blocked' | 'limit';
+  dailyMinutes: number | null;
 }
 
-export async function saveAppRule(kidId: string, pkg: string, mode: 'allowed' | 'blocked'): Promise<void> {
+export type KidApp = Omit<ServerApp, 'rule'> & { rule: KidAppRule | null };
+
+export interface KidApps {
+  newAppApproval: boolean;
+  apps: KidApp[];
+}
+
+/** The seam: CARD-058 replaces this, `fakeLimits` and the two functions below with the server. */
+export const APP_LIMITS_READY = import.meta.env.DEV;
+const fakeLimits = new Map<string, number>();
+
+/** GET /v1/kids/{kidId}/apps (docs/SPEC.md §12.4). */
+export async function fetchKidApps(kidId: string): Promise<KidApps> {
+  const server = await api.get<ServerApps>(`/v1/kids/${kidId}/apps`);
+  return {
+    newAppApproval: server.newAppApproval,
+    apps: server.apps.map((a) => {
+      const minutes = fakeLimits.get(a.package);
+      if (minutes !== undefined) return { ...a, rule: { mode: 'limit' as const, dailyMinutes: minutes } };
+      return { ...a, rule: a.rule ? { mode: a.rule.mode, dailyMinutes: null } : null };
+    }),
+  };
+}
+
+export async function saveAppRule(
+  kidId: string,
+  pkg: string,
+  mode: 'allowed' | 'blocked' | 'limit',
+  dailyMinutes: number | null = null,
+): Promise<void> {
+  if (mode === 'limit') {
+    fakeLimits.set(pkg, dailyMinutes ?? DEFAULT_LIMIT_MINUTES);
+    return;
+  }
+  fakeLimits.delete(pkg);
   await api.put(`/v1/kids/${kidId}/apps/${encodeURIComponent(pkg)}/rule`, { mode });
+}
+
+/** A new limit starts here, and the buttons move it in these steps (docs/SPEC.md §16.4). */
+export const DEFAULT_LIMIT_MINUTES = 30;
+export const LIMIT_STEP_MINUTES = 5;
+export const MAX_LIMIT_MINUTES = 480;
+
+/** One step up or down, never below one step or above the server's limit. */
+export function stepLimit(minutes: number, direction: 1 | -1): number {
+  return Math.min(MAX_LIMIT_MINUTES, Math.max(LIMIT_STEP_MINUTES, minutes + direction * LIMIT_STEP_MINUTES));
 }
 
 export async function saveNewAppApproval(kidId: string, on: boolean): Promise<void> {
@@ -18,11 +62,12 @@ export async function saveNewAppApproval(kidId: string, on: boolean): Promise<vo
 }
 
 /** What the row's control shows: nothing to choose, waiting for an answer, or the choice. */
-export type AppChoice = 'fixed' | 'waiting' | 'allowed' | 'blocked';
+export type AppChoice = 'fixed' | 'waiting' | 'allowed' | 'blocked' | 'limit';
 
 export function appChoice(app: KidApp): AppChoice {
   if (!app.blockable) return 'fixed';
   if (app.rule?.mode === 'held') return 'waiting';
+  if (app.rule?.mode === 'limit') return 'limit';
   return app.rule?.mode === 'blocked' ? 'blocked' : 'allowed';
 }
 
@@ -67,8 +112,13 @@ export function firstUsedLine(app: KidApp, timeZone: string): string {
   return first ? `First used ${shortDate(first, timeZone)}` : 'Never opened';
 }
 
-/** "Today 12m", or null before it has been used today. */
+/** "Today 12m", or with a limit "Today 12m of 30m"; without a limit, null before it has been used today. */
 export function todayLine(app: KidApp): string | null {
+  const limit = app.rule?.mode === 'limit' ? app.rule.dailyMinutes : null;
+  if (limit !== null) {
+    const used = app.todaySeconds >= 60 ? formatDuration(app.todaySeconds) : '0m';
+    return `Today ${used} of ${formatDuration(limit * 60)}`;
+  }
   return app.todaySeconds >= 60 ? `Today ${formatDuration(app.todaySeconds)}` : null;
 }
 

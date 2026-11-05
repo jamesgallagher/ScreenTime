@@ -24,7 +24,8 @@ class AppsTest {
         devices: List<KidAppDevice> = listOf(device()),
         blockable: Boolean = true,
         rule: AppRule? = null,
-    ) = KidApp("a.$label", label, source, todaySeconds, devices, blockable, rule)
+        dailyMinutes: Int? = null,
+    ) = KidApp("a.$label", label, source, todaySeconds, devices, blockable, rule, dailyMinutes)
 
     @Test
     fun saysWhereItCameFromWhenAndOnWhat() {
@@ -71,6 +72,26 @@ class AppsTest {
         assertEquals(AppChoice.ALLOWED, appChoice(app(rule = AppRule.ALLOWED)))
         assertEquals(AppChoice.BLOCKED, appChoice(app(rule = AppRule.BLOCKED)))
         assertEquals(AppChoice.WAITING, appChoice(app(rule = AppRule.HELD)))
+    }
+
+    @Test
+    fun aLimitIsAChoiceOfItsOwn() {
+        assertEquals(AppChoice.LIMIT, appChoice(app(rule = AppRule.LIMIT, dailyMinutes = 30)))
+        assertEquals(AppChoice.FIXED, appChoice(app(blockable = false, rule = AppRule.LIMIT, dailyMinutes = 30)))
+    }
+
+    @Test
+    fun showsTodaysTimeAgainstTheLimitFromNothing() {
+        assertEquals("Today 0m of 30m", todayLine(app(rule = AppRule.LIMIT, dailyMinutes = 30)))
+        assertEquals("Today 12m of 30m", todayLine(app(todaySeconds = 720, rule = AppRule.LIMIT, dailyMinutes = 30)))
+    }
+
+    @Test
+    fun aLimitMovesInFiveMinuteStepsFromFiveMinutesToEightHours() {
+        assertEquals(35, stepLimit(30, up = true))
+        assertEquals(25, stepLimit(30, up = false))
+        assertEquals(5, stepLimit(5, up = false))
+        assertEquals(480, stepLimit(480, up = true))
     }
 
     @Test
