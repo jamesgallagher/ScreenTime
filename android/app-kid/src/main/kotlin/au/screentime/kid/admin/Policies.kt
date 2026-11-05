@@ -6,6 +6,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.pm.PackageManager
 import android.content.pm.PermissionInfo
+import android.os.Build
 import android.os.UserManager
 import android.telecom.TelecomManager
 import android.util.Log
@@ -25,14 +26,15 @@ object Policies {
     private const val APPLIED = "applied"
     private const val MISSING = "missing"
 
-    /** Restrictions for every build. */
-    private val RESTRICTIONS = listOf(
+    /** Restrictions for every build. A private space could hide apps from the list and from blocks (docs/SPEC.md §12.4). */
+    private val RESTRICTIONS = listOfNotNull(
         UserManager.DISALLOW_APPS_CONTROL,
         UserManager.DISALLOW_SAFE_BOOT,
         UserManager.DISALLOW_FACTORY_RESET,
         UserManager.DISALLOW_CONFIG_DATE_TIME,
         UserManager.DISALLOW_ADD_USER,
         UserManager.DISALLOW_AIRPLANE_MODE,
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) UserManager.DISALLOW_ADD_PRIVATE_PROFILE else null,
     )
 
     fun isDeviceOwner(context: Context): Boolean =
@@ -59,6 +61,8 @@ object Policies {
             dpm.addUserRestriction(admin, UserManager.DISALLOW_DEBUGGING_FEATURES)
             dpm.setUninstallBlocked(admin, context.packageName, true)
         }
+        // The second line of the dialog Android shows when a blocked app is opened (docs/SPEC.md §12.4).
+        dpm.setShortSupportMessage(admin, "Ask Mum or Dad about this app.")
         dpm.setAutoTimeEnabled(admin, true)
         dpm.setAutoTimeZoneEnabled(admin, true)
         // The block screen runs in Lock Task (docs/SPEC.md §12.1): no Home, Recents or notification shade, but the

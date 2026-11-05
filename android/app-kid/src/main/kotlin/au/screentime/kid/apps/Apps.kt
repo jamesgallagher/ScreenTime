@@ -1,5 +1,6 @@
 package au.screentime.kid.apps
 
+import au.screentime.core.model.api.AppRuleMode
 import au.screentime.core.model.api.AppSource
 import au.screentime.core.model.api.DeviceAppIn
 import au.screentime.core.model.api.DeviceAppsPut
@@ -44,6 +45,43 @@ fun withFirstUses(known: Map<String, Long>, resumes: List<Resume>, ignored: Set<
         if (seen == null || r.atMs < seen) out[r.packageName] = r.atMs
     }
     return out
+}
+
+/** What the device must do to match [wanted]: which packages to block, and which to release. */
+data class BlockPlan(val block: Set<String>, val release: Set<String>)
+
+/**
+ * Which packages should be blocked now (docs/SPEC.md §12.4): those with a `blocked` or `held` rule and those the
+ * device is holding itself, never anything in [protected] or [NEVER_BLOCKED]. Parent mode releases everything.
+ */
+fun wantedBlocks(
+    rules: Map<String, AppRuleMode>,
+    held: Set<String>,
+    protected: Set<String>,
+    parentMode: Boolean,
+): Set<String> {
+    if (parentMode) return emptySet()
+    val ruled = rules.filterValues { it == AppRuleMode.BLOCKED || it == AppRuleMode.HELD }.keys
+    return (ruled + held) - protected - NEVER_BLOCKED
+}
+
+fun blockPlan(wanted: Set<String>, applied: Set<String>): BlockPlan = BlockPlan(wanted - applied, applied - wanted)
+
+/**
+ * The packages the device holds itself until the server's rule arrives: new since the last look, with approval on and
+ * no rule. One already held stays until it has a rule or is gone. With approval off nothing new is held, and one with
+ * no rule is let go. The first look ([known] null) is the baseline, so nothing is held.
+ */
+fun heldPackages(
+    approval: Boolean,
+    known: Set<String>?,
+    installed: Set<String>,
+    rules: Set<String>,
+    held: Set<String>,
+): Set<String> {
+    if (!approval) return emptySet()
+    val new = if (known == null) emptySet() else installed - known
+    return (held + new).intersect(installed) - rules
 }
 
 private fun iso(ms: Long): String = Instant.ofEpochMilli(ms).toString()
