@@ -36,6 +36,13 @@
       "when": 1792836535509,
       "tag": "0004_preset_delete_set_null",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1793843771672,
+      "tag": "0005_device_apps",
+      "breakpoints": true
     }
   ]
 }

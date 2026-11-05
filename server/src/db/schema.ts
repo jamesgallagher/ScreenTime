@@ -424,3 +424,28 @@ export const events = pgTable(
   },
   (t) => [index('events_family_at_idx').on(t.familyId, t.at)],
 );
+
+/** The apps of one Android device (docs/SPEC.md §12.4). */
+export const deviceApps = pgTable(
+  'device_apps',
+  {
+    familyId: familyId(),
+    kidId: uuid('kid_id')
+      .notNull()
+      .references(() => kids.id),
+    deviceId: uuid('device_id')
+      .notNull()
+      .references(() => devices.id),
+    package: text('package').notNull(),
+    label: text('label').notNull(),
+    source: text('source').notNull(),
+    installer: text('installer'),
+    blockable: boolean('blockable').notNull(),
+    installedAt: ts('installed_at').notNull(),
+    firstSeenAt: ts('first_seen_at').notNull(),
+    firstUsedAt: ts('first_used_at'),
+    removedAt: ts('removed_at'),
+    baseline: boolean('baseline').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.deviceId, t.package] }), index('device_apps_kid_idx').on(t.kidId)],
+);
