@@ -484,7 +484,7 @@ App control routes (Android only, section 12.4):
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/v1/kids/{kidId}/apps` | `{ newAppApproval, apps: [{ package, label, source, blockable, todaySeconds, rule: { mode, dailyMinutes } \| null, devices: [{ deviceId, deviceName, installedAt, firstUsedAt, removedAt }] }] }`, across the kid's Android devices. An app gone from every device is still listed, with `removedAt` set |
-| PUT | `/v1/kids/{kidId}/apps/{package}/rule` | `{ mode, dailyMinutes? }` → the app's rule. `mode` is `allowed`, `blocked` or `limit`; `held` is only written by the server (422). `dailyMinutes` 5 to 480 in steps of 5, required for `limit` and refused otherwise (422). A package not on any of the kid's devices → 404; one that any of them says is not `blockable` → 409. Answering a `held` app also writes `app.answered` |
+| PUT | `/v1/kids/{kidId}/apps/{package}/rule` | `{ mode, dailyMinutes }` → the app's rule (`dailyMinutes` null unless `limit`). `mode` is `allowed`, `blocked` or `limit`; `held` is only written by the server (422). `dailyMinutes` 5 to 480 in steps of 5 for `limit`, and anything but null otherwise is refused (422). A package not on any of the kid's devices → 404; one that any of them says is not `blockable` → 409. Answering a `held` app also writes `app.answered` |
 | PUT | `/v1/kids/{kidId}/app-settings` | `{ newAppApproval }` → 204 |
 
 ### 9.3 Device
@@ -728,7 +728,7 @@ Windows has none of this. Everything is enforced on the device from the snapshot
 | `PACKAGE_ADDED` and `PACKAGE_REMOVED`, registered in code | Delivered to a running app, on a reinstall |
 | `pm suspend` from the adb shell | Refused because of `DISALLOW_APPS_CONTROL`, so tests must go through `DevicePolicyManager` |
 
-Not tried yet, so **each card's rehearsal or the rollout must prove it**: a real Play Store install (expected installer `com.android.vending`); audio from a blocked app stopping; whether a kid can turn off usage access (CARD-058); whether hiding Play Store stops updates; a real private space being refused; and all of it on the real Pixel and XPPen tablet, since makers can change these rules. CARD-057's rehearsal proved a new package's broadcast, the dialog's new line, and that an app reinstalled after a block comes back free, so the device must ask Android what is blocked instead of trusting what it saved.
+Not tried yet, so **each card's rehearsal or the rollout must prove it**: a real Play Store install (expected installer `com.android.vending`); audio from a blocked app stopping; whether hiding Play Store stops updates; a real private space being refused; and all of it on the real Pixel and XPPen tablet, since makers can change these rules. CARD-057's rehearsal proved a new package's broadcast, the dialog's new line, and that an app reinstalled after a block comes back free, so the device must ask Android what is blocked instead of trusting what it saved. CARD-058's proved that **a kid can turn off usage access with one tap in Settings**, with the app as Device Owner, and that an upload must leave out parent mode even when it has just ended, because the server never lowers a value.
 
 **Permissions and policies.** The manifest adds `QUERY_ALL_PACKAGES` and `PACKAGE_USAGE_STATS`. `Policies` adds `DISALLOW_ADD_PRIVATE_PROFILE` on Android 15 and later, because apps in a private space cannot be listed or blocked. A device set up before this card has USB debugging off, so a parent turns usage access on in Settings during parent mode instead of using adb.
 
