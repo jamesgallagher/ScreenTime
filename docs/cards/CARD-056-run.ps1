@@ -1,4 +1,4 @@
-# CARD-056 emulator run. Run from the repo root with: pwsh -File docsrdsCARD-056-run.ps1
+# CARD-056 emulator run. Run from the repo root with: pwsh -File docs\cards\CARD-056-run.ps1
 # It wipes the emulator and the development database. Every line it prints goes into the handback.
 param([string]$Repo = (Get-Location).Path)
 $ErrorActionPreference = 'Stop'
