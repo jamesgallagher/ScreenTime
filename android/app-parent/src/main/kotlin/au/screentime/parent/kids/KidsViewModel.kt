@@ -124,7 +124,10 @@ class KidsViewModel(app: Application) : AndroidViewModel(app) {
         val deferred = viewModelScope.async {
             try {
                 val apps = session.call { getKidsApps(kidId) }
-                Result.success(KidAppsView(apps.newAppApproval, apps.apps.map(::appRow)))
+                val rows = apps.apps.map(::appRow).map { row ->
+                    FakeLimits.minutes[row.packageName]?.let { row.copy(rule = AppRule.LIMIT, dailyMinutes = it) } ?: row
+                }
+                Result.success(KidAppsView(apps.newAppApproval, rows))
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -135,7 +138,13 @@ class KidsViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Allow or block an app; a failure is a [Result.failure] with the exception. */
-    suspend fun saveAppRule(kidId: String, packageName: String, rule: AppRule): Result<Unit> {
+    suspend fun saveAppRule(kidId: String, packageName: String, rule: AppRule, minutes: Int? = null): Result<Unit> {
+        // The seam: CARD-058 replaces this with the server.
+        if (rule == AppRule.LIMIT) {
+            FakeLimits.minutes[packageName] = minutes ?: DEFAULT_LIMIT_MINUTES
+            return Result.success(Unit)
+        }
+        FakeLimits.minutes.remove(packageName)
         val deferred = viewModelScope.async {
             try {
                 session.call { putKidsAppsRule(kidId, packageName, rulePut(rule)) }

@@ -48,6 +48,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import au.screentime.core.model.api.Kid
 import au.screentime.core.ui.ScreenTimeTheme
+import au.screentime.parent.BuildConfig
 import au.screentime.parent.R
 import au.screentime.parent.today.Problem
 import au.screentime.parent.today.initial
@@ -156,7 +157,7 @@ fun AppsScreen(kid: Kid, vm: KidsViewModel, zone: ZoneId, onBack: () -> Unit) {
                         }
                     }
                     items(loaded, key = { it.packageName }) { app ->
-                        AppRow(app, zone, !busy) { rule -> change { vm.saveAppRule(kid.id, app.packageName, rule) } }
+                        AppRow(app, zone, !busy) { rule, minutes -> change { vm.saveAppRule(kid.id, app.packageName, rule, minutes) } }
                     }
                     if (loaded.isNotEmpty()) {
                         item {
@@ -208,9 +209,12 @@ private fun ApprovalCard(kid: Kid, on: Boolean, enabled: Boolean, onChange: (Boo
     }
 }
 
-/** What a parent can do about one app: nothing, answer a waiting app, or choose Allowed or Blocked. */
+/** The seam: CARD-058 makes this true. Until then a limit only shows in debug builds. */
+private val APP_LIMITS_READY = BuildConfig.DEBUG
+
+/** What a parent can do about one app: nothing, answer a waiting app, or choose Allowed, Blocked or Limit. */
 @Composable
-private fun RuleControl(app: KidApp, enabled: Boolean, onRule: (AppRule) -> Unit) {
+private fun RuleControl(app: KidApp, enabled: Boolean, onRule: (AppRule, Int?) -> Unit) {
     when (val choice = appChoice(app)) {
         AppChoice.FIXED -> Text(
             text = "Always allowed",
@@ -226,32 +230,67 @@ private fun RuleControl(app: KidApp, enabled: Boolean, onRule: (AppRule) -> Unit
             )
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { onRule(AppRule.BLOCKED) }, enabled = enabled) { Text("Block") }
-                Button(onClick = { onRule(AppRule.ALLOWED) }, enabled = enabled) { Text("Allow") }
+                OutlinedButton(onClick = { onRule(AppRule.BLOCKED, null) }, enabled = enabled) { Text("Block") }
+                Button(onClick = { onRule(AppRule.ALLOWED, null) }, enabled = enabled) { Text("Allow") }
             }
         }
-        else -> SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-            SegmentedButton(
-                selected = choice == AppChoice.ALLOWED,
-                onClick = { if (choice != AppChoice.ALLOWED) onRule(AppRule.ALLOWED) },
-                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
-                enabled = enabled,
-                label = { Text("Allowed") },
-            )
-            SegmentedButton(
-                selected = choice == AppChoice.BLOCKED,
-                onClick = { if (choice != AppChoice.BLOCKED) onRule(AppRule.BLOCKED) },
-                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
-                enabled = enabled,
-                label = { Text("Blocked") },
-            )
+        else -> Column {
+            val count = if (APP_LIMITS_READY) 3 else 2
+            val minutes = app.dailyMinutes ?: DEFAULT_LIMIT_MINUTES
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                SegmentedButton(
+                    selected = choice == AppChoice.ALLOWED,
+                    onClick = { if (choice != AppChoice.ALLOWED) onRule(AppRule.ALLOWED, null) },
+                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = count),
+                    enabled = enabled,
+                    label = { Text("Allowed") },
+                )
+                SegmentedButton(
+                    selected = choice == AppChoice.BLOCKED,
+                    onClick = { if (choice != AppChoice.BLOCKED) onRule(AppRule.BLOCKED, null) },
+                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = count),
+                    enabled = enabled,
+                    label = { Text("Blocked") },
+                )
+                if (APP_LIMITS_READY) {
+                    SegmentedButton(
+                        selected = choice == AppChoice.LIMIT,
+                        onClick = { if (choice != AppChoice.LIMIT) onRule(AppRule.LIMIT, minutes) },
+                        shape = SegmentedButtonDefaults.itemShape(index = 2, count = count),
+                        enabled = enabled,
+                        label = { Text("Limit") },
+                    )
+                }
+            }
+            if (choice == AppChoice.LIMIT) {
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    OutlinedButton(onClick = { onRule(AppRule.LIMIT, stepLimit(minutes, up = false)) }, enabled = enabled && minutes > 5) {
+                        Text("−")
+                    }
+                    Text(
+                        text = "$minutes min a day",
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    OutlinedButton(onClick = { onRule(AppRule.LIMIT, stepLimit(minutes, up = true)) }, enabled = enabled && minutes < 480) {
+                        Text("+")
+                    }
+                }
+            }
         }
     }
 }
 
 /** One app: a circle with its initial, its name, where it came from, first use, today's time or "Removed", and its rule. */
 @Composable
-private fun AppRow(app: KidApp, zone: ZoneId, enabled: Boolean, onRule: (AppRule) -> Unit) {
+private fun AppRow(app: KidApp, zone: ZoneId, enabled: Boolean, onRule: (AppRule, Int?) -> Unit) {
     val removed = isRemoved(app)
     Card(
         modifier = Modifier.fillMaxWidth(),

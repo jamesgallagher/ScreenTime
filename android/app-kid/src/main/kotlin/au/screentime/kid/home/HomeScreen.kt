@@ -56,6 +56,7 @@ import au.screentime.kid.sos.SosLayer
 import au.screentime.kid.status.KidStatus
 import au.screentime.kid.status.Level
 import au.screentime.kid.status.StatusHub
+import au.screentime.kid.status.appLimitLine
 import kotlinx.coroutines.delay
 
 /**
@@ -201,6 +202,19 @@ private fun Details(s: KidStatus, align: TextAlign) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = align,
         )
+    }
+    // The apps with a daily limit (docs/SPEC.md §12.4). Nothing counts in parent mode, so they are left out then.
+    val limits by StatusHub.appLimits.collectAsState()
+    if (!s.parentMode && limits.isNotEmpty()) {
+        Spacer(Modifier.height(12.dp))
+        for (limit in limits) {
+            Text(
+                text = appLimitLine(limit),
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (limit.leftSec <= 0) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onBackground,
+                textAlign = align,
+            )
+        }
     }
 }
 

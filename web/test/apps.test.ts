@@ -1,6 +1,6 @@
 import type { EventItem } from '@screentime/schemas';
 import { describe, expect, it } from 'vitest';
-import { appChoice, firstUsedLine, installedLine, isRemoved, type KidApp, type KidAppDevice, sortApps, todayLine } from '../src/lib/apps';
+import { appChoice, firstUsedLine, stepLimit, installedLine, isRemoved, type KidApp, type KidAppDevice, sortApps, todayLine } from '../src/lib/apps';
 import { eventView, pendingAppApprovals } from '../src/lib/inbox';
 import { NOTIFICATION_TEXT } from '../src/lib/settings';
 
@@ -58,6 +58,28 @@ describe('the lines of an app', () => {
   });
 });
 
+describe('a daily limit', () => {
+  const limited = (todaySeconds: number) => app({ todaySeconds, rule: { mode: 'limit', dailyMinutes: 30 } });
+
+  it('is a choice of its own', () => {
+    expect(appChoice(limited(0))).toBe('limit');
+    expect(appChoice({ ...limited(0), blockable: false })).toBe('fixed');
+  });
+
+  it("shows today's time against the limit, from nothing", () => {
+    expect(todayLine(limited(0))).toBe('Today 0m of 30m');
+    expect(todayLine(limited(720))).toBe('Today 12m of 30m');
+    expect(todayLine(app({ todaySeconds: 3900, rule: { mode: 'limit', dailyMinutes: 90 } }))).toBe('Today 1h 05m of 1h 30m');
+  });
+
+  it('moves in 5-minute steps from 5 minutes to 8 hours', () => {
+    expect(stepLimit(30, 1)).toBe(35);
+    expect(stepLimit(30, -1)).toBe(25);
+    expect(stepLimit(5, -1)).toBe(5);
+    expect(stepLimit(480, 1)).toBe(480);
+  });
+});
+
 describe('the order of the list', () => {
   it('puts newest installs first, then pre-installed by name, then removed', () => {
     const removed = app({ label: 'Old', devices: [device({ removedAt: '2026-11-04T00:00:00Z' })] });
@@ -108,19 +130,19 @@ describe('app events in the history', () => {
 describe('the choice on a row', () => {
   it('is allowed without a rule, and follows the rule', () => {
     expect(appChoice(app())).toBe('allowed');
-    expect(appChoice(app({ rule: { mode: 'allowed' } }))).toBe('allowed');
-    expect(appChoice(app({ rule: { mode: 'blocked' } }))).toBe('blocked');
-    expect(appChoice(app({ rule: { mode: 'held' } }))).toBe('waiting');
+    expect(appChoice(app({ rule: { mode: 'allowed', dailyMinutes: null } }))).toBe('allowed');
+    expect(appChoice(app({ rule: { mode: 'blocked', dailyMinutes: null } }))).toBe('blocked');
+    expect(appChoice(app({ rule: { mode: 'held', dailyMinutes: null } }))).toBe('waiting');
   });
 
   it('is never offered for an app that cannot be blocked', () => {
     expect(appChoice(app({ blockable: false }))).toBe('fixed');
-    expect(appChoice(app({ blockable: false, rule: { mode: 'blocked' } }))).toBe('fixed');
+    expect(appChoice(app({ blockable: false, rule: { mode: 'blocked', dailyMinutes: null } }))).toBe('fixed');
   });
 
   it('puts apps waiting for an answer first', () => {
     const newest = app({ label: 'Newest', devices: [device({ installedAt: '2026-11-05T00:00:00Z' })] });
-    const waiting = app({ label: 'Waiting', devices: [device({ installedAt: '2026-11-01T00:00:00Z' })], rule: { mode: 'held' } });
+    const waiting = app({ label: 'Waiting', devices: [device({ installedAt: '2026-11-01T00:00:00Z' })], rule: { mode: 'held', dailyMinutes: null } });
     expect(sortApps([newest, waiting]).map((a) => a.label)).toEqual(['Waiting', 'Newest']);
   });
 });
