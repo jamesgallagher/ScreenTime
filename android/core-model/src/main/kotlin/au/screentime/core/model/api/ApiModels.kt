@@ -681,6 +681,54 @@ enum class DeviceEventKind(override val wire: String) : ApiEnum {
 }
 
 @Serializable
+data class DeviceAppsPut(
+    val apps: List<DeviceAppIn>,
+)
+
+@Serializable
+data class DeviceAppIn(
+    val `package`: String,
+    val label: String,
+    val source: AppSource,
+    val installer: String?,
+    val blockable: Boolean,
+    val installedAt: String,
+    val firstUsedAt: String?,
+)
+
+@Serializable
+enum class AppSource(override val wire: String) : ApiEnum {
+    @SerialName("preinstalled") PREINSTALLED("preinstalled"),
+    @SerialName("play") PLAY("play"),
+    @SerialName("other") OTHER("other");
+}
+
+@Serializable
+data class KidApps(
+    val newAppApproval: Boolean,
+    val apps: List<KidApp>,
+)
+
+@Serializable
+data class KidApp(
+    val `package`: String,
+    val label: String,
+    val source: AppSource,
+    val blockable: Boolean,
+    val todaySeconds: Int,
+    val devices: List<KidAppDevice>,
+)
+
+@Serializable
+data class KidAppDevice(
+    val deviceId: String,
+    val deviceName: String,
+    val installedAt: String,
+    val firstUsedAt: String?,
+    val removedAt: String?,
+)
+
+@Serializable
 data class Sos(
     val id: String,
     val kidId: String,
@@ -807,6 +855,8 @@ enum class NotificationKind(override val wire: String) : ApiEnum {
     @SerialName("time_request") TIME_REQUEST("time_request"),
     @SerialName("kid_message") KID_MESSAGE("kid_message"),
     @SerialName("overspend") OVERSPEND("overspend"),
+    @SerialName("app.installed") APP_INSTALLED("app.installed"),
+    @SerialName("app.first_used") APP_FIRST_USED("app.first_used"),
     @SerialName("device.offline") DEVICE_OFFLINE("device.offline"),
     @SerialName("device.enrolled") DEVICE_ENROLLED("device.enrolled"),
     @SerialName("grant.by_other_parent") GRANT_BY_OTHER_PARENT("grant.by_other_parent");

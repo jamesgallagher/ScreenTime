@@ -575,6 +575,28 @@ class ApiClient(
     }
 
     /**
+     * Send the device's whole app list.
+     *
+     * `PUT /v1/device/apps`
+     */
+    suspend fun putDeviceApps(
+        body: DeviceAppsPut,
+    ) {
+        call(HttpMethod.Put, "/v1/device/apps", auth = true, body = body, bodyType = typeInfo<DeviceAppsPut>())
+    }
+
+    /**
+     * A kid's apps across their Android devices.
+     *
+     * `GET /v1/kids/{kidId}/apps`
+     */
+    suspend fun getKidsApps(
+        kidId: String,
+    ): KidApps {
+        return call(HttpMethod.Get, "/v1/kids/${segment(kidId)}/apps", auth = true).body()
+    }
+
+    /**
      * Start an SOS.
      *
      * `POST /v1/device/sos`
