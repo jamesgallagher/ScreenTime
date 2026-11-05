@@ -119,6 +119,18 @@ class Notifier(private val context: Context) {
         }
     }
 
+    /** "5 minutes of YouTube left" or "That's all your YouTube for today" (docs/SPEC.md §12.4). */
+    fun showAppLimit(text: String) {
+        val notification = Notification.Builder(context, WARNING_CHANNEL)
+            .setSmallIcon(R.drawable.ic_status)
+            .setContentTitle(text)
+            .setCategory(Notification.CATEGORY_REMINDER)
+            .setContentIntent(openApp)
+            .setAutoCancel(true)
+            .build()
+        manager.notify(APP_LIMIT_ID, notification)
+    }
+
     /** "Dad said yes! +15 min 🎉" or "Dad said not this time", heads-up; it goes away by itself after a minute. */
     fun showAnswer(answer: Answer) {
         val notification = Notification.Builder(context, ANSWER_CHANNEL)
@@ -158,6 +170,7 @@ class Notifier(private val context: Context) {
         private const val WARNING_ID = 2
         private const val ANSWER_ID = 3
         private const val GRANT_ID = 4
+        private const val APP_LIMIT_ID = 5
         private const val STATUS_CHANNEL = "status"
         private const val WARNING_CHANNEL = "warnings"
         private const val ANSWER_CHANNEL = "answers"
