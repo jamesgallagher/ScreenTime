@@ -72,7 +72,7 @@ public sealed class LocalStoreTests : IDisposable
             Contacts: [],
             MessagePresets: [],
             Schedule: new Schedule(3, 15, 5, [new ScheduleDay(4, 120, 60, "07:00", "21:00")]),
-            Today: new DeviceStateToday("2026-10-29", [], []),
+            Today: new DeviceStateToday("2026-10-29", [], [], []),
             ParentMode: new DeviceStateParentMode(false, null, null),
             PendingRequest: null,
             ActiveSos: null,

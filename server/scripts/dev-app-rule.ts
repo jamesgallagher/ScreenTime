@@ -2,19 +2,23 @@
 // It signs a short-lived parent token with JWT_SECRET for the family's first parent; the server must use the same secret.
 // Usage (from the repo root, with DATABASE_URL and JWT_SECRET set):
 //   pnpm --filter @screentime/server exec tsx scripts/dev-app-rule.ts Alex rule com.android.chrome blocked
+//   pnpm --filter @screentime/server exec tsx scripts/dev-app-rule.ts Alex rule com.android.chrome limit 30
 //   pnpm --filter @screentime/server exec tsx scripts/dev-app-rule.ts Alex approval on
+//   pnpm --filter @screentime/server exec tsx scripts/dev-app-rule.ts Alex tablet-usage com.android.chrome 260
+// "tablet-usage" reports today's seconds from a second Android device of the kid, which it adds the first time.
 // It prints the HTTP status. Never run this against the production database.
 import { randomUUID } from 'node:crypto';
 import { and, asc, eq, isNull, sql } from 'drizzle-orm';
 import { signAccessToken } from '../src/auth/tokens.js';
 import { createDb } from '../src/db/client.js';
-import { kids, parents } from '../src/db/schema.js';
+import { appUsageDaily, devices, kids, parents } from '../src/db/schema.js';
+import { hashDeviceToken, newDeviceToken } from '../src/devices/token.js';
 
 const databaseUrl = process.env.DATABASE_URL;
 const jwtSecret = process.env.JWT_SECRET;
-const [kidName, what, first, second] = process.argv.slice(2);
-if (!databaseUrl || !jwtSecret || !kidName || !first || (what !== 'rule' && what !== 'approval')) {
-  console.error('Usage: tsx scripts/dev-app-rule.ts <kid name> rule <package> <allowed|blocked> | approval <on|off>');
+const [kidName, what, first, second, third] = process.argv.slice(2);
+if (!databaseUrl || !jwtSecret || !kidName || !first || (what !== 'rule' && what !== 'approval' && what !== 'tablet-usage')) {
+  console.error('Usage: tsx scripts/dev-app-rule.ts <kid name> rule <package> <allowed|blocked|limit> [minutes] | approval <on|off> | tablet-usage <package> <seconds>');
   process.exit(1);
 }
 
@@ -29,15 +33,33 @@ try {
     .orderBy(asc(parents.createdAt))
     .limit(1);
   if (!parent) throw new Error(`the family of ${kid.name} has no parent`);
+  if (what === 'tablet-usage') {
+    const deviceToken = newDeviceToken();
+    await db.delete(appUsageDaily).where(and(eq(appUsageDaily.kidId, kid.id), eq(appUsageDaily.package, first)));
+    const [tablet] = await db
+      .insert(devices)
+      .values({ familyId: kid.familyId, kidId: kid.id, platform: 'android', form: 'tablet', pool: 'screens', name: 'Test tablet', tokenHash: hashDeviceToken(deviceToken) })
+      .returning();
+    if (!tablet) throw new Error('no tablet');
+    const [{ day } = { day: '' }] = (await db.execute<{ day: string }>(sql`select to_char(now() at time zone (select timezone from families where id = ${kid.familyId}), 'YYYY-MM-DD') as day`)).rows;
+    const response = await fetch('http://localhost:8080/v1/device/app-usage', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${deviceToken}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ days: [{ day, apps: [{ package: first, seconds: Number(second) }] }] }),
+    });
+    console.log(`tablet-usage ${first} ${second}: ${response.status}`);
+    process.exitCode = response.status === 204 ? 0 : 1;
+  } else {
   const token = await signAccessToken(jwtSecret, { sessionId: randomUUID(), parentId: parent.id, familyId: kid.familyId, roles: ['parent'] });
   const path = what === 'rule' ? `/v1/kids/${kid.id}/apps/${encodeURIComponent(first)}/rule` : `/v1/kids/${kid.id}/app-settings`;
-  const body = what === 'rule' ? { mode: second } : { newAppApproval: first === 'on' };
+  const body = what === 'rule' ? { mode: second, dailyMinutes: third ? Number(third) : null } : { newAppApproval: first === 'on' };
   const response = await fetch(`http://localhost:8080${path}`, {
     method: 'PUT',
     headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
     body: JSON.stringify(body),
   });
-  console.log(`${what} ${first} ${second ?? ''}: ${response.status}`);
+  console.log(`${what} ${first} ${second ?? ''} ${third ?? ''}: ${response.status}`);
+  }
 } finally {
   await pool.end();
 }

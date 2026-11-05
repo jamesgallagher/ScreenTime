@@ -36,7 +36,8 @@ describe.skipIf(!url)('app rules', () => {
   }
 
   const put = (apps: unknown[]) => api.put('/v1/device/apps', phone.token, { apps });
-  const rule = (pkg: string, mode: string, token = dad) => api.put(`/v1/kids/${kid}/apps/${encodeURIComponent(pkg)}/rule`, token, { mode });
+  const rule = (pkg: string, mode: string, token = dad, dailyMinutes: number | null = null) =>
+    api.put(`/v1/kids/${kid}/apps/${encodeURIComponent(pkg)}/rule`, token, { mode, dailyMinutes });
   const settings = (on: boolean, token = dad) => api.put(`/v1/kids/${kid}/app-settings`, token, { newAppApproval: on });
 
   async function kinds() {
@@ -100,12 +101,12 @@ describe.skipIf(!url)('app rules', () => {
     await put([app('a.game'), app('b.game')]);
     const blocked = await rule('a.game', 'blocked');
     expect(blocked.status).toBe(200);
-    expect(blocked.body).toEqual({ mode: 'blocked' });
+    expect(blocked.body).toEqual({ mode: 'blocked', dailyMinutes: null });
     const list = await api.get(`/v1/kids/${kid}/apps`, dad);
     const rows = list.body.apps as { package: string; rule: { mode: string } | null }[];
-    expect(rows.find((a) => a.package === 'a.game')?.rule).toEqual({ mode: 'blocked' });
+    expect(rows.find((a) => a.package === 'a.game')?.rule).toEqual({ mode: 'blocked', dailyMinutes: null });
     expect(rows.find((a) => a.package === 'b.game')?.rule).toBeNull();
-    expect((await rule('a.game', 'allowed')).body).toEqual({ mode: 'allowed' });
+    expect((await rule('a.game', 'allowed')).body).toEqual({ mode: 'allowed', dailyMinutes: null });
   });
 
   it('refuses what a parent cannot do', async () => {
@@ -125,7 +126,7 @@ describe.skipIf(!url)('app rules', () => {
     await rule('a.game', 'blocked');
     await settings(true);
     const after = await api.get('/v1/device/state', phone.token);
-    expect(after.body.apps).toEqual({ newAppApproval: true, rules: [{ package: 'a.game', mode: 'blocked' }] });
+    expect(after.body.apps).toEqual({ newAppApproval: true, rules: [{ package: 'a.game', mode: 'blocked', dailyMinutes: null }] });
     expect(after.body.stateVersion).not.toBe(before.body.stateVersion);
   });
 

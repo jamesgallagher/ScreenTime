@@ -586,7 +586,18 @@ class ApiClient(
     }
 
     /**
-     * Allow or block an app for a kid.
+     * Send the device's seconds per app per day.
+     *
+     * `POST /v1/device/app-usage`
+     */
+    suspend fun postDeviceAppUsage(
+        body: DeviceAppUsageUpload,
+    ) {
+        call(HttpMethod.Post, "/v1/device/app-usage", auth = true, body = body, bodyType = typeInfo<DeviceAppUsageUpload>())
+    }
+
+    /**
+     * Allow, block or limit an app for a kid.
      *
      * `PUT /v1/kids/{kidId}/apps/{package}/rule`
      */

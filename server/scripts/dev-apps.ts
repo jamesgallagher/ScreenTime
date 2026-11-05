@@ -3,7 +3,7 @@
 // Never run this against the production database.
 import { and, asc, desc, eq, like, sql } from 'drizzle-orm';
 import { createDb } from '../src/db/client.js';
-import { appRules, deviceApps, events, kids } from '../src/db/schema.js';
+import { appRules, appUsageDaily, deviceApps, devices, events, kids } from '../src/db/schema.js';
 
 const databaseUrl = process.env.DATABASE_URL;
 const kidName = process.argv[2]?.trim();
@@ -26,7 +26,14 @@ try {
   const rules = await db.select().from(appRules).where(eq(appRules.kidId, kid.id)).orderBy(asc(appRules.package));
   console.log(`approval: ${kid.newAppApproval}`);
   console.log(`rules: ${rules.length}`);
-  for (const r of rules) console.log(`rule ${r.package} ${r.mode}`);
+  for (const r of rules) console.log(`rule ${r.package} ${r.mode}${r.dailyMinutes === null ? '' : ` ${r.dailyMinutes}`}`);
+  const usage = await db
+    .select({ package: appUsageDaily.package, seconds: appUsageDaily.seconds, device: devices.name })
+    .from(appUsageDaily)
+    .innerJoin(devices, eq(devices.id, appUsageDaily.deviceId))
+    .where(eq(appUsageDaily.kidId, kid.id))
+    .orderBy(asc(appUsageDaily.package), asc(devices.name));
+  for (const u of usage) console.log(`usage ${u.package} ${u.device} ${u.seconds}`);
   const list = await db
     .select()
     .from(events)

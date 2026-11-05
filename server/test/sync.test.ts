@@ -158,7 +158,7 @@ describe.skipIf(!url)('sync routes', () => {
         contacts: [{ label: 'Grandma', phoneE164: '+61400000009' }],
         messagePresets: [{ id: expect.any(String), text: 'Can I have more time?' }],
         schedule: { version: 1, warn1Min: 15, warn2Min: 5, days: flatWeek },
-        today: { date: localDate(), grants: [], poolSegments: [] },
+        today: { date: localDate(), grants: [], poolSegments: [], appUsage: [] },
         parentMode: { active: false, endsAt: null, byName: null },
         pendingRequest: null,
         activeSos: null,

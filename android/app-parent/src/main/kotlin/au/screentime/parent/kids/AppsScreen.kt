@@ -48,7 +48,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import au.screentime.core.model.api.Kid
 import au.screentime.core.ui.ScreenTimeTheme
-import au.screentime.parent.BuildConfig
 import au.screentime.parent.R
 import au.screentime.parent.today.Problem
 import au.screentime.parent.today.initial
@@ -209,9 +208,6 @@ private fun ApprovalCard(kid: Kid, on: Boolean, enabled: Boolean, onChange: (Boo
     }
 }
 
-/** The seam: CARD-058 makes this true. Until then a limit only shows in debug builds. */
-private val APP_LIMITS_READY = BuildConfig.DEBUG
-
 /** What a parent can do about one app: nothing, answer a waiting app, or choose Allowed, Blocked or Limit. */
 @Composable
 private fun RuleControl(app: KidApp, enabled: Boolean, onRule: (AppRule, Int?) -> Unit) {
@@ -235,7 +231,7 @@ private fun RuleControl(app: KidApp, enabled: Boolean, onRule: (AppRule, Int?) -
             }
         }
         else -> Column {
-            val count = if (APP_LIMITS_READY) 3 else 2
+            val count = 3
             val minutes = app.dailyMinutes ?: DEFAULT_LIMIT_MINUTES
             SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                 SegmentedButton(
@@ -252,15 +248,13 @@ private fun RuleControl(app: KidApp, enabled: Boolean, onRule: (AppRule, Int?) -
                     enabled = enabled,
                     label = { Text("Blocked") },
                 )
-                if (APP_LIMITS_READY) {
-                    SegmentedButton(
-                        selected = choice == AppChoice.LIMIT,
-                        onClick = { if (choice != AppChoice.LIMIT) onRule(AppRule.LIMIT, minutes) },
-                        shape = SegmentedButtonDefaults.itemShape(index = 2, count = count),
-                        enabled = enabled,
-                        label = { Text("Limit") },
-                    )
-                }
+                SegmentedButton(
+                    selected = choice == AppChoice.LIMIT,
+                    onClick = { if (choice != AppChoice.LIMIT) onRule(AppRule.LIMIT, minutes) },
+                    shape = SegmentedButtonDefaults.itemShape(index = 2, count = count),
+                    enabled = enabled,
+                    label = { Text("Limit") },
+                )
             }
             if (choice == AppChoice.LIMIT) {
                 Spacer(Modifier.height(8.dp))

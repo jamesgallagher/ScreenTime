@@ -155,7 +155,13 @@ public sealed record DeviceStateMessagePresetsItem(
 public sealed record DeviceStateToday(
     [property: JsonPropertyName("date")] string Date,
     [property: JsonPropertyName("grants")] IReadOnlyList<StateGrant> Grants,
-    [property: JsonPropertyName("poolSegments")] IReadOnlyList<PoolSegment> PoolSegments);
+    [property: JsonPropertyName("poolSegments")] IReadOnlyList<PoolSegment> PoolSegments,
+    [property: JsonPropertyName("appUsage")] IReadOnlyList<DeviceStateTodayAppUsageItem> AppUsage);
+
+public sealed record DeviceStateTodayAppUsageItem(
+    [property: JsonPropertyName("package")] string Package,
+    [property: JsonPropertyName("deviceId")] string DeviceId,
+    [property: JsonPropertyName("seconds")] int Seconds);
 
 public sealed record DeviceStateParentMode(
     [property: JsonPropertyName("active")] bool Active,
@@ -177,7 +183,8 @@ public sealed record DeviceStateApps(
 
 public sealed record DeviceStateAppsRulesItem(
     [property: JsonPropertyName("package")] string Package,
-    [property: JsonPropertyName("mode")] AppRuleMode Mode);
+    [property: JsonPropertyName("mode")] AppRuleMode Mode,
+    [property: JsonPropertyName("dailyMinutes")] int? DailyMinutes);
 
 public sealed record StateGrant(
     [property: JsonPropertyName("id")] string Id,
@@ -197,6 +204,7 @@ public enum AppRuleMode
     [JsonStringEnumMemberName("allowed")] Allowed,
     [JsonStringEnumMemberName("held")] Held,
     [JsonStringEnumMemberName("blocked")] Blocked,
+    [JsonStringEnumMemberName("limit")] Limit,
 }
 
 public sealed record UsageReceipt(
@@ -337,6 +345,17 @@ public enum AppSource
     [JsonStringEnumMemberName("other")] Other,
 }
 
+public sealed record DeviceAppUsageUpload(
+    [property: JsonPropertyName("days")] IReadOnlyList<DeviceAppUsageUploadDaysItem> Days);
+
+public sealed record DeviceAppUsageUploadDaysItem(
+    [property: JsonPropertyName("day")] string Day,
+    [property: JsonPropertyName("apps")] IReadOnlyList<DeviceAppUsageUploadDaysItemAppsItem> Apps);
+
+public sealed record DeviceAppUsageUploadDaysItemAppsItem(
+    [property: JsonPropertyName("package")] string Package,
+    [property: JsonPropertyName("seconds")] int Seconds);
+
 public sealed record Sos(
     [property: JsonPropertyName("id")] string Id,
     [property: JsonPropertyName("kidId")] string KidId,
@@ -439,6 +458,7 @@ public sealed record PushTokenPut(
 [JsonSerializable(typeof(DeviceStateContactsItem))]
 [JsonSerializable(typeof(DeviceStateMessagePresetsItem))]
 [JsonSerializable(typeof(DeviceStateToday))]
+[JsonSerializable(typeof(DeviceStateTodayAppUsageItem))]
 [JsonSerializable(typeof(DeviceStateParentMode))]
 [JsonSerializable(typeof(DeviceStatePendingRequest))]
 [JsonSerializable(typeof(DeviceStateActiveSos))]
@@ -466,6 +486,9 @@ public sealed record PushTokenPut(
 [JsonSerializable(typeof(DeviceAppsPut))]
 [JsonSerializable(typeof(DeviceAppIn))]
 [JsonSerializable(typeof(AppSource))]
+[JsonSerializable(typeof(DeviceAppUsageUpload))]
+[JsonSerializable(typeof(DeviceAppUsageUploadDaysItem))]
+[JsonSerializable(typeof(DeviceAppUsageUploadDaysItemAppsItem))]
 [JsonSerializable(typeof(Sos))]
 [JsonSerializable(typeof(SosEndedBy))]
 [JsonSerializable(typeof(SosStatus))]

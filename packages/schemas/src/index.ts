@@ -102,6 +102,7 @@ export {
   AppSource,
   DeviceAppIn,
   DeviceAppsPut,
+  DeviceAppUsageUpload,
   KidApp,
   KidAppDevice,
   KidAppRule,

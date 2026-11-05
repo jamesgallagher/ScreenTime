@@ -58,11 +58,6 @@ private const val MAX_LIMIT_MINUTES = 480
 fun stepLimit(minutes: Int, up: Boolean): Int =
     (minutes + if (up) LIMIT_STEP_MINUTES else -LIMIT_STEP_MINUTES).coerceIn(LIMIT_STEP_MINUTES, MAX_LIMIT_MINUTES)
 
-/** The seam: CARD-058 replaces this with the server, in `KidsViewModel`. */
-internal object FakeLimits {
-    val minutes = mutableMapOf<String, Int>()
-}
-
 /** Gone from every device. */
 fun isRemoved(app: KidApp): Boolean = app.devices.all { it.removedAt != null }
 
@@ -144,10 +139,15 @@ fun appRow(app: au.screentime.core.model.api.KidApp): KidApp = KidApp(
         AppRuleMode.ALLOWED -> AppRule.ALLOWED
         AppRuleMode.HELD -> AppRule.HELD
         AppRuleMode.BLOCKED -> AppRule.BLOCKED
+        AppRuleMode.LIMIT -> AppRule.LIMIT
         null -> null
     },
+    dailyMinutes = app.rule?.dailyMinutes,
 )
 
 /** The server's mode for a rule. A parent cannot hold an app, so HELD is never sent. */
-fun rulePut(rule: AppRule): AppRulePut =
-    AppRulePut(if (rule == AppRule.BLOCKED) AppRulePutMode.BLOCKED else AppRulePutMode.ALLOWED)
+fun rulePut(rule: AppRule, minutes: Int? = null): AppRulePut = when (rule) {
+    AppRule.BLOCKED -> AppRulePut(AppRulePutMode.BLOCKED, null)
+    AppRule.LIMIT -> AppRulePut(AppRulePutMode.LIMIT, minutes ?: DEFAULT_LIMIT_MINUTES)
+    AppRule.ALLOWED, AppRule.HELD -> AppRulePut(AppRulePutMode.ALLOWED, null)
+}

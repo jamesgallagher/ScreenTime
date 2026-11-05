@@ -472,6 +472,7 @@ class KidService : Service() {
             if (sos.pending) sos.tick()
             sendTamper()
             apps?.send()
+            states.load()?.let { apps?.sendUsage(it.state) }
             val ok = syncer.sync()
             lastSyncElapsed = SystemClock.elapsedRealtime()
             lastSyncOk = ok
@@ -518,7 +519,15 @@ class KidService : Service() {
         paused = parentMode != null
         if (sosOn != sos.active) Log.i(TAG, "sos: ${if (sos.active) "on" else "off"}")
         sosOn = sos.active
-        apps?.applyBlocks(cached.state, paused)
+        if (apps?.usageAccessLost() == true) onTamper(DeviceEventKind.TAMPER_POLICY, mapOf("missing" to "usage_access"))
+        val appsNow = apps?.applyBlocks(cached.state, paused)
+        if (appsNow != null) {
+            StatusHub.appLimits.value = appsNow.limits
+            appsNow.news.forEach {
+                Log.i(TAG, "apps: told the kid: $it")
+                notifier.showAppLimit(it)
+            }
+        }
         val counting = !blocked && !paused && !sosOn
         if (wasCounting && !counting) recorder.stop(now)
         if (!wasCounting && counting && inUse()) recorder.start(now)
@@ -536,6 +545,8 @@ class KidService : Service() {
             warnings.check(status)?.let { notifier.showWarning(status, it) }
         }
         nextCheckAt = nextCheckAtMs(status, now)
+        // An app in front that is about to use up its limit: look again when it should run out.
+        appsNow?.nextLimitMs?.let { nextCheckAt = minOf(nextCheckAt, now + it) }
         wake.trySend(Unit)
         Log.i(
             TAG,

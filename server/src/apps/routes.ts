@@ -1,16 +1,17 @@
 import { createRoute, z } from '@hono/zod-openapi';
-import { and, asc, eq, isNull } from 'drizzle-orm';
-import { type AppRuleMode, AppRulePut, AppRuleSaved, DeviceAppsPut, KidApps, KidAppSettings, type KidApp } from '@screentime/schemas';
+import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { type AppRuleMode, AppRulePut, AppRuleSaved, DeviceAppsPut, DeviceAppUsageUpload, KidApps, KidAppSettings, type KidApp } from '@screentime/schemas';
 import type { AppDeps } from '../app.js';
 import { requireFamilyParent } from '../auth/guards.js';
 import { withFamily } from '../db/family.js';
-import { appRules, deviceApps, devices, events, kids, parents } from '../db/schema.js';
+import { appRules, appUsageDaily, deviceApps, devices, events, families, kids, parents } from '../db/schema.js';
 import { requireDevice } from '../devices/auth.js';
 import { ApiError } from '../errors.js';
 import { findKid } from '../kids/routes.js';
 import { notifyParents, stateChanged } from '../notify/dispatch.js';
 import { bearer, deviceBearer, errorResponses, jsonBody, jsonResponse } from '../openapi.js';
 import type { createRouter } from '../router.js';
+import { familyDay } from '../sync/day.js';
 
 type Router = ReturnType<typeof createRouter>;
 
@@ -36,11 +37,22 @@ const getKidAppsRoute = createRoute({
   responses: { 200: jsonResponse('The apps.', KidApps), ...errorResponses(401, 403, 404, 422) },
 });
 
+const postUsageRoute = createRoute({
+  method: 'post',
+  path: '/v1/device/app-usage',
+  tags: ['device'],
+  summary: "Send the device's seconds per app per day",
+  description: 'A repeat or an older upload never lowers a value. Android only.',
+  security: deviceBearer,
+  request: { body: jsonBody(DeviceAppUsageUpload) },
+  responses: { 204: { description: 'Stored.' }, ...errorResponses(401, 409, 422) },
+});
+
 const putRuleRoute = createRoute({
   method: 'put',
   path: '/v1/kids/{kidId}/apps/{package}/rule',
   tags: ['kids'],
-  summary: 'Allow or block an app for a kid',
+  summary: 'Allow, block or limit an app for a kid',
   description:
     'Answering a waiting app also writes `app.answered`. An app on none of the kid\'s devices gets 404, and one that cannot be blocked gets 409.',
   security: bearer,
@@ -152,10 +164,41 @@ export function registerAppRoutes(app: Router, deps: AppDeps) {
     return c.body(null, 204);
   });
 
+  app.openapi(postUsageRoute, async (c) => {
+    const { deviceId, kidId, familyId } = await requireDevice(c, db);
+    const { days } = c.req.valid('json');
+    const limitedSent = await withFamily(db, familyId, async (tx) => {
+      const [device] = await tx.select({ platform: devices.platform }).from(devices).where(eq(devices.id, deviceId));
+      if (device?.platform !== 'android') throw new ApiError('conflict', 'Apps are only on Android devices.');
+      const sent = new Set<string>();
+      for (const { day, apps } of days) {
+        for (const a of apps) {
+          sent.add(a.package);
+          await tx
+            .insert(appUsageDaily)
+            .values({ familyId, kidId, deviceId, package: a.package, day, seconds: a.seconds })
+            .onConflictDoUpdate({
+              target: [appUsageDaily.deviceId, appUsageDaily.package, appUsageDaily.day],
+              set: { seconds: sql`greatest(${appUsageDaily.seconds}, excluded.seconds)` },
+            });
+        }
+      }
+      if (sent.size === 0) return false;
+      const limited = await tx
+        .select({ package: appRules.package })
+        .from(appRules)
+        .where(and(eq(appRules.kidId, kidId), eq(appRules.mode, 'limit'), inArray(appRules.package, [...sent])));
+      return limited.length > 0;
+    });
+    // The other devices count this at their next sync; a live channel that is open hears now. No push: it would be often.
+    if (limitedSent) await stateChanged(deps, familyId, { kidId }, false);
+    return c.body(null, 204);
+  });
+
   app.openapi(putRuleRoute, async (c) => {
     const { familyId, parentId } = await requireFamilyParent(c, db, config.jwtSecret);
     const { kidId, package: pkg } = c.req.valid('param');
-    const { mode } = c.req.valid('json');
+    const { mode, dailyMinutes } = c.req.valid('json');
     const eventIds = await withFamily(db, familyId, async (tx) => {
       if (!(await findKid(tx, kidId))) throw new ApiError('not_found', 'No such kid in your family.');
       const rows = await tx
@@ -166,7 +209,7 @@ export function registerAppRoutes(app: Router, deps: AppDeps) {
       if (rows.length === 0) throw new ApiError('not_found', 'That app is not on any of this kid\'s devices.');
       if (rows.some((r) => !r.blockable)) throw new ApiError('conflict', 'That app cannot be blocked.');
       const [before] = await tx.select({ mode: appRules.mode }).from(appRules).where(and(eq(appRules.kidId, kidId), eq(appRules.package, pkg)));
-      const values = { mode, updatedAt: new Date(), updatedBy: parentId };
+      const values = { mode, dailyMinutes, updatedAt: new Date(), updatedBy: parentId };
       await tx
         .insert(appRules)
         .values({ familyId, kidId, package: pkg, ...values })
@@ -180,14 +223,14 @@ export function registerAppRoutes(app: Router, deps: AppDeps) {
           kidId,
           kind: 'app.answered',
           at: new Date(),
-          payload: { package: pkg, label: rows[0]?.label, approved: mode === 'allowed', byName: parent?.name ?? null },
+          payload: { package: pkg, label: rows[0]?.label, approved: mode !== 'blocked', byName: parent?.name ?? null },
         })
         .returning({ id: events.id });
       return stored.map((e) => e.id);
     });
     await notifyParents(deps, familyId, eventIds);
     await stateChanged(deps, familyId, { kidId });
-    return c.json({ mode }, 200);
+    return c.json({ mode, dailyMinutes }, 200);
   });
 
   app.openapi(putSettingsRoute, async (c) => {
@@ -205,7 +248,7 @@ export function registerAppRoutes(app: Router, deps: AppDeps) {
   app.openapi(getKidAppsRoute, async (c) => {
     const { familyId } = await requireFamilyParent(c, db, config.jwtSecret);
     const { kidId } = c.req.valid('param');
-    const { kid, rows, rules } = await withFamily(db, familyId, async (tx) => {
+    const { kid, rows, rules, usage } = await withFamily(db, familyId, async (tx) => {
       const kid = await findKid(tx, kidId);
       if (!kid) throw new ApiError('not_found', 'No such kid.');
       const rows = await tx
@@ -215,9 +258,17 @@ export function registerAppRoutes(app: Router, deps: AppDeps) {
         .where(and(eq(deviceApps.kidId, kidId), isNull(devices.revokedAt)))
         .orderBy(asc(deviceApps.label), asc(devices.name));
       const rules = await tx.select().from(appRules).where(eq(appRules.kidId, kidId));
-      return { kid, rows, rules };
+      const [family] = await tx.select({ timezone: families.timezone }).from(families);
+      const day = await familyDay(tx, family?.timezone ?? 'UTC');
+      const usage = await tx
+        .select({ package: appUsageDaily.package, seconds: sql<number>`sum(${appUsageDaily.seconds})::int` })
+        .from(appUsageDaily)
+        .where(and(eq(appUsageDaily.kidId, kidId), eq(appUsageDaily.day, day.date)))
+        .groupBy(appUsageDaily.package);
+      return { kid, rows, rules, usage };
     });
-    const ruleOf = new Map(rules.map((r) => [r.package, r.mode as AppRuleMode]));
+    const ruleOf = new Map(rules.map((r) => [r.package, { mode: r.mode as AppRuleMode, dailyMinutes: r.dailyMinutes }]));
+    const secondsOf = new Map(usage.map((u) => [u.package, u.seconds]));
     const apps = new Map<string, KidApp>();
     for (const { app: row, deviceName } of rows) {
       const entry = apps.get(row.package) ?? {
@@ -225,8 +276,8 @@ export function registerAppRoutes(app: Router, deps: AppDeps) {
         label: row.label,
         source: row.source as KidApp['source'],
         blockable: true,
-        todaySeconds: 0,
-        rule: ruleOf.has(row.package) ? { mode: ruleOf.get(row.package) as AppRuleMode } : null,
+        todaySeconds: secondsOf.get(row.package) ?? 0,
+        rule: ruleOf.get(row.package) ?? null,
         devices: [],
       };
       // A phone's Settings may be listed where a tablet's is not: it can be blocked only if every device can.

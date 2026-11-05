@@ -461,11 +461,30 @@ export const appRules = pgTable(
       .references(() => kids.id),
     package: text('package').notNull(),
     mode: text('mode').notNull(),
+    dailyMinutes: integer('daily_minutes'),
     updatedAt: ts('updated_at').notNull().defaultNow(),
     updatedBy: uuid('updated_by').references(() => parents.id),
   },
   (t) => [
     primaryKey({ columns: [t.kidId, t.package] }),
-    check('app_rules_mode', sql`${t.mode} in ('allowed', 'held', 'blocked')`),
+    check('app_rules_mode', sql`${t.mode} in ('allowed', 'held', 'blocked', 'limit')`),
   ],
+);
+
+/** One device's seconds in one app on one local day (docs/SPEC.md §12.4). */
+export const appUsageDaily = pgTable(
+  'app_usage_daily',
+  {
+    familyId: familyId(),
+    kidId: uuid('kid_id')
+      .notNull()
+      .references(() => kids.id),
+    deviceId: uuid('device_id')
+      .notNull()
+      .references(() => devices.id),
+    package: text('package').notNull(),
+    day: date('day').notNull(),
+    seconds: integer('seconds').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.deviceId, t.package, t.day] }), index('app_usage_daily_kid_day_idx').on(t.kidId, t.day)],
 );

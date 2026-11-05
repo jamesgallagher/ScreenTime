@@ -34,19 +34,27 @@ export const DeviceAppsPut = z
 export type DeviceAppsPut = z.infer<typeof DeviceAppsPut>;
 
 /** A parent's rule for an app (docs/SPEC.md §12.4). `held` is written by the server while a new app waits. */
-export const AppRuleMode = z.enum(['allowed', 'held', 'blocked']).meta({ id: 'AppRuleMode' });
+export const AppRuleMode = z.enum(['allowed', 'held', 'blocked', 'limit']).meta({ id: 'AppRuleMode' });
 
 export type AppRuleMode = z.infer<typeof AppRuleMode>;
 
-/** Body of PUT /v1/kids/{kidId}/apps/{package}/rule. A parent cannot hold an app. */
-export const AppRulePut = z.object({ mode: z.enum(['allowed', 'blocked']) }).meta({ id: 'AppRulePut' });
+/**
+ * Body of PUT /v1/kids/{kidId}/apps/{package}/rule. A parent cannot hold an app. `dailyMinutes` is 5 to 480 in steps
+ * of 5 for `limit`, and null otherwise.
+ */
+export const AppRulePut = z
+  .object({ mode: z.enum(['allowed', 'blocked', 'limit']), dailyMinutes: z.int().nullable() })
+  .refine((r) => (r.mode === 'limit' ? r.dailyMinutes !== null && r.dailyMinutes >= 5 && r.dailyMinutes <= 480 && r.dailyMinutes % 5 === 0 : r.dailyMinutes === null), {
+    message: 'A limit needs 5 to 480 minutes in steps of 5, and only a limit has minutes.',
+  })
+  .meta({ id: 'AppRulePut' });
 
 export type AppRulePut = z.infer<typeof AppRulePut>;
 
-export const KidAppRule = z.object({ mode: AppRuleMode });
+export const KidAppRule = z.object({ mode: AppRuleMode, dailyMinutes: z.int().nullable() });
 
 /** Answer of PUT /v1/kids/{kidId}/apps/{package}/rule. */
-export const AppRuleSaved = z.object({ mode: AppRuleMode }).meta({ id: 'AppRuleSaved' });
+export const AppRuleSaved = z.object({ mode: AppRuleMode, dailyMinutes: z.int().nullable() }).meta({ id: 'AppRuleSaved' });
 
 export type KidAppRule = z.infer<typeof KidAppRule>;
 
@@ -54,6 +62,23 @@ export type KidAppRule = z.infer<typeof KidAppRule>;
 export const KidAppSettings = z.object({ newAppApproval: z.boolean() }).meta({ id: 'KidAppSettings' });
 
 export type KidAppSettings = z.infer<typeof KidAppSettings>;
+
+/** Body of POST /v1/device/app-usage: seconds per app per local day. A repeat or an older upload never lowers a value. */
+export const DeviceAppUsageUpload = z
+  .object({
+    days: z
+      .array(
+        z.object({
+          day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+          apps: z.array(z.object({ package: z.string().min(1).max(255), seconds: z.int().min(0).max(86400) })).max(500),
+        }),
+      )
+      .min(1)
+      .max(8),
+  })
+  .meta({ id: 'DeviceAppUsageUpload' });
+
+export type DeviceAppUsageUpload = z.infer<typeof DeviceAppUsageUpload>;
 
 /** One of the kid's devices an app is or was on. */
 export const KidAppDevice = z
@@ -75,7 +100,7 @@ export const KidApp = z
     label: z.string(),
     source: AppSource,
     blockable: z.boolean(),
-    /** 0 until app time is counted (CARD-058). */
+    /** Today's seconds across the kid's devices. */
     todaySeconds: z.int(),
     /** Null means allowed. */
     rule: KidAppRule.nullable(),

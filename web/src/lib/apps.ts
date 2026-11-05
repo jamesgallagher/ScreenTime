@@ -1,36 +1,12 @@
-import type { KidApp as ServerApp, KidAppDevice, KidApps as ServerApps } from '@screentime/schemas';
+import type { KidApp, KidAppDevice, KidApps } from '@screentime/schemas';
 import { api } from '@/lib/auth';
 import { formatDuration } from '@/lib/format';
 
-export type { KidAppDevice };
-
-export interface KidAppRule {
-  mode: 'allowed' | 'held' | 'blocked' | 'limit';
-  dailyMinutes: number | null;
-}
-
-export type KidApp = Omit<ServerApp, 'rule'> & { rule: KidAppRule | null };
-
-export interface KidApps {
-  newAppApproval: boolean;
-  apps: KidApp[];
-}
-
-/** The seam: CARD-058 replaces this, `fakeLimits` and the two functions below with the server. */
-export const APP_LIMITS_READY = import.meta.env.DEV;
-const fakeLimits = new Map<string, number>();
+export type { KidApp, KidAppDevice, KidApps };
 
 /** GET /v1/kids/{kidId}/apps (docs/SPEC.md §12.4). */
-export async function fetchKidApps(kidId: string): Promise<KidApps> {
-  const server = await api.get<ServerApps>(`/v1/kids/${kidId}/apps`);
-  return {
-    newAppApproval: server.newAppApproval,
-    apps: server.apps.map((a) => {
-      const minutes = fakeLimits.get(a.package);
-      if (minutes !== undefined) return { ...a, rule: { mode: 'limit' as const, dailyMinutes: minutes } };
-      return { ...a, rule: a.rule ? { mode: a.rule.mode, dailyMinutes: null } : null };
-    }),
-  };
+export function fetchKidApps(kidId: string): Promise<KidApps> {
+  return api.get<KidApps>(`/v1/kids/${kidId}/apps`);
 }
 
 export async function saveAppRule(
@@ -39,12 +15,7 @@ export async function saveAppRule(
   mode: 'allowed' | 'blocked' | 'limit',
   dailyMinutes: number | null = null,
 ): Promise<void> {
-  if (mode === 'limit') {
-    fakeLimits.set(pkg, dailyMinutes ?? DEFAULT_LIMIT_MINUTES);
-    return;
-  }
-  fakeLimits.delete(pkg);
-  await api.put(`/v1/kids/${kidId}/apps/${encodeURIComponent(pkg)}/rule`, { mode });
+  await api.put(`/v1/kids/${kidId}/apps/${encodeURIComponent(pkg)}/rule`, { mode, dailyMinutes });
 }
 
 /** A new limit starts here, and the buttons move it in these steps (docs/SPEC.md §16.4). */
