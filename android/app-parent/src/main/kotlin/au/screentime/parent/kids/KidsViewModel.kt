@@ -118,6 +118,9 @@ class KidsViewModel(app: Application) : AndroidViewModel(app) {
         return deferred.await()
     }
 
+    /** The seam for the Apps page: CARD-056 replaces this body with `GET /v1/kids/{kidId}/apps`. Fake data until then. */
+    suspend fun apps(kidId: String): Result<List<KidApp>> = Result.success(fakeKidApps())
+
     /** Load a kid's always-callable numbers; a failure is a [Result.failure] with the exception. */
     suspend fun contacts(kidId: String): Result<List<KidContact>> {
         val deferred = viewModelScope.async {

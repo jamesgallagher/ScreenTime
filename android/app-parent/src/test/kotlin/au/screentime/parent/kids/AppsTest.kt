@@ -1,0 +1,78 @@
+package au.screentime.parent.kids
+
+import java.time.ZoneId
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Test
+
+/** The Apps page's words and order (docs/SPEC.md §16.4). */
+class AppsTest {
+    private val sydney = ZoneId.of("Australia/Sydney")
+
+    private fun device(
+        installedAt: String = "2026-11-03T06:00:00Z",
+        firstUsedAt: String? = null,
+        removedAt: String? = null,
+        name: String = "Pixel 7",
+    ) = KidAppDevice(name, installedAt, firstUsedAt, removedAt)
+
+    private fun app(
+        label: String = "Game",
+        source: AppSource = AppSource.PLAY,
+        todaySeconds: Int = 0,
+        devices: List<KidAppDevice> = listOf(device()),
+    ) = KidApp("a.$label", label, source, todaySeconds, devices)
+
+    @Test
+    fun saysWhereItCameFromWhenAndOnWhat() {
+        assertEquals("From Play Store · 3 Nov on Pixel 7", installedLine(app(), sydney))
+        assertEquals("Installed another way · 3 Nov on Pixel 7", installedLine(app(source = AppSource.OTHER), sydney))
+    }
+
+    @Test
+    fun usesTheFamilyTimeZoneForTheDate() {
+        // 2 Nov 20:00 UTC is already 3 Nov in Sydney.
+        val line = installedLine(app(devices = listOf(device(installedAt = "2026-11-02T20:00:00Z"))), sydney)
+        assertEquals("From Play Store · 3 Nov on Pixel 7", line)
+    }
+
+    @Test
+    fun leavesTheDateOutForAPreinstalledAppAndNamesEveryDevice() {
+        val two = listOf(device(), device(name = "XPPen tablet"))
+        assertEquals("Came with Pixel 7 and XPPen tablet", installedLine(app(source = AppSource.PREINSTALLED, devices = two), sydney))
+    }
+
+    @Test
+    fun leavesOutADeviceTheAppWasRemovedFrom() {
+        val two = listOf(device(removedAt = "2026-11-04T00:00:00Z"), device(name = "XPPen tablet"))
+        assertEquals("From Play Store · 3 Nov on XPPen tablet", installedLine(app(devices = two), sydney))
+        assertFalse(isRemoved(app(devices = two)))
+    }
+
+    @Test
+    fun givesFirstUseAsTheEarliestOnAnyDevice() {
+        assertEquals("Never opened", firstUsedLine(app(), sydney))
+        val two = listOf(device(firstUsedAt = "2026-11-05T00:00:00Z"), device(firstUsedAt = "2026-11-04T00:00:00Z", name = "Tablet"))
+        assertEquals("First used 4 Nov", firstUsedLine(app(devices = two), sydney))
+    }
+
+    @Test
+    fun showsTodaysTimeFromAWholeMinute() {
+        assertNull(todayLine(app(todaySeconds = 59)))
+        assertEquals("Today 12m", todayLine(app(todaySeconds = 720)))
+    }
+
+    @Test
+    fun putsNewestInstallsFirstThenPreinstalledByNameThenRemoved() {
+        val removed = app("Old", devices = listOf(device(removedAt = "2026-11-04T00:00:00Z")))
+        val older = app("Older", devices = listOf(device(installedAt = "2026-11-01T00:00:00Z")))
+        val newer = app("Newer", devices = listOf(device(installedAt = "2026-11-04T00:00:00Z")))
+        val youtube = app("YouTube", source = AppSource.PREINSTALLED)
+        val chrome = app("chrome", source = AppSource.PREINSTALLED)
+        assertEquals(
+            listOf("Newer", "Older", "chrome", "YouTube", "Old"),
+            sortApps(listOf(removed, youtube, older, chrome, newer)).map { it.label },
+        )
+    }
+}

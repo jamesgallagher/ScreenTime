@@ -127,6 +127,13 @@ export function eventView(event: EventItem, timeZone: string): EventView {
         tone: 'info',
       };
     }
+    case 'app.installed': {
+      const source = str(p, 'source');
+      const from = source === 'play' ? 'From Play Store' : source === 'preinstalled' ? 'Came with the device' : 'Installed another way';
+      return { text: `${kid} installed ${str(p, 'label') ?? 'an app'}`, detail: `${from} on ${device}`, tone: 'info' };
+    }
+    case 'app.first_used':
+      return { text: `${kid} opened ${str(p, 'label') ?? 'an app'} for the first time`, detail: `On ${device}`, tone: 'info' };
     case 'device.enrolled':
       return { text: `${str(p, 'name') ?? device} was added for ${kid}`, detail: null, tone: 'info' };
     default:

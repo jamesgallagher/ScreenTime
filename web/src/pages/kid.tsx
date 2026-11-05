@@ -3,6 +3,7 @@ import { Link } from '@tanstack/react-router';
 import { ChevronLeft, Pencil, RefreshCw, UserX } from 'lucide-react';
 import { useState } from 'react';
 import { AdjustDialog } from '@/components/adjust-dialog';
+import { AppsPanel } from '@/components/apps-panel';
 import { ContactsEditor } from '@/components/contacts-editor';
 import { DevicesPanel } from '@/components/devices-panel';
 import { KidAvatar } from '@/components/kid-avatar';
@@ -13,7 +14,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ApiError } from '@/lib/api';
 import { kidChips } from '@/lib/today';
-import { useKids } from '@/pages/kids';
+import { useDevices, useKids } from '@/pages/kids';
 import { ChipList, PoolRow, useToday } from '@/pages/today';
 
 function TodayPanel({ kid }: { kid: Kid }) {
@@ -46,11 +47,14 @@ function BackLink() {
   );
 }
 
-/** docs/SPEC.md §16.5 Kid detail: tabs Today, Schedule, Devices, Contacts. */
+/** docs/SPEC.md §16.5 Kid detail: tabs Today, Schedule, Devices, Contacts, and Apps for a kid with an Android device. */
 export function KidPage({ kidId }: { kidId: string }) {
   const kids = useKids();
+  const devices = useDevices();
   const [editing, setEditing] = useState(false);
   const kid = kids.data?.find((k) => k.id === kidId);
+  // Apps are Android only (docs/SPEC.md §12.4).
+  const hasAndroid = devices.data?.some((d) => d.kidId === kidId && d.platform === 'android') ?? false;
 
   if (!kids.data) {
     return (
@@ -109,6 +113,7 @@ export function KidPage({ kidId }: { kidId: string }) {
           <TabsTrigger value="schedule">Schedule</TabsTrigger>
           <TabsTrigger value="devices">Devices</TabsTrigger>
           <TabsTrigger value="contacts">Contacts</TabsTrigger>
+          {hasAndroid && <TabsTrigger value="apps">Apps</TabsTrigger>}
         </TabsList>
         <TabsContent value="today">
           <TodayPanel kid={kid} />
@@ -121,6 +126,9 @@ export function KidPage({ kidId }: { kidId: string }) {
         </TabsContent>
         <TabsContent value="contacts">
           <ContactsEditor kidId={kid.id} kidName={kid.name} />
+        </TabsContent>
+        <TabsContent value="apps">
+          <AppsPanel kidId={kid.id} kidName={kid.name} />
         </TabsContent>
       </Tabs>
       <KidDialog open={editing} kid={kid} onClose={() => setEditing(false)} />

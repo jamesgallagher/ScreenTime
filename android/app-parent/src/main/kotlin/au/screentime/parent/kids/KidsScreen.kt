@@ -45,6 +45,7 @@ import au.screentime.core.ui.ScreenTimeTheme
 import au.screentime.parent.home.ScreenHeader
 import au.screentime.parent.today.Problem
 import au.screentime.parent.today.initial
+import java.time.ZoneId
 import kotlinx.coroutines.launch
 
 /**
@@ -53,7 +54,7 @@ import kotlinx.coroutines.launch
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun KidsScreen(vm: KidsViewModel) {
+fun KidsScreen(vm: KidsViewModel, zone: ZoneId) {
     val state = vm.state
     val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) { vm.load() }
@@ -107,6 +108,7 @@ fun KidsScreen(vm: KidsViewModel) {
             when (kidPage) {
                 "schedule" -> ScheduleScreen(kid = openKid, vm = vm, onBack = { kidPage = null })
                 "contacts" -> ContactsScreen(kid = openKid, vm = vm, onBack = { kidPage = null })
+                "apps" -> AppsScreen(kid = openKid, vm = vm, zone = zone, onBack = { kidPage = null })
                 else -> KidScreen(
                     kid = openKid,
                     vm = vm,
@@ -115,6 +117,7 @@ fun KidsScreen(vm: KidsViewModel) {
                     error = addError,
                     onSchedule = { kidPage = "schedule" },
                     onContacts = { kidPage = "contacts" },
+                    onApps = { kidPage = "apps" },
                 )
             }
         }

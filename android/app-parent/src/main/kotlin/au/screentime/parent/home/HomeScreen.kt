@@ -170,11 +170,12 @@ fun HomeScreen(
                     }
                 }
             }
+            val familyZone = runCatching { ZoneId.of(me.family!!.timezone) }.getOrElse { ZoneId.systemDefault() }
             Box(modifier = Modifier.weight(1f)) {
                 when (tab) {
                     Tab.TODAY -> TodayScreen(today)
-                    Tab.INBOX -> InboxScreen(inbox, runCatching { ZoneId.of(me.family!!.timezone) }.getOrElse { ZoneId.systemDefault() })
-                    Tab.KIDS -> KidsScreen(kids)
+                    Tab.INBOX -> InboxScreen(inbox, familyZone)
+                    Tab.KIDS -> KidsScreen(kids, familyZone)
                     Tab.SETTINGS -> SettingsScreen(me, secure, onSignOut)
                 }
             }
