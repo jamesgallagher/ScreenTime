@@ -115,7 +115,7 @@ Android phones and tablets only. These come before cards 054 and 055, although t
 
 | Card | Title | Depends on | Size | James | Spec |
 |---|---|---|---|---|---|
-| 056 | App list and alerts: `device_apps`, `PUT /v1/device/apps`, `GET /v1/kids/{kidId}/apps`, the first list as a silent baseline, install and first-use detection with usage access, `app.installed` and `app.first_used`, the Apps page without rules (front end by Claude) | 039, 042, 043b | L | | 6, 9, 12.4, 13, 16.4, 16.5 |
+| 056 | App list and alerts (front end by Claude, PR #154): `device_apps`, `PUT /v1/device/apps`, `GET /v1/kids/{kidId}/apps`, the first list as a silent baseline, install and first-use detection with usage access, `app.installed` and `app.first_used`, the Apps page without rules, the usage access step in the guide | 039, 042, 043b | L | | 6, 9, 12.4, 13, 16.4, 16.5 |
 | 057 | Blocking: `app_rules`, the rule route and the snapshot, suspend with hide as the fallback for Play Store, the never-block list, parent mode releasing blocks, new app approval with `app.approval` (front end by Claude) | 056 | L | | 6, 8.2, 9, 12.4, 13, 16.4, 16.5 |
 | 058 | Daily limits: `app_usage_daily`, `POST /v1/device/app-usage`, the Kotlin sum with tests, warning and block at the limit, sharing across the kid's devices, the usage access tamper check, the kid's limits list (front end by Claude) | 057 | L | | 6, 8.2, 9, 12.4, 14, 16.2, 16.4 |
 

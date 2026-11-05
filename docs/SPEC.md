@@ -504,7 +504,7 @@ App control routes (Android only, section 12.4):
 | POST | `/v1/device/sos` | `{ id, startedAt, location? }` → 201 SOS (shape of `/v1/sos`). Phones only (else 409). Stored from `least(startedAt, now())`, auto stop 2 h later. While the kid has an active SOS → 409. Same `id` again → 200. Writes `sos.started` (critical push) and emails every enabled parent |
 | POST | `/v1/device/sos/{id}/locations` | `{ locations: [{ at, lat, lng, accuracyM?, batteryPct?, via }] }` 1 to 100 → 204. Also after the end (queued positions). A position with the same `at` as a stored one is skipped. Another device's SOS → 404 |
 | POST | `/v1/device/sos/{id}/end` | kid held "I'm safe" → 204, writes `sos.ended`. Already ended is fine |
-| PUT | `/v1/device/apps` | `{ apps: [{ package, label, source, installer?, blockable, installedAt, firstUsedAt? }] }` 1 to 500, the device's **whole** list → 204. Android only (a PC → 409). What it stores and raises is in 12.4 |
+| PUT | `/v1/device/apps` | `{ apps: [{ package, label, source, installer, blockable, installedAt, firstUsedAt }] }` (`installer` and `firstUsedAt` may be null) 1 to 500, the device's **whole** list → 204. Android only (a PC → 409). What it stores and raises is in 12.4 |
 | POST | `/v1/device/app-usage` | `{ days: [{ day, apps: [{ package, seconds }] }] }` at most 8 days and 500 apps a day → 204. Android only (a PC → 409). Upsert keeps the larger value |
 | GET | `/v1/device/ws` | WebSocket upgrade, `Authorization: Bearer <deviceToken>`. A wrong or revoked token gets 401 and no socket; a request that is not an upgrade gets 422. Details in section 10 |
 
@@ -732,7 +732,7 @@ Not tried yet, so **each card's rehearsal must prove it**: a real Play Store ins
 
 **Permissions and policies.** The manifest adds `QUERY_ALL_PACKAGES` and `PACKAGE_USAGE_STATS`. `Policies` adds `DISALLOW_ADD_PRIVATE_PROFILE` on Android 15 and later, because apps in a private space cannot be listed or blocked. A device set up before this card has USB debugging off, so a parent turns usage access on in Settings during parent mode instead of using adb.
 
-**The app list (Q34).** The list holds apps with a launcher icon; other packages cannot be opened by a kid. `source` is `preinstalled` for a system app, even one updated later, `play` when the installer is `com.android.vending`, and `other` for the rest. `blockable` is false for the never-block list below. The service registers for `PACKAGE_ADDED` and `PACKAGE_REMOVED` while it runs and also compares against its last list at every start and sync, so an install made while it was down is still found. An app the device itself hid (below) stays on the list as installed. It sends the whole list with `PUT /v1/device/apps` when the list changes, and retries until the server has it.
+**The app list (Q34).** The list holds apps with a launcher icon, except the kid app itself; other packages cannot be opened by a kid. `source` is `preinstalled` for a system app, even one updated later, `play` when the installer is `com.android.vending`, and `other` for the rest. `blockable` is false for the never-block list below. The service registers for `PACKAGE_ADDED` and `PACKAGE_REMOVED` while it runs and also compares against its last list at every start and sync, so an install made while it was down is still found. An app the device itself hid (below) stays on the list as installed. It sends the whole list with `PUT /v1/device/apps` when the list changes, and retries until the server has it.
 
 **What the server does with a list.**
 
