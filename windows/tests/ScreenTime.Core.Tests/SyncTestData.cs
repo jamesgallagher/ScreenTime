@@ -26,7 +26,7 @@ internal static class SyncTestData
              "parents":[],"contacts":[],"messagePresets":[],
              "schedule":{"version":1,"warn1Min":15,"warn2Min":5,"days":[{{days}}]},
              "today":{"date":"{{date}}","grants":[{{grants}}],"poolSegments":[{{segments}}]},
-             "parentMode":{"active":false,"endsAt":null,"byName":null},"pendingRequest":null,"activeSos":null}
+             "parentMode":{"active":false,"endsAt":null,"byName":null},"pendingRequest":null,"apps":{"newAppApproval":false,"rules":[]},"activeSos":null}
             """;
     }
 

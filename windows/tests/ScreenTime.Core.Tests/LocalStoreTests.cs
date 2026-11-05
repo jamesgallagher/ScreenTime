@@ -75,7 +75,8 @@ public sealed class LocalStoreTests : IDisposable
             Today: new DeviceStateToday("2026-10-29", [], []),
             ParentMode: new DeviceStateParentMode(false, null, null),
             PendingRequest: null,
-            ActiveSos: null);
+            ActiveSos: null,
+            Apps: new DeviceStateApps(false, []));
         store.SaveState(Alex, new CachedState("\"v8\"", state));
 
         var loaded = store.LoadState(Alex)!;
