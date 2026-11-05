@@ -53,6 +53,8 @@ import au.screentime.core.model.api.TimeRequest
 import au.screentime.core.time.formatDuration
 import au.screentime.core.ui.AvatarColors
 import au.screentime.core.ui.ScreenTimeTheme
+import au.screentime.parent.BuildConfig
+import au.screentime.parent.kids.AppRule
 import au.screentime.parent.R
 import au.screentime.parent.home.ScreenHeader
 import au.screentime.parent.today.Problem
@@ -114,7 +116,9 @@ fun InboxScreen(vm: InboxViewModel, zone: ZoneId) {
                             )
                         }
                     }
-                    if (state.requests.isNotEmpty()) {
+                    // Debug builds only until CARD-057 connects the server.
+                    val approvals = if (BuildConfig.DEBUG) pendingAppApprovals(state.events) else emptyList()
+                    if (state.requests.isNotEmpty() || approvals.isNotEmpty()) {
                         item {
                             Text(
                                 text = "Waiting for you",
@@ -123,6 +127,7 @@ fun InboxScreen(vm: InboxViewModel, zone: ZoneId) {
                                 color = MaterialTheme.colorScheme.onBackground,
                             )
                         }
+                        items(approvals, key = { it.id }) { e -> AppApprovalCard(e, now, zone, vm) }
                         items(state.requests, key = { it.id }) { r ->
                             RequestCard(r, now, zone, vm) { otherId = r.id }
                         }
@@ -181,6 +186,53 @@ fun InboxScreen(vm: InboxViewModel, zone: ZoneId) {
     }
     if (other != null) {
         AmountDialog(other, vm) { otherId = null }
+    }
+}
+
+/** A new app that stays blocked until a parent answers (docs/SPEC.md §12.4): Block and Allow. */
+@Composable
+private fun AppApprovalCard(e: EventItem, now: Instant, zone: ZoneId, vm: InboxViewModel) {
+    val scope = rememberCoroutineScope()
+    val view = eventView(e, zone)
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, ScreenTimeTheme.colors.outline),
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = view.text,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = "${view.detail}. It stays blocked until you answer.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = whenText(e.at, now, zone),
+                style = MaterialTheme.typography.bodySmall,
+                color = ScreenTimeTheme.colors.muted,
+            )
+            Spacer(Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                OutlinedButton(onClick = { scope.launch { vm.answerApp(e, AppRule.BLOCKED) } }, enabled = !vm.state.busy) {
+                    Text("Block")
+                }
+                Button(onClick = { scope.launch { vm.answerApp(e, AppRule.ALLOWED) } }, enabled = !vm.state.busy) {
+                    Text("Allow")
+                }
+            }
+        }
     }
 }
 

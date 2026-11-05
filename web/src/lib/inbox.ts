@@ -127,11 +127,18 @@ export function eventView(event: EventItem, timeZone: string): EventView {
         tone: 'info',
       };
     }
+    case 'app.approval':
     case 'app.installed': {
       const source = str(p, 'source');
       const from = source === 'play' ? 'From Play Store' : source === 'preinstalled' ? 'Came with the device' : 'Installed another way';
       return { text: `${kid} installed ${str(p, 'label') ?? 'an app'}`, detail: `${from} on ${device}`, tone: 'info' };
     }
+    case 'app.answered':
+      return {
+        text: `${by ?? 'A parent'} ${p.approved === true ? 'allowed' : 'blocked'} ${str(p, 'label') ?? 'an app'} for ${kid}`,
+        detail: null,
+        tone: 'info',
+      };
     case 'app.first_used':
       return { text: `${kid} opened ${str(p, 'label') ?? 'an app'} for the first time`, detail: `On ${device}`, tone: 'info' };
     case 'device.enrolled':
@@ -170,6 +177,21 @@ export function pendingParentModeRequests(events: EventItem[], now: Date): Event
     const id = str(e.payload, 'requestId');
     return id !== null && !answered.has(id) && now.getTime() - new Date(e.at).getTime() < PARENT_MODE_WAIT_MS;
   });
+}
+
+/**
+ * New apps still waiting for an answer, newest first: an `app.approval` with no later `app.answered` for the same
+ * kid and package (docs/SPEC.md §12.4).
+ */
+export function pendingAppApprovals(events: EventItem[]): EventItem[] {
+  const key = (e: EventItem) => `${e.kidId} ${str(e.payload, 'package')}`;
+  const answered = new Map<string, number>();
+  for (const e of events) {
+    if (e.kind !== 'app.answered') continue;
+    const at = new Date(e.at).getTime();
+    answered.set(key(e), Math.max(answered.get(key(e)) ?? 0, at));
+  }
+  return events.filter((e) => e.kind === 'app.approval' && (answered.get(key(e)) ?? 0) < new Date(e.at).getTime());
 }
 
 function dayKey(instant: Date, timeZone: string): string {

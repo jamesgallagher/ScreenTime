@@ -119,10 +119,11 @@ class KidsViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** A kid's apps for the Apps page; a failure is a [Result.failure] with the exception. */
-    suspend fun apps(kidId: String): Result<List<KidApp>> {
+    suspend fun apps(kidId: String): Result<KidAppsView> {
         val deferred = viewModelScope.async {
             try {
-                Result.success(session.call { getKidsApps(kidId) }.apps.map(::appRow))
+                val apps = session.call { getKidsApps(kidId) }.apps.map(::appRow)
+                Result.success(KidAppsView(FakeAppRules.approval, apps.map { it.copy(rule = FakeAppRules.rules[it.packageName]) }))
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -130,6 +131,20 @@ class KidsViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
         return deferred.await()
+    }
+
+    /** The seam: CARD-057 replaces this with `PUT /v1/kids/{kidId}/apps/{package}/rule`. */
+    @Suppress("UNUSED_PARAMETER", "RedundantSuspendModifier")
+    suspend fun saveAppRule(kidId: String, packageName: String, rule: AppRule): Result<Unit> {
+        FakeAppRules.rules[packageName] = rule
+        return Result.success(Unit)
+    }
+
+    /** The seam: CARD-057 replaces this with `PUT /v1/kids/{kidId}/app-settings`. */
+    @Suppress("UNUSED_PARAMETER", "RedundantSuspendModifier")
+    suspend fun saveNewAppApproval(kidId: String, on: Boolean): Result<Unit> {
+        FakeAppRules.approval = on
+        return Result.success(Unit)
     }
 
     /** Load a kid's always-callable numbers; a failure is a [Result.failure] with the exception. */

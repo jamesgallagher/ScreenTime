@@ -1,12 +1,51 @@
-import type { KidApp, KidAppDevice, KidApps } from '@screentime/schemas';
+import type { KidApp as ServerApp, KidAppDevice, KidApps as ServerApps } from '@screentime/schemas';
 import { api } from '@/lib/auth';
 import { formatDuration } from '@/lib/format';
 
-export type { KidApp, KidAppDevice, KidApps };
+export type { KidAppDevice };
+
+/** A parent's rule for an app (docs/SPEC.md §12.4). `held` is written by the server while a new app waits. */
+export type AppRuleMode = 'allowed' | 'held' | 'blocked';
+
+export type KidApp = ServerApp & { rule: { mode: AppRuleMode } | null };
+
+export interface KidApps {
+  newAppApproval: boolean;
+  apps: KidApp[];
+}
+
+/** The seam: CARD-057 replaces this, and the three functions below, with the server. */
+export const APP_RULES_READY = import.meta.env.DEV;
+const fakeRules = new Map<string, AppRuleMode>();
+let fakeApproval = false;
 
 /** GET /v1/kids/{kidId}/apps (docs/SPEC.md §12.4). */
-export function fetchKidApps(kidId: string): Promise<KidApps> {
-  return api.get<KidApps>(`/v1/kids/${kidId}/apps`);
+export async function fetchKidApps(kidId: string): Promise<KidApps> {
+  const server = await api.get<ServerApps>(`/v1/kids/${kidId}/apps`);
+  return {
+    newAppApproval: fakeApproval,
+    apps: server.apps.map((a) => {
+      const mode = fakeRules.get(a.package);
+      return { ...a, rule: mode ? { mode } : null };
+    }),
+  };
+}
+
+export async function saveAppRule(_kidId: string, pkg: string, mode: 'allowed' | 'blocked'): Promise<void> {
+  fakeRules.set(pkg, mode);
+}
+
+export async function saveNewAppApproval(_kidId: string, on: boolean): Promise<void> {
+  fakeApproval = on;
+}
+
+/** What the row's control shows: nothing to choose, waiting for an answer, or the choice. */
+export type AppChoice = 'fixed' | 'waiting' | 'allowed' | 'blocked';
+
+export function appChoice(app: KidApp): AppChoice {
+  if (!app.blockable) return 'fixed';
+  if (app.rule?.mode === 'held') return 'waiting';
+  return app.rule?.mode === 'blocked' ? 'blocked' : 'allowed';
 }
 
 /** Gone from every device. */
@@ -60,14 +99,14 @@ function latestInstall(app: KidApp): string {
 }
 
 /**
- * The page's order (docs/SPEC.md §16.4): installed apps newest first, then pre-installed ones by name, then
+ * The page's order (docs/SPEC.md §16.4): apps waiting for an answer, then installed apps newest first, then pre-installed ones by name, then
  * removed apps by name, so what the kid just added is at the top.
  */
 export function sortApps(apps: KidApp[]): KidApp[] {
-  const group = (a: KidApp) => (isRemoved(a) ? 2 : a.source === 'preinstalled' ? 1 : 0);
+  const group = (a: KidApp) => (isRemoved(a) ? 3 : appChoice(a) === 'waiting' ? 0 : a.source === 'preinstalled' ? 2 : 1);
   return [...apps].sort((a, b) => {
     if (group(a) !== group(b)) return group(a) - group(b);
-    if (group(a) === 0) {
+    if (group(a) <= 1) {
       const byDate = latestInstall(b).localeCompare(latestInstall(a));
       if (byDate !== 0) return byDate;
     }

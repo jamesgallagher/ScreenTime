@@ -9,6 +9,9 @@ import java.util.Locale
 /** How an app got onto the device (docs/SPEC.md §12.4). */
 enum class AppSource { PREINSTALLED, PLAY, OTHER }
 
+/** A parent's rule for an app (docs/SPEC.md §12.4). HELD is written by the server while a new app waits. */
+enum class AppRule { ALLOWED, HELD, BLOCKED }
+
 /** One of the kid's devices an app is or was on. Times are the API's ISO 8601 strings. */
 data class KidAppDevice(
     val deviceName: String,
@@ -24,7 +27,28 @@ data class KidApp(
     val source: AppSource,
     val todaySeconds: Int,
     val devices: List<KidAppDevice>,
+    val blockable: Boolean = true,
+    val rule: AppRule? = null,
 )
+
+/** What the Apps page shows. */
+data class KidAppsView(val newAppApproval: Boolean, val apps: List<KidApp>)
+
+/** What the row's control shows: nothing to choose, waiting for an answer, or the choice. */
+enum class AppChoice { FIXED, WAITING, ALLOWED, BLOCKED }
+
+fun appChoice(app: KidApp): AppChoice = when {
+    !app.blockable -> AppChoice.FIXED
+    app.rule == AppRule.HELD -> AppChoice.WAITING
+    app.rule == AppRule.BLOCKED -> AppChoice.BLOCKED
+    else -> AppChoice.ALLOWED
+}
+
+/** The seam: CARD-057 replaces this with the server, in `KidsViewModel` and `InboxViewModel`. */
+internal object FakeAppRules {
+    val rules = mutableMapOf<String, AppRule>()
+    var approval = false
+}
 
 /** Gone from every device. */
 fun isRemoved(app: KidApp): Boolean = app.devices.all { it.removedAt != null }
@@ -69,15 +93,20 @@ fun todayLine(app: KidApp): String? =
     if (app.todaySeconds >= 60) "Today ${formatDuration(app.todaySeconds.toLong())}" else null
 
 /**
- * The page's order (docs/SPEC.md §16.4): installed apps newest first, then pre-installed ones by name, then removed
+ * The page's order (docs/SPEC.md §16.4): apps waiting for an answer, then installed apps newest first, then pre-installed ones by name, then removed
  * apps by name, so what the kid just added is at the top.
  */
 fun sortApps(apps: List<KidApp>): List<KidApp> {
-    fun group(a: KidApp) = if (isRemoved(a)) 2 else if (a.source == AppSource.PREINSTALLED) 1 else 0
+    fun group(a: KidApp) = when {
+        isRemoved(a) -> 3
+        appChoice(a) == AppChoice.WAITING -> 0
+        a.source == AppSource.PREINSTALLED -> 2
+        else -> 1
+    }
     fun latest(a: KidApp) = a.devices.maxOf { Instant.parse(it.installedAt) }
     return apps.sortedWith(
         compareBy<KidApp> { group(it) }
-            .thenComparing { a, b -> if (group(a) == 0) latest(b).compareTo(latest(a)) else 0 }
+            .thenComparing { a, b -> if (group(a) <= 1) latest(b).compareTo(latest(a)) else 0 }
             .thenBy { it.label.lowercase(Locale.ENGLISH) },
     )
 }
@@ -93,4 +122,5 @@ fun appRow(app: au.screentime.core.model.api.KidApp): KidApp = KidApp(
     },
     todaySeconds = app.todaySeconds,
     devices = app.devices.map { KidAppDevice(it.deviceName, it.installedAt, it.firstUsedAt, it.removedAt) },
+    blockable = app.blockable,
 )

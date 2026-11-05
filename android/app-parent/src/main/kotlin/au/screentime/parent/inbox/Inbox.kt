@@ -127,13 +127,17 @@ fun eventView(e: EventItem, zone: ZoneId): EventView {
             val lastSeenAt = text(p, "lastSeenAt")
             EventView("$device is offline", lastSeenAt?.let { "Last seen at ${timeOfDay(Instant.parse(it), zone)}" }, EventTone.INFO)
         }
-        "app.installed" -> {
+        "app.approval", "app.installed" -> {
             val from = when (text(p, "source")) {
                 "play" -> "From Play Store"
                 "preinstalled" -> "Came with the device"
                 else -> "Installed another way"
             }
             EventView("$kid installed ${text(p, "label") ?: "an app"}", "$from on $device", EventTone.INFO)
+        }
+        "app.answered" -> {
+            val what = if (boolean(p, "approved") == true) "allowed" else "blocked"
+            EventView("$byOrParent $what ${text(p, "label") ?: "an app"} for $kid", null, EventTone.INFO)
         }
         "app.first_used" -> EventView("$kid opened ${text(p, "label") ?: "an app"} for the first time", "On $device", EventTone.INFO)
         "device.enrolled" -> EventView("${text(p, "name") ?: device} was added for $kid", null, EventTone.INFO)
@@ -153,6 +157,23 @@ fun eventView(e: EventItem, zone: ZoneId): EventView {
         }
     }
 }
+
+/**
+ * New apps still waiting for an answer, newest first: an `app.approval` with no later `app.answered` for the same kid
+ * and package (docs/SPEC.md §12.4).
+ */
+fun pendingAppApprovals(events: List<EventItem>): List<EventItem> {
+    fun key(e: EventItem) = "${e.kidId} ${text(e.payload, "package")}"
+    val answered = events.filter { it.kind == "app.answered" }
+        .groupBy(::key)
+        .mapValues { (_, list) -> list.maxOf { Instant.parse(it.at) } }
+    return events.filter { e ->
+        e.kind == "app.approval" && answered[key(e)]?.let { it < Instant.parse(e.at) } != false
+    }
+}
+
+/** The package of an `app.approval`, else null. */
+fun approvalPackage(e: EventItem): String? = text(e.payload, "package")
 
 /** "3:30 pm" in the family's time zone. */
 fun timeOfDay(instant: Instant, zone: ZoneId): String {
