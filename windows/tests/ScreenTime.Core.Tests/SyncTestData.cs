@@ -25,7 +25,7 @@ internal static class SyncTestData
              "family":{"timezone":"Australia/Sydney","emergencyNumber":"000","parentCodeSecret":"not-a-real-secret"},
              "parents":[],"contacts":[],"messagePresets":[],
              "schedule":{"version":1,"warn1Min":15,"warn2Min":5,"days":[{{days}}]},
-             "today":{"date":"{{date}}","grants":[{{grants}}],"poolSegments":[{{segments}}]},
+             "today":{"date":"{{date}}","grants":[{{grants}}],"poolSegments":[{{segments}}],"appUsage":[]},
              "parentMode":{"active":false,"endsAt":null,"byName":null},"pendingRequest":null,"apps":{"newAppApproval":false,"rules":[]},"activeSos":null}
             """;
     }
