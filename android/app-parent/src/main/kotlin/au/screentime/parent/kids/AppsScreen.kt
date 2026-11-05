@@ -11,11 +11,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -23,6 +25,11 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
@@ -41,6 +48,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import au.screentime.core.model.api.Kid
 import au.screentime.core.ui.ScreenTimeTheme
+import au.screentime.parent.BuildConfig
 import au.screentime.parent.R
 import au.screentime.parent.today.Problem
 import au.screentime.parent.today.initial
@@ -48,8 +56,8 @@ import java.time.ZoneId
 import kotlinx.coroutines.launch
 
 /**
- * The Apps page (docs/SPEC.md §12.4, §16.4): what is on the kid's Android devices, what is new and what has been
- * used. Its data comes through [KidsViewModel.apps].
+ * The Apps page (docs/SPEC.md §12.4, §16.4): what is on the kid's Android devices, what is new, what has been used
+ * and what is blocked. Its data comes through [KidsViewModel.apps].
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -57,12 +65,15 @@ fun AppsScreen(kid: Kid, vm: KidsViewModel, zone: ZoneId, onBack: () -> Unit) {
     BackHandler(onBack = onBack)
     val scope = rememberCoroutineScope()
     var apps by remember { mutableStateOf<List<KidApp>?>(null) }
+    var approval by remember { mutableStateOf(false) }
+    var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var refreshing by remember { mutableStateOf(false) }
 
     suspend fun load() {
         vm.apps(kid.id).onSuccess {
-            apps = sortApps(it)
+            apps = sortApps(it.apps)
+            approval = it.newAppApproval
             error = null
         }.onFailure { e ->
             error = actionError(e as Exception)
@@ -70,6 +81,15 @@ fun AppsScreen(kid: Kid, vm: KidsViewModel, zone: ZoneId, onBack: () -> Unit) {
     }
 
     LaunchedEffect(kid.id) { load() }
+
+    fun change(call: suspend () -> Result<Unit>) {
+        scope.launch {
+            busy = true
+            call().onFailure { e -> error = actionError(e as Exception) }
+            load()
+            busy = false
+        }
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
@@ -120,6 +140,11 @@ fun AppsScreen(kid: Kid, vm: KidsViewModel, zone: ZoneId, onBack: () -> Unit) {
                             )
                         }
                     }
+                    if (APP_RULES_READY) {
+                        item {
+                            ApprovalCard(kid, approval, !busy) { on -> change { vm.saveNewAppApproval(kid.id, on) } }
+                        }
+                    }
                     if (loaded.isEmpty()) {
                         item {
                             Text(
@@ -133,16 +158,106 @@ fun AppsScreen(kid: Kid, vm: KidsViewModel, zone: ZoneId, onBack: () -> Unit) {
                             )
                         }
                     }
-                    items(loaded, key = { it.packageName }) { app -> AppRow(app, zone) }
+                    items(loaded, key = { it.packageName }) { app ->
+                        AppRow(app, zone, !busy) { rule -> change { vm.saveAppRule(kid.id, app.packageName, rule) } }
+                    }
+                    if (APP_RULES_READY && loaded.isNotEmpty()) {
+                        item {
+                            Text(
+                                text = "Blocking an app does not block its website. To stop YouTube in a browser, block the browsers too.",
+                                modifier = Modifier.padding(top = 8.dp),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = ScreenTimeTheme.colors.muted,
+                            )
+                        }
+                    }
                 }
             }
         }
     }
 }
 
-/** One app: a circle with its initial, its name, where it came from, first use, and today's time or "Removed". */
+/** The seam: CARD-057 makes this true. Until then the rules are only shown in debug builds. */
+private val APP_RULES_READY = BuildConfig.DEBUG
+
+/** The "New apps need approval" switch. */
 @Composable
-private fun AppRow(app: KidApp, zone: ZoneId) {
+private fun ApprovalCard(kid: Kid, on: Boolean, enabled: Boolean, onChange: (Boolean) -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, ScreenTimeTheme.colors.outline),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "New apps need approval",
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text = "A new app on ${kid.name}'s device stays blocked until a parent says yes.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = ScreenTimeTheme.colors.muted,
+                )
+            }
+            Spacer(Modifier.size(12.dp))
+            Switch(checked = on, onCheckedChange = onChange, enabled = enabled)
+        }
+    }
+}
+
+/** What a parent can do about one app: nothing, answer a waiting app, or choose Allowed or Blocked. */
+@Composable
+private fun RuleControl(app: KidApp, enabled: Boolean, onRule: (AppRule) -> Unit) {
+    when (val choice = appChoice(app)) {
+        AppChoice.FIXED -> Text(
+            text = "Always allowed",
+            style = MaterialTheme.typography.bodySmall,
+            color = ScreenTimeTheme.colors.muted,
+        )
+        AppChoice.WAITING -> Column {
+            Text(
+                text = "Waiting for you",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = { onRule(AppRule.BLOCKED) }, enabled = enabled) { Text("Block") }
+                Button(onClick = { onRule(AppRule.ALLOWED) }, enabled = enabled) { Text("Allow") }
+            }
+        }
+        else -> SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+            SegmentedButton(
+                selected = choice == AppChoice.ALLOWED,
+                onClick = { if (choice != AppChoice.ALLOWED) onRule(AppRule.ALLOWED) },
+                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                enabled = enabled,
+                label = { Text("Allowed") },
+            )
+            SegmentedButton(
+                selected = choice == AppChoice.BLOCKED,
+                onClick = { if (choice != AppChoice.BLOCKED) onRule(AppRule.BLOCKED) },
+                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                enabled = enabled,
+                label = { Text("Blocked") },
+            )
+        }
+    }
+}
+
+/** One app: a circle with its initial, its name, where it came from, first use, today's time or "Removed", and its rule. */
+@Composable
+private fun AppRow(app: KidApp, zone: ZoneId, enabled: Boolean, onRule: (AppRule) -> Unit) {
     val removed = isRemoved(app)
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -198,6 +313,11 @@ private fun AppRow(app: KidApp, zone: ZoneId) {
                     style = MaterialTheme.typography.labelMedium,
                     color = if (removed) ScreenTimeTheme.colors.muted else MaterialTheme.colorScheme.onSurface,
                 )
+            }
+        }
+        if (APP_RULES_READY && !removed) {
+            Column(modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp)) {
+                RuleControl(app, enabled, onRule)
             }
         }
     }

@@ -1,7 +1,7 @@
 import type { EventItem } from '@screentime/schemas';
 import { describe, expect, it } from 'vitest';
-import { firstUsedLine, installedLine, isRemoved, type KidApp, type KidAppDevice, sortApps, todayLine } from '../src/lib/apps';
-import { eventView } from '../src/lib/inbox';
+import { appChoice, firstUsedLine, installedLine, isRemoved, type KidApp, type KidAppDevice, sortApps, todayLine } from '../src/lib/apps';
+import { eventView, pendingAppApprovals } from '../src/lib/inbox';
 import { NOTIFICATION_TEXT } from '../src/lib/settings';
 
 const SYDNEY = 'Australia/Sydney';
@@ -18,7 +18,7 @@ function device(over: Partial<KidAppDevice> = {}): KidAppDevice {
 }
 
 function app(over: Partial<KidApp> = {}): KidApp {
-  return { package: 'a.b', label: 'Game', source: 'play', blockable: true, todaySeconds: 0, devices: [device()], ...over };
+  return { package: 'a.b', label: 'Game', source: 'play', blockable: true, todaySeconds: 0, devices: [device()], rule: null, ...over };
 }
 
 describe('the lines of an app', () => {
@@ -105,9 +105,50 @@ describe('app events in the history', () => {
   });
 });
 
+describe('the choice on a row', () => {
+  it('is allowed without a rule, and follows the rule', () => {
+    expect(appChoice(app())).toBe('allowed');
+    expect(appChoice(app({ rule: { mode: 'allowed' } }))).toBe('allowed');
+    expect(appChoice(app({ rule: { mode: 'blocked' } }))).toBe('blocked');
+    expect(appChoice(app({ rule: { mode: 'held' } }))).toBe('waiting');
+  });
+
+  it('is never offered for an app that cannot be blocked', () => {
+    expect(appChoice(app({ blockable: false }))).toBe('fixed');
+    expect(appChoice(app({ blockable: false, rule: { mode: 'blocked' } }))).toBe('fixed');
+  });
+
+  it('puts apps waiting for an answer first', () => {
+    const newest = app({ label: 'Newest', devices: [device({ installedAt: '2026-11-05T00:00:00Z' })] });
+    const waiting = app({ label: 'Waiting', devices: [device({ installedAt: '2026-11-01T00:00:00Z' })], rule: { mode: 'held' } });
+    expect(sortApps([newest, waiting]).map((a) => a.label)).toEqual(['Waiting', 'Newest']);
+  });
+});
+
+describe('new apps waiting for an answer', () => {
+  const approval = (pkg: string, at: string) => ({ ...event('app.approval', { package: pkg, label: pkg, source: 'play' }), id: pkg, at });
+  const answered = (pkg: string, at: string) => ({ ...event('app.answered', { package: pkg, label: pkg, approved: true, byName: 'Dad' }), at });
+
+  it('waits until a later answer for the same package', () => {
+    const events = [approval('a', '2026-11-03T06:00:00Z'), approval('b', '2026-11-03T05:00:00Z'), answered('b', '2026-11-03T05:30:00Z')];
+    expect(pendingAppApprovals(events).map((e) => e.id)).toEqual(['a']);
+  });
+
+  it('waits again when the app comes back after an old answer', () => {
+    expect(pendingAppApprovals([approval('a', '2026-11-04T00:00:00Z'), answered('a', '2026-11-03T00:00:00Z')])).toHaveLength(1);
+  });
+
+  it('reads as an install, and the answer says who gave it', () => {
+    expect(eventView(event('app.approval', { label: 'Block Blast', source: 'play' }), SYDNEY).text).toBe('Alex installed Block Blast');
+    expect(eventView(event('app.answered', { label: 'Block Blast', approved: true, byName: 'Dad' }), SYDNEY).text).toBe('Dad allowed Block Blast for Alex');
+    expect(eventView(event('app.answered', { label: 'Block Blast', approved: false, byName: 'Dad' }), SYDNEY).text).toBe('Dad blocked Block Blast for Alex');
+  });
+});
+
 describe('the notification switches', () => {
   it('have words for the app kinds', () => {
     expect(NOTIFICATION_TEXT['app.installed'].title).toBe('New apps');
     expect(NOTIFICATION_TEXT['app.first_used'].title).toBe('Apps used for the first time');
+    expect(NOTIFICATION_TEXT['app.approval'].title).toBe('New apps waiting for approval');
   });
 });

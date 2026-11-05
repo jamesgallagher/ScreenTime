@@ -11,6 +11,8 @@ import au.screentime.core.model.api.EventItem
 import au.screentime.core.model.api.TimeRequest
 import au.screentime.core.model.api.TimeRequestApprove
 import au.screentime.core.model.api.TimeRequestStatus
+import au.screentime.parent.kids.AppRule
+import au.screentime.parent.kids.FakeAppRules
 import au.screentime.parent.ParentApp
 import au.screentime.parent.auth.SignedOutException
 import kotlinx.coroutines.CancellationException
@@ -33,9 +35,9 @@ class InboxViewModel(app: Application) : AndroidViewModel(app) {
     var state by mutableStateOf(InboxState())
         private set
 
-    /** The number of waiting time requests: the badge on the Inbox tab. */
+    /** The number of waiting time requests and new apps: the badge on the Inbox tab. */
     val pending: Int
-        get() = state.requests?.size ?: 0
+        get() = (state.requests?.size ?: 0) + pendingAppApprovals(state.events.orEmpty()).size
 
     /** Load the waiting requests and the history, or refresh them when [pulled]. */
     suspend fun load(pulled: Boolean = false) {
@@ -64,6 +66,15 @@ class InboxViewModel(app: Application) : AndroidViewModel(app) {
     /** Say no to a time request. */
     suspend fun deny(request: TimeRequest) {
         answer { session.call { postRequestsDeny(request.id) } }
+    }
+
+    /**
+     * Answer a new app that waits for a parent. The seam: CARD-057 replaces the fake with
+     * `PUT /v1/kids/{kidId}/apps/{package}/rule`.
+     */
+    suspend fun answerApp(e: EventItem, rule: AppRule) {
+        val packageName = approvalPackage(e) ?: return
+        answer { FakeAppRules.rules[packageName] = rule }
     }
 
     /**

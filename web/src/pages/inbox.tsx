@@ -8,9 +8,10 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { ApiError } from '@/lib/api';
+import { APP_RULES_READY, saveAppRule } from '@/lib/apps';
 import { api, useAuth } from '@/lib/auth';
 import { formatDuration } from '@/lib/format';
-import { type EventTone, eventView, pendingParentModeRequests, whenText } from '@/lib/inbox';
+import { type EventTone, eventView, pendingAppApprovals, pendingParentModeRequests, whenText } from '@/lib/inbox';
 import { POOL_NAMES } from '@/lib/today';
 import { cn } from '@/lib/utils';
 
@@ -237,6 +238,40 @@ function ParentModeCard({ event, timeZone, now }: { event: EventItem; timeZone: 
   );
 }
 
+/** A new app that stays blocked until a parent answers (docs/SPEC.md §12.4). */
+function AppApprovalCard({ event, timeZone, now }: { event: EventItem; timeZone: string; now: Date }) {
+  const refreshAll = useRefreshAll();
+  const view = eventView(event, timeZone);
+  const save = useMutation({
+    mutationFn: (mode: 'allowed' | 'blocked') => saveAppRule(String(event.kidId), String(event.payload.package), mode),
+    onSuccess: refreshAll,
+  });
+  return (
+    <Card>
+      <CardContent className="flex flex-col gap-4">
+        <div className="flex gap-3">
+          <ToneIcon tone="request" />
+          <div className="min-w-0">
+            <p className="font-semibold">{view.text}</p>
+            <p className="text-sm text-muted">{view.detail}. It stays blocked until you answer.</p>
+            <p className="text-xs text-muted">{whenText(event.at, now, timeZone)}</p>
+            {save.error && <p className="mt-1 text-sm text-danger">{messageOf(save.error)}</p>}
+          </div>
+        </div>
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" size="sm" disabled={save.isPending} onClick={() => save.mutate('blocked')}>
+            Block
+          </Button>
+          <Button size="sm" disabled={save.isPending} onClick={() => save.mutate('allowed')}>
+            {save.isPending && <Loader2 className="animate-spin" />}
+            Allow
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function EventRow({ event, timeZone, now }: { event: EventItem; timeZone: string; now: Date }) {
   const view = eventView(event, timeZone);
   return (
@@ -262,7 +297,8 @@ export function InboxPage() {
   const now = new Date();
   const all = events.data?.pages.flatMap((p) => p.events) ?? [];
   const parentMode = pendingParentModeRequests(all, now);
-  const waiting = (requests.data?.length ?? 0) + parentMode.length;
+  const approvals = APP_RULES_READY ? pendingAppApprovals(all) : [];
+  const waiting = (requests.data?.length ?? 0) + parentMode.length + approvals.length;
 
   return (
     <>
@@ -274,6 +310,9 @@ export function InboxPage() {
           </h2>
           {parentMode.map((e) => (
             <ParentModeCard key={e.id} event={e} timeZone={timeZone} now={now} />
+          ))}
+          {approvals.map((e) => (
+            <AppApprovalCard key={e.id} event={e} timeZone={timeZone} now={now} />
           ))}
           {requests.data?.map((r) => (
             <TimeRequestCard key={r.id} request={r} timeZone={timeZone} now={now} />

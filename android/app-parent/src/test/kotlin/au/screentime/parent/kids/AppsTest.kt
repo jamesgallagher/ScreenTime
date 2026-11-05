@@ -22,7 +22,9 @@ class AppsTest {
         source: AppSource = AppSource.PLAY,
         todaySeconds: Int = 0,
         devices: List<KidAppDevice> = listOf(device()),
-    ) = KidApp("a.$label", label, source, todaySeconds, devices)
+        blockable: Boolean = true,
+        rule: AppRule? = null,
+    ) = KidApp("a.$label", label, source, todaySeconds, devices, blockable, rule)
 
     @Test
     fun saysWhereItCameFromWhenAndOnWhat() {
@@ -61,6 +63,27 @@ class AppsTest {
     fun showsTodaysTimeFromAWholeMinute() {
         assertNull(todayLine(app(todaySeconds = 59)))
         assertEquals("Today 12m", todayLine(app(todaySeconds = 720)))
+    }
+
+    @Test
+    fun theChoiceIsAllowedWithoutARuleAndFollowsTheRule() {
+        assertEquals(AppChoice.ALLOWED, appChoice(app()))
+        assertEquals(AppChoice.ALLOWED, appChoice(app(rule = AppRule.ALLOWED)))
+        assertEquals(AppChoice.BLOCKED, appChoice(app(rule = AppRule.BLOCKED)))
+        assertEquals(AppChoice.WAITING, appChoice(app(rule = AppRule.HELD)))
+    }
+
+    @Test
+    fun anAppThatCannotBeBlockedOffersNoChoice() {
+        assertEquals(AppChoice.FIXED, appChoice(app(blockable = false)))
+        assertEquals(AppChoice.FIXED, appChoice(app(blockable = false, rule = AppRule.BLOCKED)))
+    }
+
+    @Test
+    fun putsAppsWaitingForAnAnswerFirst() {
+        val newest = app("Newest", devices = listOf(device(installedAt = "2026-11-05T00:00:00Z")))
+        val waiting = app("Waiting", devices = listOf(device(installedAt = "2026-11-01T00:00:00Z")), rule = AppRule.HELD)
+        assertEquals(listOf("Waiting", "Newest"), sortApps(listOf(newest, waiting)).map { it.label })
     }
 
     @Test

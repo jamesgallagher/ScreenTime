@@ -181,4 +181,31 @@ class InboxTest {
         assertEquals("Alex installed an app", view("app.installed").text)
         assertEquals("Alex opened an app for the first time", view("app.first_used").text)
     }
+
+    @Test
+    fun aWaitingAppReadsAsAnInstallAndTheAnswerSaysWhoGaveIt() {
+        assertEquals("Alex installed Block Blast", view("app.approval", "label" to "Block Blast", "source" to "play").text)
+        assertEquals(
+            "Dad allowed Block Blast for Alex",
+            view("app.answered", "label" to "Block Blast", "approved" to true, "byName" to "Dad").text,
+        )
+        assertEquals(
+            "Dad blocked Block Blast for Alex",
+            view("app.answered", "label" to "Block Blast", "approved" to false, "byName" to "Dad").text,
+        )
+    }
+
+    @Test
+    fun anAppWaitsUntilALaterAnswerForTheSamePackage() {
+        fun at(kind: String, pkg: String, time: String) = event(kind, "package" to pkg).copy(id = "$kind$pkg$time", at = time)
+        val events = listOf(
+            at("app.approval", "a", "2026-11-03T06:00:00Z"),
+            at("app.answered", "b", "2026-11-03T05:30:00Z"),
+            at("app.approval", "b", "2026-11-03T05:00:00Z"),
+        )
+        assertEquals(listOf("a"), pendingAppApprovals(events).map { approvalPackage(it) })
+        // Back after an old answer: it waits again.
+        val back = listOf(at("app.approval", "a", "2026-11-04T00:00:00Z"), at("app.answered", "a", "2026-11-03T00:00:00Z"))
+        assertEquals(1, pendingAppApprovals(back).size)
+    }
 }
