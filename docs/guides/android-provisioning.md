@@ -45,9 +45,10 @@ $adb = "C:\Users\james\AppData\Local\Android\Sdk\platform-tools\adb.exe"
 ```powershell
 & $adb install -t app-kid\build\outputs\apk\debug\app-kid-debug.apk
 & $adb shell dpm set-device-owner au.screentime.kid/.admin.KidDeviceAdminReceiver
+& $adb shell cmd appops set au.screentime.kid GET_USAGE_STATS allow
 ```
 
-`-t` is needed because debug builds are test-only. The second command prints `Success: Device owner set to package ...`.
+`-t` is needed because debug builds are test-only. The second command prints `Success: Device owner set to package ...`. The last command gives the app usage access, which Device Owner cannot grant: it is how the app sees the first use of each app.
 
 If it says `Not allowed to set the device owner because there are already some accounts on the device`, an account is still there (step 2). If it says `already several users`, remove the other users.
 
