@@ -82,18 +82,15 @@ fun sortApps(apps: List<KidApp>): List<KidApp> {
     )
 }
 
-/** Fake data behind [KidsViewModel.apps] until CARD-056 connects the server. */
-internal fun fakeKidApps(): List<KidApp> {
-    fun device(installedAt: String, firstUsedAt: String?, removedAt: String? = null, name: String = "Pixel 7") =
-        KidAppDevice(name, installedAt, firstUsedAt, removedAt)
-    return listOf(
-        KidApp("com.example.blockblast", "Block Blast", AppSource.PLAY, 2700, listOf(device("2026-11-03T06:12:00Z", "2026-11-03T06:14:00Z"))),
-        KidApp("com.example.subwayrun", "Subway Run", AppSource.PLAY, 0, listOf(device("2026-11-03T06:02:00Z", null))),
-        KidApp("com.example.oldgame", "Word Stack", AppSource.OTHER, 0, listOf(device("2026-10-20T03:00:00Z", "2026-10-20T03:10:00Z", "2026-11-01T03:00:00Z"))),
-        KidApp(
-            "com.google.android.youtube", "YouTube", AppSource.PREINSTALLED, 720,
-            listOf(device("2026-01-10T00:00:00Z", "2026-10-28T07:30:00Z"), device("2026-01-11T00:00:00Z", "2026-10-30T07:30:00Z", name = "XPPen tablet")),
-        ),
-        KidApp("com.google.android.apps.bard", "Gemini", AppSource.PREINSTALLED, 0, listOf(device("2026-01-10T00:00:00Z", null))),
-    )
-}
+/** The page's row for what the server sends. */
+fun appRow(app: au.screentime.core.model.api.KidApp): KidApp = KidApp(
+    packageName = app.`package`,
+    label = app.label,
+    source = when (app.source) {
+        au.screentime.core.model.api.AppSource.PREINSTALLED -> AppSource.PREINSTALLED
+        au.screentime.core.model.api.AppSource.PLAY -> AppSource.PLAY
+        au.screentime.core.model.api.AppSource.OTHER -> AppSource.OTHER
+    },
+    todaySeconds = app.todaySeconds,
+    devices = app.devices.map { KidAppDevice(it.deviceName, it.installedAt, it.firstUsedAt, it.removedAt) },
+)
