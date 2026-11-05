@@ -300,6 +300,26 @@ public enum DeviceEventKind
     [JsonStringEnumMemberName("tamper.call_blocked")] TamperCallBlocked,
 }
 
+public sealed record DeviceAppsPut(
+    [property: JsonPropertyName("apps")] IReadOnlyList<DeviceAppIn> Apps);
+
+public sealed record DeviceAppIn(
+    [property: JsonPropertyName("package")] string Package,
+    [property: JsonPropertyName("label")] string Label,
+    [property: JsonPropertyName("source")] AppSource Source,
+    [property: JsonPropertyName("installer")] string? Installer,
+    [property: JsonPropertyName("blockable")] bool Blockable,
+    [property: JsonPropertyName("installedAt")] string InstalledAt,
+    [property: JsonPropertyName("firstUsedAt")] string? FirstUsedAt);
+
+[JsonConverter(typeof(JsonStringEnumConverter<AppSource>))]
+public enum AppSource
+{
+    [JsonStringEnumMemberName("preinstalled")] Preinstalled,
+    [JsonStringEnumMemberName("play")] Play,
+    [JsonStringEnumMemberName("other")] Other,
+}
+
 public sealed record Sos(
     [property: JsonPropertyName("id")] string Id,
     [property: JsonPropertyName("kidId")] string KidId,
@@ -423,6 +443,9 @@ public sealed record PushTokenPut(
 [JsonSerializable(typeof(DeviceEventUpload))]
 [JsonSerializable(typeof(DeviceEventIn))]
 [JsonSerializable(typeof(DeviceEventKind))]
+[JsonSerializable(typeof(DeviceAppsPut))]
+[JsonSerializable(typeof(DeviceAppIn))]
+[JsonSerializable(typeof(AppSource))]
 [JsonSerializable(typeof(Sos))]
 [JsonSerializable(typeof(SosEndedBy))]
 [JsonSerializable(typeof(SosStatus))]

@@ -1,64 +1,12 @@
+import type { KidApp, KidAppDevice, KidApps } from '@screentime/schemas';
+import { api } from '@/lib/auth';
 import { formatDuration } from '@/lib/format';
 
-/** How an app got onto the device (docs/SPEC.md §12.4). */
-export type AppSource = 'preinstalled' | 'play' | 'other';
+export type { KidApp, KidAppDevice, KidApps };
 
-export interface KidAppDevice {
-  deviceId: string;
-  deviceName: string;
-  installedAt: string;
-  firstUsedAt: string | null;
-  removedAt: string | null;
-}
-
-export interface KidApp {
-  package: string;
-  label: string;
-  source: AppSource;
-  blockable: boolean;
-  todaySeconds: number;
-  devices: KidAppDevice[];
-}
-
-export interface KidApps {
-  newAppApproval: boolean;
-  apps: KidApp[];
-}
-
-/** The seam: CARD-056 replaces this body with `GET /v1/kids/{kidId}/apps`. Fake data until then. */
-export async function fetchKidApps(_kidId: string): Promise<KidApps> {
-  // Never show made-up apps in a production build.
-  if (!import.meta.env.DEV) return { newAppApproval: false, apps: [] };
-  const device = (installedAt: string, firstUsedAt: string | null, removedAt: string | null = null): KidAppDevice => ({
-    deviceId: 'fake-phone',
-    deviceName: 'Pixel 7',
-    installedAt,
-    firstUsedAt,
-    removedAt,
-  });
-  const app = (pkg: string, label: string, source: AppSource, todaySeconds: number, d: KidAppDevice[]): KidApp => ({
-    package: pkg,
-    label,
-    source,
-    blockable: true,
-    todaySeconds,
-    devices: d,
-  });
-  return {
-    newAppApproval: false,
-    apps: [
-      app('com.example.blockblast', 'Block Blast', 'play', 2700, [device('2026-11-03T06:12:00Z', '2026-11-03T06:14:00Z')]),
-      app('com.example.subwayrun', 'Subway Run', 'play', 0, [device('2026-11-03T06:02:00Z', null)]),
-      app('com.example.oldgame', 'Word Stack', 'other', 0, [
-        device('2026-10-20T03:00:00Z', '2026-10-20T03:10:00Z', '2026-11-01T03:00:00Z'),
-      ]),
-      app('com.google.android.youtube', 'YouTube', 'preinstalled', 720, [
-        device('2026-01-10T00:00:00Z', '2026-10-28T07:30:00Z'),
-        { ...device('2026-01-11T00:00:00Z', '2026-10-30T07:30:00Z'), deviceId: 'fake-tablet', deviceName: 'XPPen tablet' },
-      ]),
-      app('com.google.android.apps.bard', 'Gemini', 'preinstalled', 0, [device('2026-01-10T00:00:00Z', null)]),
-    ],
-  };
+/** GET /v1/kids/{kidId}/apps (docs/SPEC.md §12.4). */
+export function fetchKidApps(kidId: string): Promise<KidApps> {
+  return api.get<KidApps>(`/v1/kids/${kidId}/apps`);
 }
 
 /** Gone from every device. */

@@ -60,6 +60,11 @@ public sealed class ApiClient(HttpClient http, Func<string?> token) : ApiClientB
     public Task PostDeviceEventsAsync(DeviceEventUpload body, CancellationToken cancellationToken = default) =>
         SendAsync(HttpMethod.Post, "v1/device/events", auth: true, body, ApiJsonContext.Default.DeviceEventUpload, cancellationToken);
 
+    /// <summary>Send the device's whole app list.</summary>
+    /// <remarks><c>PUT /v1/device/apps</c></remarks>
+    public Task PutDeviceAppsAsync(DeviceAppsPut body, CancellationToken cancellationToken = default) =>
+        SendAsync(HttpMethod.Put, "v1/device/apps", auth: true, body, ApiJsonContext.Default.DeviceAppsPut, cancellationToken);
+
     /// <summary>Start an SOS.</summary>
     /// <remarks><c>POST /v1/device/sos</c></remarks>
     public Task<Sos> PostDeviceSosAsync(SosStart body, CancellationToken cancellationToken = default) =>

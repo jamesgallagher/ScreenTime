@@ -43,6 +43,8 @@ class PushTest {
         assertEquals("info", channelFor("grant.by_other_parent"))
         assertEquals("info", channelFor("device.enrolled"))
         assertEquals("info", channelFor("overspend"))
+        assertEquals("requests", channelFor("app.installed"))
+        assertEquals("requests", channelFor("app.first_used"))
     }
 
     @Test

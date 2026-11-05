@@ -35,7 +35,7 @@ const val CHANNEL_INFO = "info"
 fun channelFor(kind: String): String = when {
     kind.startsWith("sos.") -> CHANNEL_CRITICAL
     kind.startsWith("tamper.") || kind.startsWith("parent_mode.") -> CHANNEL_ALERTS
-    kind == "time_request" || kind == "kid_message" -> CHANNEL_REQUESTS
+    kind == "time_request" || kind == "kid_message" || kind.startsWith("app.") -> CHANNEL_REQUESTS
     else -> CHANNEL_INFO
 }
 

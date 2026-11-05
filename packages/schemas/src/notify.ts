@@ -14,6 +14,8 @@ export const NotificationKind = z
     'time_request',
     'kid_message',
     'overspend',
+    'app.installed',
+    'app.first_used',
     'device.offline',
     'device.enrolled',
     'grant.by_other_parent',

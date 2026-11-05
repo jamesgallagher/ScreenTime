@@ -2039,6 +2039,167 @@
           "tamper.call_blocked"
         ]
       },
+      "DeviceAppsPut": {
+        "type": "object",
+        "properties": {
+          "apps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeviceAppIn"
+            },
+            "minItems": 1,
+            "maxItems": 500
+          }
+        },
+        "required": [
+          "apps"
+        ]
+      },
+      "DeviceAppIn": {
+        "type": "object",
+        "properties": {
+          "package": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "source": {
+            "$ref": "#/components/schemas/AppSource"
+          },
+          "installer": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 255
+          },
+          "blockable": {
+            "type": "boolean"
+          },
+          "installedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "firstUsedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "package",
+          "label",
+          "source",
+          "installer",
+          "blockable",
+          "installedAt",
+          "firstUsedAt"
+        ]
+      },
+      "AppSource": {
+        "type": "string",
+        "enum": [
+          "preinstalled",
+          "play",
+          "other"
+        ]
+      },
+      "KidApps": {
+        "type": "object",
+        "properties": {
+          "newAppApproval": {
+            "type": "boolean"
+          },
+          "apps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KidApp"
+            }
+          }
+        },
+        "required": [
+          "newAppApproval",
+          "apps"
+        ]
+      },
+      "KidApp": {
+        "type": "object",
+        "properties": {
+          "package": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/AppSource"
+          },
+          "blockable": {
+            "type": "boolean"
+          },
+          "todaySeconds": {
+            "type": "integer"
+          },
+          "devices": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KidAppDevice"
+            }
+          }
+        },
+        "required": [
+          "package",
+          "label",
+          "source",
+          "blockable",
+          "todaySeconds",
+          "devices"
+        ]
+      },
+      "KidAppDevice": {
+        "type": "object",
+        "properties": {
+          "deviceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "deviceName": {
+            "type": "string"
+          },
+          "installedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "firstUsedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "removedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "deviceId",
+          "deviceName",
+          "installedAt",
+          "firstUsedAt",
+          "removedAt"
+        ]
+      },
       "Sos": {
         "type": "object",
         "properties": {
@@ -2417,6 +2578,8 @@
           "time_request",
           "kid_message",
           "overspend",
+          "app.installed",
+          "app.first_used",
           "device.offline",
           "device.enrolled",
           "grant.by_other_parent"
@@ -2440,7 +2603,7 @@
           ]
         },
         "minItems": 1,
-        "maxItems": 10
+        "maxItems": 12
       },
       "EventPage": {
         "type": "object",
@@ -6038,6 +6201,141 @@
           },
           "401": {
             "description": "Not signed in, or the code or token is wrong or expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/device/apps": {
+      "put": {
+        "tags": [
+          "device"
+        ],
+        "summary": "Send the device's whole app list",
+        "description": "The first list is the baseline and raises nothing. After that a new app writes `app.installed`, and a first `firstUsedAt` writes `app.first_used`. An app left out is marked removed. Android only.",
+        "security": [
+          {
+            "deviceAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceAppsPut"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Stored."
+          },
+          "401": {
+            "description": "Not signed in, or the code or token is wrong or expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicts with existing data.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/kids/{kidId}/apps": {
+      "get": {
+        "tags": [
+          "kids"
+        ],
+        "summary": "A kid's apps across their Android devices",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "kidId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The apps.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KidApps"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the code or token is wrong or expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Signed in, but not allowed to do this.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
             "content": {
               "application/json": {
                 "schema": {
