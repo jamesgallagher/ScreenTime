@@ -5,7 +5,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Switch } from '@/components/ui/switch';
 import { ApiError } from '@/lib/api';
 import {
-  APP_LIMITS_READY,
   type AppChoice,
   appChoice,
   DEFAULT_LIMIT_MINUTES,
@@ -32,7 +31,7 @@ type Mode = 'allowed' | 'blocked' | 'limit';
 const MODES: { value: Mode; label: string }[] = [
   { value: 'allowed', label: 'Allowed' },
   { value: 'blocked', label: 'Blocked' },
-  ...(APP_LIMITS_READY ? [{ value: 'limit' as const, label: 'Limit' }] : []),
+  { value: 'limit', label: 'Limit' },
 ];
 
 function RuleControl({ app, choice, kidId }: { app: KidApp; choice: AppChoice; kidId: string }) {
