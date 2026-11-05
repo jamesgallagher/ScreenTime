@@ -411,6 +411,14 @@ data class DeviceStateToday(
     val date: String,
     val grants: List<StateGrant>,
     val poolSegments: List<PoolSegment>,
+    val appUsage: List<DeviceStateTodayAppUsageItem>,
+)
+
+@Serializable
+data class DeviceStateTodayAppUsageItem(
+    val `package`: String,
+    val deviceId: String,
+    val seconds: Int,
 )
 
 @Serializable
@@ -443,6 +451,7 @@ data class DeviceStateApps(
 data class DeviceStateAppsRulesItem(
     val `package`: String,
     val mode: AppRuleMode,
+    val dailyMinutes: Int?,
 )
 
 @Serializable
@@ -465,7 +474,8 @@ data class PoolSegment(
 enum class AppRuleMode(override val wire: String) : ApiEnum {
     @SerialName("allowed") ALLOWED("allowed"),
     @SerialName("held") HELD("held"),
-    @SerialName("blocked") BLOCKED("blocked");
+    @SerialName("blocked") BLOCKED("blocked"),
+    @SerialName("limit") LIMIT("limit");
 }
 
 @Serializable
@@ -724,19 +734,39 @@ enum class AppSource(override val wire: String) : ApiEnum {
 }
 
 @Serializable
+data class DeviceAppUsageUpload(
+    val days: List<DeviceAppUsageUploadDaysItem>,
+)
+
+@Serializable
+data class DeviceAppUsageUploadDaysItem(
+    val day: String,
+    val apps: List<DeviceAppUsageUploadDaysItemAppsItem>,
+)
+
+@Serializable
+data class DeviceAppUsageUploadDaysItemAppsItem(
+    val `package`: String,
+    val seconds: Int,
+)
+
+@Serializable
 data class AppRuleSaved(
     val mode: AppRuleMode,
+    val dailyMinutes: Int?,
 )
 
 @Serializable
 data class AppRulePut(
     val mode: AppRulePutMode,
+    val dailyMinutes: Int?,
 )
 
 @Serializable
 enum class AppRulePutMode(override val wire: String) : ApiEnum {
     @SerialName("allowed") ALLOWED("allowed"),
-    @SerialName("blocked") BLOCKED("blocked");
+    @SerialName("blocked") BLOCKED("blocked"),
+    @SerialName("limit") LIMIT("limit");
 }
 
 @Serializable
@@ -764,6 +794,7 @@ data class KidApp(
 @Serializable
 data class KidAppRule(
     val mode: AppRuleMode,
+    val dailyMinutes: Int?,
 )
 
 @Serializable

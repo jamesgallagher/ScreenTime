@@ -1079,12 +1079,36 @@
                 "items": {
                   "$ref": "#/components/schemas/PoolSegment"
                 }
+              },
+              "appUsage": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "package": {
+                      "type": "string"
+                    },
+                    "deviceId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "seconds": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "package",
+                    "deviceId",
+                    "seconds"
+                  ]
+                }
               }
             },
             "required": [
               "date",
               "grants",
-              "poolSegments"
+              "poolSegments",
+              "appUsage"
             ]
           },
           "parentMode": {
@@ -1173,11 +1197,18 @@
                     },
                     "mode": {
                       "$ref": "#/components/schemas/AppRuleMode"
+                    },
+                    "dailyMinutes": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
                     }
                   },
                   "required": [
                     "package",
-                    "mode"
+                    "mode",
+                    "dailyMinutes"
                   ]
                 }
               }
@@ -1265,7 +1296,8 @@
         "enum": [
           "allowed",
           "held",
-          "blocked"
+          "blocked",
+          "limit"
         ]
       },
       "UsageReceipt": {
@@ -2150,15 +2182,71 @@
           "other"
         ]
       },
+      "DeviceAppUsageUpload": {
+        "type": "object",
+        "properties": {
+          "days": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "day": {
+                  "type": "string",
+                  "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                },
+                "apps": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "package": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 255
+                      },
+                      "seconds": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 86400
+                      }
+                    },
+                    "required": [
+                      "package",
+                      "seconds"
+                    ]
+                  },
+                  "maxItems": 500
+                }
+              },
+              "required": [
+                "day",
+                "apps"
+              ]
+            },
+            "minItems": 1,
+            "maxItems": 8
+          }
+        },
+        "required": [
+          "days"
+        ]
+      },
       "AppRuleSaved": {
         "type": "object",
         "properties": {
           "mode": {
             "$ref": "#/components/schemas/AppRuleMode"
+          },
+          "dailyMinutes": {
+            "type": [
+              "integer",
+              "null"
+            ]
           }
         },
         "required": [
-          "mode"
+          "mode",
+          "dailyMinutes"
         ]
       },
       "AppRulePut": {
@@ -2168,12 +2256,20 @@
             "type": "string",
             "enum": [
               "allowed",
-              "blocked"
+              "blocked",
+              "limit"
+            ]
+          },
+          "dailyMinutes": {
+            "type": [
+              "integer",
+              "null"
             ]
           }
         },
         "required": [
-          "mode"
+          "mode",
+          "dailyMinutes"
         ]
       },
       "KidAppSettings": {
@@ -2231,10 +2327,17 @@
             "properties": {
               "mode": {
                 "$ref": "#/components/schemas/AppRuleMode"
+              },
+              "dailyMinutes": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
               }
             },
             "required": [
-              "mode"
+              "mode",
+              "dailyMinutes"
             ]
           },
           "devices": {
@@ -6373,12 +6476,71 @@
         }
       }
     },
+    "/v1/device/app-usage": {
+      "post": {
+        "tags": [
+          "device"
+        ],
+        "summary": "Send the device's seconds per app per day",
+        "description": "A repeat or an older upload never lowers a value. Android only.",
+        "security": [
+          {
+            "deviceAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceAppUsageUpload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Stored."
+          },
+          "401": {
+            "description": "Not signed in, or the code or token is wrong or expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicts with existing data.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/kids/{kidId}/apps/{package}/rule": {
       "put": {
         "tags": [
           "kids"
         ],
-        "summary": "Allow or block an app for a kid",
+        "summary": "Allow, block or limit an app for a kid",
         "description": "Answering a waiting app also writes `app.answered`. An app on none of the kid's devices gets 404, and one that cannot be blocked gets 409.",
         "security": [
           {
