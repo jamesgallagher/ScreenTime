@@ -14,6 +14,7 @@ export const NotificationKind = z
     'time_request',
     'kid_message',
     'overspend',
+    'app.approval',
     'app.installed',
     'app.first_used',
     'device.offline',
@@ -25,7 +26,7 @@ export const NotificationKind = z
 export type NotificationKind = z.infer<typeof NotificationKind>;
 
 /** Kinds that cannot be turned off: SOS and every request that waits for a parent's answer. */
-export const ESSENTIAL_KINDS: readonly NotificationKind[] = ['sos', 'parent_mode.request', 'time_request'];
+export const ESSENTIAL_KINDS: readonly NotificationKind[] = ['sos', 'parent_mode.request', 'time_request', 'app.approval'];
 
 export const NotificationPref = z
   .object({

@@ -164,7 +164,10 @@ class KidService : Service() {
             if (intent.getBooleanExtra(Intent.EXTRA_REPLACING, false)) return
             Log.i(TAG, "apps: ${intent.action} ${intent.data?.schemeSpecificPart}")
             // No connection: the network callback syncs when it is back, and the sync sends the list.
-            scope.launch { if (apps?.send() == false) lastSyncOk = false }
+            scope.launch {
+                if (apps?.send() == false) lastSyncOk = false
+                report()
+            }
         }
     }
 
@@ -515,6 +518,7 @@ class KidService : Service() {
         paused = parentMode != null
         if (sosOn != sos.active) Log.i(TAG, "sos: ${if (sos.active) "on" else "off"}")
         sosOn = sos.active
+        apps?.applyBlocks(cached.state, paused)
         val counting = !blocked && !paused && !sosOn
         if (wasCounting && !counting) recorder.stop(now)
         if (!wasCounting && counting && inUse()) recorder.start(now)

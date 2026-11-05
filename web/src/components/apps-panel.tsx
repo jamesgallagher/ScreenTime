@@ -5,7 +5,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Switch } from '@/components/ui/switch';
 import { ApiError } from '@/lib/api';
 import {
-  APP_RULES_READY,
   type AppChoice,
   appChoice,
   fetchKidApps,
@@ -105,7 +104,7 @@ function AppRow({ app, kidId, timeZone }: { app: KidApp; kidId: string; timeZone
           <p className="text-sm text-muted">{installedLine(app, timeZone)}</p>
           <p className="text-sm text-muted">{firstUsedLine(app, timeZone)}</p>
         </div>
-        {APP_RULES_READY && !removed && <RuleControl app={app} choice={appChoice(app)} kidId={kidId} />}
+        {!removed && <RuleControl app={app} choice={appChoice(app)} kidId={kidId} />}
       </div>
       {removed ? (
         <span className="shrink-0 rounded-full bg-surface-variant px-2.5 py-1 text-xs font-medium text-muted">Removed</span>
@@ -147,29 +146,27 @@ export function AppsPanel({ kidId, kidName }: { kidId: string; kidName: string }
 
   return (
     <div className="flex flex-col gap-4">
-      {APP_RULES_READY && (
-        <Card>
-          <CardContent className="flex items-center gap-4">
-            <div className="min-w-0 flex-1">
-              <label htmlFor="new-app-approval" className="font-medium">
-                New apps need approval
-              </label>
-              <p className="text-sm text-muted">A new app on {kidName}'s device stays blocked until a parent says yes.</p>
-              {approval.error && (
-                <p role="alert" className="mt-1 text-sm text-danger">
-                  {messageOf(approval.error)}
-                </p>
-              )}
-            </div>
-            <Switch
-              id="new-app-approval"
-              checked={apps.data.newAppApproval}
-              disabled={approval.isPending}
-              onCheckedChange={(on) => approval.mutate(on)}
-            />
-          </CardContent>
-        </Card>
-      )}
+      <Card>
+        <CardContent className="flex items-center gap-4">
+          <div className="min-w-0 flex-1">
+            <label htmlFor="new-app-approval" className="font-medium">
+              New apps need approval
+            </label>
+            <p className="text-sm text-muted">A new app on {kidName}'s device stays blocked until a parent says yes.</p>
+            {approval.error && (
+              <p role="alert" className="mt-1 text-sm text-danger">
+                {messageOf(approval.error)}
+              </p>
+            )}
+          </div>
+          <Switch
+            id="new-app-approval"
+            checked={apps.data.newAppApproval}
+            disabled={approval.isPending}
+            onCheckedChange={(on) => approval.mutate(on)}
+          />
+        </CardContent>
+      </Card>
       <Card>
         <CardHeader>
           <CardTitle>Apps</CardTitle>
@@ -188,7 +185,7 @@ export function AppsPanel({ kidId, kidName }: { kidId: string; kidName: string }
               ))}
             </ul>
           )}
-          {APP_RULES_READY && apps.data.apps.length > 0 && (
+          {apps.data.apps.length > 0 && (
             <p className="mt-4 border-t border-outline pt-4 text-sm text-muted">
               Blocking an app does not block its website. To stop YouTube in a browser, block the browsers too.
             </p>

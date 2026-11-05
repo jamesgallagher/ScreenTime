@@ -11,10 +11,14 @@ import android.os.Process
 import android.provider.Telephony
 import android.telecom.TelecomManager
 import android.util.Log
+import android.app.admin.DevicePolicyManager
 import au.screentime.core.model.api.ApiClient
 import au.screentime.core.model.api.ApiException
 import au.screentime.core.model.api.ApiJson
 import au.screentime.core.model.api.DeviceAppsPut
+import au.screentime.core.model.api.DeviceState
+import au.screentime.kid.admin.KidDeviceAdminReceiver
+import au.screentime.kid.admin.Policies
 import kotlinx.coroutines.CancellationException
 
 /**
@@ -27,6 +31,56 @@ class AppWatcher(context: Context, private val api: ApiClient, private val now: 
     private val prefs = this.context.getSharedPreferences("apps", Context.MODE_PRIVATE)
     private val firstUsePrefs = this.context.getSharedPreferences("apps_first_use", Context.MODE_PRIVATE)
     private var warned = false
+
+    /**
+     * Makes the device match the snapshot's rules: suspended, or hidden when Android refuses (Play Store); released
+     * when no longer wanted. Cheap when nothing changed, so the service can call it after every run of the engine.
+     * Does nothing unless the app is Device Owner.
+     */
+    fun applyBlocks(state: DeviceState, parentMode: Boolean) {
+        if (!Policies.isDeviceOwner(context)) return
+        val rules = state.apps.rules.associate { it.`package` to it.mode }
+        val installed = installed().map { it.packageName }.toSet()
+        val knownBefore = prefs.getStringSet(KNOWN, null)
+        val held = heldPackages(state.apps.newAppApproval, knownBefore, installed, rules.keys, prefs.getStringSet(HELD, null).orEmpty())
+        val dpm = context.getSystemService(DevicePolicyManager::class.java)
+        val admin = KidDeviceAdminReceiver.component(context)
+        // Android's word, not what was saved: a reinstalled app comes back free. An app not on this device is skipped:
+        // rules are per kid, so it may only be on another one.
+        val suspended = prefs.getStringSet(SUSPENDED, null).orEmpty().filter { isSuspended(dpm, it) }.toSet()
+        val hidden = prefs.getStringSet(HIDDEN, null).orEmpty().filter { dpm.isApplicationHidden(admin, it) }.toSet()
+        val wanted = wantedBlocks(rules, held, protectedPackages(), parentMode).intersect(installed)
+        val plan = blockPlan(wanted, suspended + hidden)
+        prefs.edit().putStringSet(KNOWN, installed).putStringSet(HELD, held).commit()
+        if (plan.block.isEmpty() && plan.release.isEmpty()) return
+
+        val nowSuspended = suspended.toMutableSet()
+        val nowHidden = hidden.toMutableSet()
+        val unsuspend = plan.release.intersect(suspended)
+        if (unsuspend.isNotEmpty()) {
+            dpm.setPackagesSuspended(admin, unsuspend.toTypedArray(), false)
+            nowSuspended -= unsuspend
+        }
+        for (name in plan.release.intersect(hidden)) {
+            dpm.setApplicationHidden(admin, name, false)
+            nowHidden -= name
+        }
+        if (plan.block.isNotEmpty()) {
+            val refused = dpm.setPackagesSuspended(admin, plan.block.toTypedArray(), true).toSet()
+            nowSuspended += plan.block - refused
+            for (name in refused) {
+                if (dpm.setApplicationHidden(admin, name, true)) nowHidden += name
+            }
+        }
+        prefs.edit().putStringSet(SUSPENDED, nowSuspended).putStringSet(HIDDEN, nowHidden).commit()
+        Log.i(TAG, "apps: blocked ${(nowSuspended + nowHidden).sorted()} (hidden ${nowHidden.sorted()})")
+    }
+
+    private fun isSuspended(dpm: DevicePolicyManager, name: String): Boolean = try {
+        dpm.isPackageSuspended(KidDeviceAdminReceiver.component(context), name)
+    } catch (e: PackageManager.NameNotFoundException) {
+        false
+    }
 
     /** Reads new usage events. Sends the list if an app was used for the first time. */
     suspend fun tick() {
@@ -94,21 +148,22 @@ class AppWatcher(context: Context, private val api: ApiClient, private val now: 
         return out
     }
 
-    /** Every app with a launcher icon, except this one. */
+    /** Every app with a launcher icon, except this one, and the apps this app hid: they stay on the list. */
     private fun installed(): List<InstalledApp> {
         val launcher = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
         val packages = pm.queryIntentActivities(launcher, PackageManager.ResolveInfoFlags.of(0))
             .map { it.activityInfo.packageName }
-            .toSet() - context.packageName
+            .toSet() - context.packageName + prefs.getStringSet(HIDDEN, null).orEmpty()
         return packages.mapNotNull { name ->
             try {
-                val info = pm.getPackageInfo(name, PackageManager.PackageInfoFlags.of(0))
+                val flags = PackageManager.MATCH_UNINSTALLED_PACKAGES.toLong()
+                val info = pm.getPackageInfo(name, PackageManager.PackageInfoFlags.of(flags))
                 val app = info.applicationInfo ?: return@mapNotNull null
                 InstalledApp(
                     packageName = name,
                     label = app.loadLabel(pm).toString(),
                     isSystem = app.flags and ApplicationInfo.FLAG_SYSTEM != 0,
-                    installer = pm.getInstallSourceInfo(name).installingPackageName,
+                    installer = runCatching { pm.getInstallSourceInfo(name).installingPackageName }.getOrNull(),
                     installedAtMs = info.firstInstallTime,
                 )
             } catch (e: PackageManager.NameNotFoundException) {
@@ -141,6 +196,10 @@ class AppWatcher(context: Context, private val api: ApiClient, private val now: 
         const val TAG = "KidService"
         const val SENT = "sent"
         const val READ_TO = "readTo"
+        const val KNOWN = "known"
+        const val HELD = "held"
+        const val SUSPENDED = "suspended"
+        const val HIDDEN = "hidden"
 
         /** The first read looks this far back, so apps already in use raise no alert. */
         const val HISTORY_MS = 7 * 24 * 60 * 60 * 1000L

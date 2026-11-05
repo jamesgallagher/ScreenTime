@@ -53,7 +53,6 @@ import au.screentime.core.model.api.TimeRequest
 import au.screentime.core.time.formatDuration
 import au.screentime.core.ui.AvatarColors
 import au.screentime.core.ui.ScreenTimeTheme
-import au.screentime.parent.BuildConfig
 import au.screentime.parent.kids.AppRule
 import au.screentime.parent.R
 import au.screentime.parent.home.ScreenHeader
@@ -116,8 +115,7 @@ fun InboxScreen(vm: InboxViewModel, zone: ZoneId) {
                             )
                         }
                     }
-                    // Debug builds only until CARD-057 connects the server.
-                    val approvals = if (BuildConfig.DEBUG) pendingAppApprovals(state.events) else emptyList()
+                    val approvals = pendingAppApprovals(state.events)
                     if (state.requests.isNotEmpty() || approvals.isNotEmpty()) {
                         item {
                             Text(

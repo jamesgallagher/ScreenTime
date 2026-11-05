@@ -125,7 +125,7 @@ public class ApiClientTests
              "parents":[{"id":"p-1","displayName":"Dad","phoneE164":null}],"contacts":[],"messagePresets":[],
              "schedule":{"version":3,"warn1Min":15,"warn2Min":5,"days":[{"weekday":4,"screensMin":120,"phoneMin":60,"wake":"07:00","bedtime":"21:00"}]},
              "today":{"date":"2026-10-29","grants":[],"poolSegments":[{"id":"s-1","deviceId":"d-1","startedAt":"2026-10-29T07:00:00.000Z","endedAt":null}]},
-             "parentMode":{"active":false,"endsAt":null,"byName":null},"pendingRequest":null,"activeSos":null}
+             "parentMode":{"active":false,"endsAt":null,"byName":null},"pendingRequest":null,"apps":{"newAppApproval":false,"rules":[]},"activeSos":null}
             """;
         var server = new FakeServer(HttpStatusCode.OK, json, ("ETag", "\"v8\""));
         var state = await ClientFor(server).GetDeviceStateAsync(cancellationToken: TestContext.Current.CancellationToken);

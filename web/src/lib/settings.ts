@@ -1,7 +1,7 @@
 import type { NotificationKind } from '@screentime/schemas';
 
 /** What each notification switch means, in the words of docs/SPEC.md §13. The server sends the order. */
-export const NOTIFICATION_TEXT: Record<NotificationKind | 'app.approval', { title: string; detail: string }> = {
+export const NOTIFICATION_TEXT: Record<NotificationKind, { title: string; detail: string }> = {
   sos: { title: 'SOS', detail: 'When a kid presses SOS on their phone, and every update after.' },
   'parent_mode.request': { title: 'Parent mode requests', detail: 'When a kid asks a parent to unlock a device.' },
   time_request: { title: 'Requests for more time', detail: 'When a kid asks for more time.' },

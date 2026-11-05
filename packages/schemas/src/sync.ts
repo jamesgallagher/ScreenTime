@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { AppRuleMode } from './apps.js';
 import { DeviceForm, Pool } from './devices.js';
 import { AvatarColor, Schedule } from './kids.js';
 
@@ -69,6 +70,11 @@ export const DeviceState = z
     /** The kid's pending "ask for more time" for this pool today, if any. */
     pendingRequest: z.object({ id: z.uuid(), minutes: z.int(), createdAt: z.iso.datetime() }).nullable(),
     activeSos: z.object({ id: z.uuid(), startedAt: z.iso.datetime() }).nullable(),
+    /** The kid's app rules (docs/SPEC.md §12.4). Empty on a PC. */
+    apps: z.object({
+      newAppApproval: z.boolean(),
+      rules: z.array(z.object({ package: z.string(), mode: AppRuleMode })),
+    }),
   })
   .meta({ id: 'DeviceState' });
 

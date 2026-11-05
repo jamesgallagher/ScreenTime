@@ -3,6 +3,7 @@ import { createRoute } from '@hono/zod-openapi';
 import { and, asc, desc, eq, gt, gte, isNull, sql } from 'drizzle-orm';
 import {
   type AvatarColor,
+  type AppRuleMode,
   type DeviceForm,
   DeviceState,
   type Pool,
@@ -15,6 +16,7 @@ import type { AppDeps } from '../app.js';
 import { requireFamilyParent } from '../auth/guards.js';
 import { withFamily } from '../db/family.js';
 import {
+  appRules,
   devices,
   families,
   grants,
@@ -172,6 +174,16 @@ export function registerSyncRoutes(app: Router, deps: AppDeps) {
         .orderBy(desc(sosIncidents.startedAt))
         .limit(1);
 
+      // Apps are Android only (docs/SPEC.md §12.4).
+      const rules =
+        device.platform === 'android'
+          ? await tx
+              .select({ package: appRules.package, mode: appRules.mode })
+              .from(appRules)
+              .where(eq(appRules.kidId, kidId))
+              .orderBy(asc(appRules.package))
+          : [];
+
       return {
         serverTime: day.now.toISOString(),
         content: {
@@ -197,6 +209,10 @@ export function registerSyncRoutes(app: Router, deps: AppDeps) {
             : { active: false, endsAt: null, byName: null },
           pendingRequest: pending ? { id: pending.id, minutes: pending.minutes, createdAt: pending.createdAt.toISOString() } : null,
           activeSos: sos ? { id: sos.id, startedAt: sos.startedAt.toISOString() } : null,
+          apps: {
+            newAppApproval: device.platform === 'android' && kid.newAppApproval,
+            rules: rules.map((r) => ({ package: r.package, mode: r.mode as AppRuleMode })),
+          },
         },
       };
     });

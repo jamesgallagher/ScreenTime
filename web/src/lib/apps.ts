@@ -1,42 +1,20 @@
-import type { KidApp as ServerApp, KidAppDevice, KidApps as ServerApps } from '@screentime/schemas';
+import type { KidApp, KidAppDevice, KidApps } from '@screentime/schemas';
 import { api } from '@/lib/auth';
 import { formatDuration } from '@/lib/format';
 
-export type { KidAppDevice };
-
-/** A parent's rule for an app (docs/SPEC.md §12.4). `held` is written by the server while a new app waits. */
-export type AppRuleMode = 'allowed' | 'held' | 'blocked';
-
-export type KidApp = ServerApp & { rule: { mode: AppRuleMode } | null };
-
-export interface KidApps {
-  newAppApproval: boolean;
-  apps: KidApp[];
-}
-
-/** The seam: CARD-057 replaces this, and the three functions below, with the server. */
-export const APP_RULES_READY = import.meta.env.DEV;
-const fakeRules = new Map<string, AppRuleMode>();
-let fakeApproval = false;
+export type { KidApp, KidAppDevice, KidApps };
 
 /** GET /v1/kids/{kidId}/apps (docs/SPEC.md §12.4). */
-export async function fetchKidApps(kidId: string): Promise<KidApps> {
-  const server = await api.get<ServerApps>(`/v1/kids/${kidId}/apps`);
-  return {
-    newAppApproval: fakeApproval,
-    apps: server.apps.map((a) => {
-      const mode = fakeRules.get(a.package);
-      return { ...a, rule: mode ? { mode } : null };
-    }),
-  };
+export function fetchKidApps(kidId: string): Promise<KidApps> {
+  return api.get<KidApps>(`/v1/kids/${kidId}/apps`);
 }
 
-export async function saveAppRule(_kidId: string, pkg: string, mode: 'allowed' | 'blocked'): Promise<void> {
-  fakeRules.set(pkg, mode);
+export async function saveAppRule(kidId: string, pkg: string, mode: 'allowed' | 'blocked'): Promise<void> {
+  await api.put(`/v1/kids/${kidId}/apps/${encodeURIComponent(pkg)}/rule`, { mode });
 }
 
-export async function saveNewAppApproval(_kidId: string, on: boolean): Promise<void> {
-  fakeApproval = on;
+export async function saveNewAppApproval(kidId: string, on: boolean): Promise<void> {
+  await api.put(`/v1/kids/${kidId}/app-settings`, { newAppApproval: on });
 }
 
 /** What the row's control shows: nothing to choose, waiting for an answer, or the choice. */

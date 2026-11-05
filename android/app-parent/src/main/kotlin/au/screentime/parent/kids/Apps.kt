@@ -1,5 +1,8 @@
 package au.screentime.parent.kids
 
+import au.screentime.core.model.api.AppRuleMode
+import au.screentime.core.model.api.AppRulePut
+import au.screentime.core.model.api.AppRulePutMode
 import au.screentime.core.time.formatDuration
 import java.time.Instant
 import java.time.ZoneId
@@ -42,12 +45,6 @@ fun appChoice(app: KidApp): AppChoice = when {
     app.rule == AppRule.HELD -> AppChoice.WAITING
     app.rule == AppRule.BLOCKED -> AppChoice.BLOCKED
     else -> AppChoice.ALLOWED
-}
-
-/** The seam: CARD-057 replaces this with the server, in `KidsViewModel` and `InboxViewModel`. */
-internal object FakeAppRules {
-    val rules = mutableMapOf<String, AppRule>()
-    var approval = false
 }
 
 /** Gone from every device. */
@@ -123,4 +120,14 @@ fun appRow(app: au.screentime.core.model.api.KidApp): KidApp = KidApp(
     todaySeconds = app.todaySeconds,
     devices = app.devices.map { KidAppDevice(it.deviceName, it.installedAt, it.firstUsedAt, it.removedAt) },
     blockable = app.blockable,
+    rule = when (app.rule?.mode) {
+        AppRuleMode.ALLOWED -> AppRule.ALLOWED
+        AppRuleMode.HELD -> AppRule.HELD
+        AppRuleMode.BLOCKED -> AppRule.BLOCKED
+        null -> null
+    },
 )
+
+/** The server's mode for a rule. A parent cannot hold an app, so HELD is never sent. */
+fun rulePut(rule: AppRule): AppRulePut =
+    AppRulePut(if (rule == AppRule.BLOCKED) AppRulePutMode.BLOCKED else AppRulePutMode.ALLOWED)

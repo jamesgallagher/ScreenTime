@@ -362,6 +362,7 @@ data class DeviceState(
     val parentMode: DeviceStateParentMode,
     val pendingRequest: DeviceStatePendingRequest?,
     val activeSos: DeviceStateActiveSos?,
+    val apps: DeviceStateApps,
 )
 
 @Serializable
@@ -433,6 +434,18 @@ data class DeviceStateActiveSos(
 )
 
 @Serializable
+data class DeviceStateApps(
+    val newAppApproval: Boolean,
+    val rules: List<DeviceStateAppsRulesItem>,
+)
+
+@Serializable
+data class DeviceStateAppsRulesItem(
+    val `package`: String,
+    val mode: AppRuleMode,
+)
+
+@Serializable
 data class StateGrant(
     val id: String,
     val minutes: Int,
@@ -447,6 +460,13 @@ data class PoolSegment(
     val startedAt: String,
     val endedAt: String?,
 )
+
+@Serializable
+enum class AppRuleMode(override val wire: String) : ApiEnum {
+    @SerialName("allowed") ALLOWED("allowed"),
+    @SerialName("held") HELD("held"),
+    @SerialName("blocked") BLOCKED("blocked");
+}
 
 @Serializable
 data class UsageReceipt(
@@ -704,6 +724,27 @@ enum class AppSource(override val wire: String) : ApiEnum {
 }
 
 @Serializable
+data class AppRuleSaved(
+    val mode: AppRuleMode,
+)
+
+@Serializable
+data class AppRulePut(
+    val mode: AppRulePutMode,
+)
+
+@Serializable
+enum class AppRulePutMode(override val wire: String) : ApiEnum {
+    @SerialName("allowed") ALLOWED("allowed"),
+    @SerialName("blocked") BLOCKED("blocked");
+}
+
+@Serializable
+data class KidAppSettings(
+    val newAppApproval: Boolean,
+)
+
+@Serializable
 data class KidApps(
     val newAppApproval: Boolean,
     val apps: List<KidApp>,
@@ -716,7 +757,13 @@ data class KidApp(
     val source: AppSource,
     val blockable: Boolean,
     val todaySeconds: Int,
+    val rule: KidAppRule?,
     val devices: List<KidAppDevice>,
+)
+
+@Serializable
+data class KidAppRule(
+    val mode: AppRuleMode,
 )
 
 @Serializable
@@ -855,6 +902,7 @@ enum class NotificationKind(override val wire: String) : ApiEnum {
     @SerialName("time_request") TIME_REQUEST("time_request"),
     @SerialName("kid_message") KID_MESSAGE("kid_message"),
     @SerialName("overspend") OVERSPEND("overspend"),
+    @SerialName("app.approval") APP_APPROVAL("app.approval"),
     @SerialName("app.installed") APP_INSTALLED("app.installed"),
     @SerialName("app.first_used") APP_FIRST_USED("app.first_used"),
     @SerialName("device.offline") DEVICE_OFFLINE("device.offline"),

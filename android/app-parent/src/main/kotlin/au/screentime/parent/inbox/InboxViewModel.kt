@@ -12,7 +12,7 @@ import au.screentime.core.model.api.TimeRequest
 import au.screentime.core.model.api.TimeRequestApprove
 import au.screentime.core.model.api.TimeRequestStatus
 import au.screentime.parent.kids.AppRule
-import au.screentime.parent.kids.FakeAppRules
+import au.screentime.parent.kids.rulePut
 import au.screentime.parent.ParentApp
 import au.screentime.parent.auth.SignedOutException
 import kotlinx.coroutines.CancellationException
@@ -68,13 +68,11 @@ class InboxViewModel(app: Application) : AndroidViewModel(app) {
         answer { session.call { postRequestsDeny(request.id) } }
     }
 
-    /**
-     * Answer a new app that waits for a parent. The seam: CARD-057 replaces the fake with
-     * `PUT /v1/kids/{kidId}/apps/{package}/rule`.
-     */
+    /** Answer a new app that waits for a parent. */
     suspend fun answerApp(e: EventItem, rule: AppRule) {
         val packageName = approvalPackage(e) ?: return
-        answer { FakeAppRules.rules[packageName] = rule }
+        val kidId = e.kidId ?: return
+        answer { session.call { putKidsAppsRule(kidId, packageName, rulePut(rule)) } }
     }
 
     /**

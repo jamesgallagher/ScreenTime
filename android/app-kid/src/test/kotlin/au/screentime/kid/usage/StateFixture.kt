@@ -32,7 +32,8 @@ fun stateJson(
           "today": {"date": "$date", "grants": [$grants], "poolSegments": [$segments]},
           "parentMode": {"active": false, "endsAt": null, "byName": null},
           "pendingRequest": null,
-          "activeSos": null
+          "activeSos": null,
+          "apps": { "newAppApproval": false, "rules": [] }
         }
     """.trimIndent()
 }

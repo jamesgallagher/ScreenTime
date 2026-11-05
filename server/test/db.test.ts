@@ -32,6 +32,7 @@ describe.skipIf(!url)('database', () => {
       "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'",
     );
     expect(result.rows.map((r) => r.table_name).sort()).toEqual([
+      'app_rules',
       'device_apps',
       'devices',
       'enrolment_codes',

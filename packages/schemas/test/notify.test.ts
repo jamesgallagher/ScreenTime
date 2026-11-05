@@ -3,7 +3,7 @@ import { ESSENTIAL_KINDS, NotificationKind, NotificationPrefsPut, PushTokenPut }
 
 describe('notification schemas', () => {
   it('makes SOS and requests that wait for a parent essential', () => {
-    expect([...ESSENTIAL_KINDS].sort()).toEqual(['parent_mode.request', 'sos', 'time_request']);
+    expect([...ESSENTIAL_KINDS].sort()).toEqual(['app.approval', 'parent_mode.request', 'sos', 'time_request']);
     for (const kind of ESSENTIAL_KINDS) expect(NotificationKind.options).toContain(kind);
   });
 
