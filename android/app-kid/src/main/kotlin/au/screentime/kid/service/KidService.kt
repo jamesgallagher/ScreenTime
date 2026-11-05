@@ -48,6 +48,7 @@ import au.screentime.kid.status.nextCheckAtMs
 import au.screentime.kid.sync.Syncer
 import au.screentime.kid.sync.TrustedClock
 import au.screentime.kid.tamper.CaughtActivity
+import au.screentime.kid.apps.AppWatcher
 import au.screentime.kid.tamper.TamperApi
 import au.screentime.kid.tamper.TamperStore
 import au.screentime.kid.tamper.caughtLine
@@ -101,6 +102,7 @@ class KidService : Service() {
     private lateinit var sos: SosController
     private lateinit var tamper: TamperStore
     private var tamperApi: TamperApi? = null
+    private var apps: AppWatcher? = null
     private var kidName = ""
     private var engine: HttpClientEngine? = null
     private var api: ApiClient? = null
@@ -156,6 +158,16 @@ class KidService : Service() {
         }
     }
 
+    /** An app was installed or removed (docs/SPEC.md §12.4). A reinstall that replaces it is not news. */
+    private val packages = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.getBooleanExtra(Intent.EXTRA_REPLACING, false)) return
+            Log.i(TAG, "apps: ${intent.action} ${intent.data?.schemeSpecificPart}")
+            // No connection: the network callback syncs when it is back, and the sync sends the list.
+            scope.launch { if (apps?.send() == false) lastSyncOk = false }
+        }
+    }
+
     private val network = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
             // Back online: what an SOS still has to send goes at once, not at the next tick.
@@ -194,6 +206,7 @@ class KidService : Service() {
         sos = SosController(this, clock, SosApi(client))
         tamper = TamperStore(this)
         tamperApi = TamperApi(client)
+        apps = AppWatcher(this, client)
         kidName = enrolment.kidName
         sos.resume()
         syncer = Syncer(client, segments, states, clock, log = { Log.w(TAG, it) })
@@ -212,6 +225,12 @@ class KidService : Service() {
             addAction(Intent.ACTION_TIME_CHANGED)
         }
         registerReceiver(screen, filter, Context.RECEIVER_NOT_EXPORTED)
+        val packageFilter = IntentFilter().apply {
+            addAction(Intent.ACTION_PACKAGE_ADDED)
+            addAction(Intent.ACTION_PACKAGE_REMOVED)
+            addDataScheme("package")
+        }
+        registerReceiver(packages, packageFilter, Context.RECEIVER_NOT_EXPORTED)
         getSystemService(ConnectivityManager::class.java).registerDefaultNetworkCallback(network)
         started = true
         KidFirebase.start(this)
@@ -231,7 +250,8 @@ class KidService : Service() {
                 // live channel is down), so a parent's end or a new schedule still arrives.
                 val untilNext = (nextCheckAt - clock.nowMs()).coerceIn(SECOND, MINUTE)
                 val normal = when {
-                    inUse() || (paused && screenOn()) -> untilNext
+                    inUse() -> minOf(untilNext, APP_TICK_MS)
+                    paused && screenOn() -> untilNext
                     blocked && screenOn() -> if (live?.connected == true) untilNext else minOf(untilNext, BLOCKED_POLL)
                     else -> MINUTE
                 }
@@ -244,6 +264,7 @@ class KidService : Service() {
                 if (sos.active) sos.tick()
                 when {
                     inUse() -> {
+                        apps?.tick()
                         recorder.tick(clock.nowMs())
                         if (SystemClock.elapsedRealtime() - lastSyncElapsed >= 5 * MINUTE) sync() else report()
                     }
@@ -296,6 +317,7 @@ class KidService : Service() {
     override fun onDestroy() {
         if (started) {
             unregisterReceiver(screen)
+            unregisterReceiver(packages)
             getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(network)
         }
         scope.cancel()
@@ -446,6 +468,7 @@ class KidService : Service() {
             // And whatever an SOS still has to send, and the tamper attempts.
             if (sos.pending) sos.tick()
             sendTamper()
+            apps?.send()
             val ok = syncer.sync()
             lastSyncElapsed = SystemClock.elapsedRealtime()
             lastSyncOk = ok
@@ -543,6 +566,9 @@ class KidService : Service() {
 
         /** How often a blocked device with the screen on asks the server for news while the live channel is down. */
         private const val BLOCKED_POLL = 30_000L
+
+        /** How often usage events are read while in use: a first use shows within this (docs/SPEC.md §12.4). */
+        private const val APP_TICK_MS = 30_000L
 
         /** Sent segments are kept this long, then forgotten (docs/SPEC.md §8.3, offline buffer). */
         private const val KEEP_DAYS = 30L
