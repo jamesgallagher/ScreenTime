@@ -97,6 +97,7 @@ const KIND_NAME: Record<NotificationKind, string> = {
   time_request: 'Ask for more time',
   kid_message: 'Messages',
   overspend: 'Offline overspend',
+  'app.approval': 'New apps waiting for approval',
   'app.installed': 'New apps',
   'app.first_used': 'Apps used for the first time',
   'device.offline': 'Device offline',

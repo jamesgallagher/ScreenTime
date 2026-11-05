@@ -33,6 +33,28 @@ export const DeviceAppsPut = z
 
 export type DeviceAppsPut = z.infer<typeof DeviceAppsPut>;
 
+/** A parent's rule for an app (docs/SPEC.md §12.4). `held` is written by the server while a new app waits. */
+export const AppRuleMode = z.enum(['allowed', 'held', 'blocked']).meta({ id: 'AppRuleMode' });
+
+export type AppRuleMode = z.infer<typeof AppRuleMode>;
+
+/** Body of PUT /v1/kids/{kidId}/apps/{package}/rule. A parent cannot hold an app. */
+export const AppRulePut = z.object({ mode: z.enum(['allowed', 'blocked']) }).meta({ id: 'AppRulePut' });
+
+export type AppRulePut = z.infer<typeof AppRulePut>;
+
+export const KidAppRule = z.object({ mode: AppRuleMode });
+
+/** Answer of PUT /v1/kids/{kidId}/apps/{package}/rule. */
+export const AppRuleSaved = z.object({ mode: AppRuleMode }).meta({ id: 'AppRuleSaved' });
+
+export type KidAppRule = z.infer<typeof KidAppRule>;
+
+/** Body of PUT /v1/kids/{kidId}/app-settings. */
+export const KidAppSettings = z.object({ newAppApproval: z.boolean() }).meta({ id: 'KidAppSettings' });
+
+export type KidAppSettings = z.infer<typeof KidAppSettings>;
+
 /** One of the kid's devices an app is or was on. */
 export const KidAppDevice = z
   .object({
@@ -55,6 +77,8 @@ export const KidApp = z
     blockable: z.boolean(),
     /** 0 until app time is counted (CARD-058). */
     todaySeconds: z.int(),
+    /** Null means allowed. */
+    rule: KidAppRule.nullable(),
     devices: z.array(KidAppDevice),
   })
   .meta({ id: 'KidApp' });
@@ -64,7 +88,6 @@ export type KidApp = z.infer<typeof KidApp>;
 /** GET /v1/kids/{kidId}/apps. */
 export const KidApps = z
   .object({
-    /** Always false until new app approval exists (CARD-057). */
     newAppApproval: z.boolean(),
     apps: z.array(KidApp),
   })

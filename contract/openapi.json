@@ -1156,6 +1156,36 @@
               "id",
               "startedAt"
             ]
+          },
+          "apps": {
+            "type": "object",
+            "properties": {
+              "newAppApproval": {
+                "type": "boolean"
+              },
+              "rules": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "package": {
+                      "type": "string"
+                    },
+                    "mode": {
+                      "$ref": "#/components/schemas/AppRuleMode"
+                    }
+                  },
+                  "required": [
+                    "package",
+                    "mode"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "newAppApproval",
+              "rules"
+            ]
           }
         },
         "required": [
@@ -1171,7 +1201,8 @@
           "today",
           "parentMode",
           "pendingRequest",
-          "activeSos"
+          "activeSos",
+          "apps"
         ]
       },
       "StateGrant": {
@@ -1227,6 +1258,14 @@
           "deviceId",
           "startedAt",
           "endedAt"
+        ]
+      },
+      "AppRuleMode": {
+        "type": "string",
+        "enum": [
+          "allowed",
+          "held",
+          "blocked"
         ]
       },
       "UsageReceipt": {
@@ -2111,6 +2150,43 @@
           "other"
         ]
       },
+      "AppRuleSaved": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "$ref": "#/components/schemas/AppRuleMode"
+          }
+        },
+        "required": [
+          "mode"
+        ]
+      },
+      "AppRulePut": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "allowed",
+              "blocked"
+            ]
+          }
+        },
+        "required": [
+          "mode"
+        ]
+      },
+      "KidAppSettings": {
+        "type": "object",
+        "properties": {
+          "newAppApproval": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "newAppApproval"
+        ]
+      },
       "KidApps": {
         "type": "object",
         "properties": {
@@ -2147,6 +2223,20 @@
           "todaySeconds": {
             "type": "integer"
           },
+          "rule": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "mode": {
+                "$ref": "#/components/schemas/AppRuleMode"
+              }
+            },
+            "required": [
+              "mode"
+            ]
+          },
           "devices": {
             "type": "array",
             "items": {
@@ -2160,6 +2250,7 @@
           "source",
           "blockable",
           "todaySeconds",
+          "rule",
           "devices"
         ]
       },
@@ -2578,6 +2669,7 @@
           "time_request",
           "kid_message",
           "overspend",
+          "app.approval",
           "app.installed",
           "app.first_used",
           "device.offline",
@@ -2603,7 +2695,7 @@
           ]
         },
         "minItems": 1,
-        "maxItems": 12
+        "maxItems": 13
       },
       "EventPage": {
         "type": "object",
@@ -6260,6 +6352,193 @@
           },
           "409": {
             "description": "Conflicts with existing data.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/kids/{kidId}/apps/{package}/rule": {
+      "put": {
+        "tags": [
+          "kids"
+        ],
+        "summary": "Allow or block an app for a kid",
+        "description": "Answering a waiting app also writes `app.answered`. An app on none of the kid's devices gets 404, and one that cannot be blocked gets 409.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "kidId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            },
+            "required": true,
+            "name": "package",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppRulePut"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The rule.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppRuleSaved"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the code or token is wrong or expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Signed in, but not allowed to do this.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicts with existing data.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/kids/{kidId}/app-settings": {
+      "put": {
+        "tags": [
+          "kids"
+        ],
+        "summary": "Turn new app approval on or off for a kid",
+        "description": "Apps already waiting keep waiting for an answer.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "kidId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KidAppSettings"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Saved."
+          },
+          "401": {
+            "description": "Not signed in, or the code or token is wrong or expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Signed in, but not allowed to do this.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
             "content": {
               "application/json": {
                 "schema": {

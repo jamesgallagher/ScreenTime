@@ -120,7 +120,8 @@ public sealed record DeviceState(
     [property: JsonPropertyName("today")] DeviceStateToday Today,
     [property: JsonPropertyName("parentMode")] DeviceStateParentMode ParentMode,
     [property: JsonPropertyName("pendingRequest")] DeviceStatePendingRequest? PendingRequest,
-    [property: JsonPropertyName("activeSos")] DeviceStateActiveSos? ActiveSos);
+    [property: JsonPropertyName("activeSos")] DeviceStateActiveSos? ActiveSos,
+    [property: JsonPropertyName("apps")] DeviceStateApps Apps);
 
 public sealed record DeviceStateDevice(
     [property: JsonPropertyName("id")] string Id,
@@ -170,6 +171,14 @@ public sealed record DeviceStateActiveSos(
     [property: JsonPropertyName("id")] string Id,
     [property: JsonPropertyName("startedAt")] string StartedAt);
 
+public sealed record DeviceStateApps(
+    [property: JsonPropertyName("newAppApproval")] bool NewAppApproval,
+    [property: JsonPropertyName("rules")] IReadOnlyList<DeviceStateAppsRulesItem> Rules);
+
+public sealed record DeviceStateAppsRulesItem(
+    [property: JsonPropertyName("package")] string Package,
+    [property: JsonPropertyName("mode")] AppRuleMode Mode);
+
 public sealed record StateGrant(
     [property: JsonPropertyName("id")] string Id,
     [property: JsonPropertyName("minutes")] int Minutes,
@@ -181,6 +190,14 @@ public sealed record PoolSegment(
     [property: JsonPropertyName("deviceId")] string DeviceId,
     [property: JsonPropertyName("startedAt")] string StartedAt,
     [property: JsonPropertyName("endedAt")] string? EndedAt);
+
+[JsonConverter(typeof(JsonStringEnumConverter<AppRuleMode>))]
+public enum AppRuleMode
+{
+    [JsonStringEnumMemberName("allowed")] Allowed,
+    [JsonStringEnumMemberName("held")] Held,
+    [JsonStringEnumMemberName("blocked")] Blocked,
+}
 
 public sealed record UsageReceipt(
     [property: JsonPropertyName("received")] int Received);
@@ -425,8 +442,11 @@ public sealed record PushTokenPut(
 [JsonSerializable(typeof(DeviceStateParentMode))]
 [JsonSerializable(typeof(DeviceStatePendingRequest))]
 [JsonSerializable(typeof(DeviceStateActiveSos))]
+[JsonSerializable(typeof(DeviceStateApps))]
+[JsonSerializable(typeof(DeviceStateAppsRulesItem))]
 [JsonSerializable(typeof(StateGrant))]
 [JsonSerializable(typeof(PoolSegment))]
+[JsonSerializable(typeof(AppRuleMode))]
 [JsonSerializable(typeof(UsageReceipt))]
 [JsonSerializable(typeof(UsageUpload))]
 [JsonSerializable(typeof(UsageSegmentIn))]

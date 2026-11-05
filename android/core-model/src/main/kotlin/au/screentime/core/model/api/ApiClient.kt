@@ -586,6 +586,31 @@ class ApiClient(
     }
 
     /**
+     * Allow or block an app for a kid.
+     *
+     * `PUT /v1/kids/{kidId}/apps/{package}/rule`
+     */
+    suspend fun putKidsAppsRule(
+        kidId: String,
+        `package`: String,
+        body: AppRulePut,
+    ): AppRuleSaved {
+        return call(HttpMethod.Put, "/v1/kids/${segment(kidId)}/apps/${segment(`package`)}/rule", auth = true, body = body, bodyType = typeInfo<AppRulePut>()).body()
+    }
+
+    /**
+     * Turn new app approval on or off for a kid.
+     *
+     * `PUT /v1/kids/{kidId}/app-settings`
+     */
+    suspend fun putKidsAppSettings(
+        kidId: String,
+        body: KidAppSettings,
+    ) {
+        call(HttpMethod.Put, "/v1/kids/${segment(kidId)}/app-settings", auth = true, body = body, bodyType = typeInfo<KidAppSettings>())
+    }
+
+    /**
      * A kid's apps across their Android devices.
      *
      * `GET /v1/kids/{kidId}/apps`

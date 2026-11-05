@@ -3,7 +3,7 @@
 // Never run this against the production database.
 import { and, asc, desc, eq, like, sql } from 'drizzle-orm';
 import { createDb } from '../src/db/client.js';
-import { deviceApps, events, kids } from '../src/db/schema.js';
+import { appRules, deviceApps, events, kids } from '../src/db/schema.js';
 
 const databaseUrl = process.env.DATABASE_URL;
 const kidName = process.argv[2]?.trim();
@@ -23,6 +23,10 @@ try {
       `${a.package} | ${a.label} | ${a.source} | installer=${a.installer} | blockable=${a.blockable} | baseline=${a.baseline} | used=${a.firstUsedAt?.toISOString() ?? '-'} | removed=${a.removedAt?.toISOString() ?? '-'}`,
     );
   }
+  const rules = await db.select().from(appRules).where(eq(appRules.kidId, kid.id)).orderBy(asc(appRules.package));
+  console.log(`approval: ${kid.newAppApproval}`);
+  console.log(`rules: ${rules.length}`);
+  for (const r of rules) console.log(`rule ${r.package} ${r.mode}`);
   const list = await db
     .select()
     .from(events)

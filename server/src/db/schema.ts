@@ -115,6 +115,7 @@ export const kids = pgTable(
     familyId: familyId(),
     name: text('name').notNull(),
     avatarColor: text('avatar_color').notNull(),
+    newAppApproval: boolean('new_app_approval').notNull().default(false),
     createdAt: createdAt(),
     archivedAt: ts('archived_at'),
   },
@@ -448,4 +449,23 @@ export const deviceApps = pgTable(
     baseline: boolean('baseline').notNull(),
   },
   (t) => [primaryKey({ columns: [t.deviceId, t.package] }), index('device_apps_kid_idx').on(t.kidId)],
+);
+
+/** A parent's rule for an app, for one kid (docs/SPEC.md §12.4). No row means allowed. */
+export const appRules = pgTable(
+  'app_rules',
+  {
+    familyId: familyId(),
+    kidId: uuid('kid_id')
+      .notNull()
+      .references(() => kids.id),
+    package: text('package').notNull(),
+    mode: text('mode').notNull(),
+    updatedAt: ts('updated_at').notNull().defaultNow(),
+    updatedBy: uuid('updated_by').references(() => parents.id),
+  },
+  (t) => [
+    primaryKey({ columns: [t.kidId, t.package] }),
+    check('app_rules_mode', sql`${t.mode} in ('allowed', 'held', 'blocked')`),
+  ],
 );

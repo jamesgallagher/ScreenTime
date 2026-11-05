@@ -184,12 +184,13 @@ describe.skipIf(!url)('notifications', () => {
     it('lists every kind, all on, with the essential ones marked', async () => {
       const res = await api.get('/v1/me/notification-prefs', dad);
       expect(res.status).toBe(200);
-      expect(res.body).toHaveLength(12);
+      expect(res.body).toHaveLength(13);
       expect(res.body.every((p: { enabled: boolean }) => p.enabled)).toBe(true);
       expect(res.body.filter((p: { essential: boolean }) => p.essential).map((p: { kind: string }) => p.kind)).toEqual([
         'sos',
         'parent_mode.request',
         'time_request',
+        'app.approval',
       ]);
     });
 

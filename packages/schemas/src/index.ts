@@ -95,4 +95,16 @@ export {
   SosStart,
   SosStatus,
 } from './sos.js';
-export { AppSource, DeviceAppIn, DeviceAppsPut, KidApp, KidAppDevice, KidApps } from './apps.js';
+export {
+  AppRuleMode,
+  AppRulePut,
+  AppRuleSaved,
+  AppSource,
+  DeviceAppIn,
+  DeviceAppsPut,
+  KidApp,
+  KidAppDevice,
+  KidAppRule,
+  KidApps,
+  KidAppSettings,
+} from './apps.js';
