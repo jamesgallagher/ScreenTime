@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { ApiError } from '@/lib/api';
-import { APP_RULES_READY, saveAppRule } from '@/lib/apps';
+import { saveAppRule } from '@/lib/apps';
 import { api, useAuth } from '@/lib/auth';
 import { formatDuration } from '@/lib/format';
 import { type EventTone, eventView, pendingAppApprovals, pendingParentModeRequests, whenText } from '@/lib/inbox';
@@ -297,7 +297,7 @@ export function InboxPage() {
   const now = new Date();
   const all = events.data?.pages.flatMap((p) => p.events) ?? [];
   const parentMode = pendingParentModeRequests(all, now);
-  const approvals = APP_RULES_READY ? pendingAppApprovals(all) : [];
+  const approvals = pendingAppApprovals(all);
   const waiting = (requests.data?.length ?? 0) + parentMode.length + approvals.length;
 
   return (

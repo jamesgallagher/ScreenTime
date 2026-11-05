@@ -48,7 +48,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import au.screentime.core.model.api.Kid
 import au.screentime.core.ui.ScreenTimeTheme
-import au.screentime.parent.BuildConfig
 import au.screentime.parent.R
 import au.screentime.parent.today.Problem
 import au.screentime.parent.today.initial
@@ -140,10 +139,8 @@ fun AppsScreen(kid: Kid, vm: KidsViewModel, zone: ZoneId, onBack: () -> Unit) {
                             )
                         }
                     }
-                    if (APP_RULES_READY) {
-                        item {
-                            ApprovalCard(kid, approval, !busy) { on -> change { vm.saveNewAppApproval(kid.id, on) } }
-                        }
+                    item {
+                        ApprovalCard(kid, approval, !busy) { on -> change { vm.saveNewAppApproval(kid.id, on) } }
                     }
                     if (loaded.isEmpty()) {
                         item {
@@ -161,7 +158,7 @@ fun AppsScreen(kid: Kid, vm: KidsViewModel, zone: ZoneId, onBack: () -> Unit) {
                     items(loaded, key = { it.packageName }) { app ->
                         AppRow(app, zone, !busy) { rule -> change { vm.saveAppRule(kid.id, app.packageName, rule) } }
                     }
-                    if (APP_RULES_READY && loaded.isNotEmpty()) {
+                    if (loaded.isNotEmpty()) {
                         item {
                             Text(
                                 text = "Blocking an app does not block its website. To stop YouTube in a browser, block the browsers too.",
@@ -176,9 +173,6 @@ fun AppsScreen(kid: Kid, vm: KidsViewModel, zone: ZoneId, onBack: () -> Unit) {
         }
     }
 }
-
-/** The seam: CARD-057 makes this true. Until then the rules are only shown in debug builds. */
-private val APP_RULES_READY = BuildConfig.DEBUG
 
 /** The "New apps need approval" switch. */
 @Composable
@@ -315,7 +309,7 @@ private fun AppRow(app: KidApp, zone: ZoneId, enabled: Boolean, onRule: (AppRule
                 )
             }
         }
-        if (APP_RULES_READY && !removed) {
+        if (!removed) {
             Column(modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp)) {
                 RuleControl(app, enabled, onRule)
             }
