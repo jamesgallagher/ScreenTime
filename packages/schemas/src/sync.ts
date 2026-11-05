@@ -61,6 +61,8 @@ export const DeviceState = z
       grants: z.array(StateGrant),
       /** Segments of every device in this pool (this one too) that overlap today, oldest first. */
       poolSegments: z.array(PoolSegment),
+      /** Today's seconds of the kid's other Android devices, only for apps with a daily limit (docs/SPEC.md §12.4). */
+      appUsage: z.array(z.object({ package: z.string(), deviceId: z.uuid(), seconds: z.int() })),
     }),
     parentMode: z.object({
       active: z.boolean(),
@@ -73,7 +75,7 @@ export const DeviceState = z
     /** The kid's app rules (docs/SPEC.md §12.4). Empty on a PC. */
     apps: z.object({
       newAppApproval: z.boolean(),
-      rules: z.array(z.object({ package: z.string(), mode: AppRuleMode })),
+      rules: z.array(z.object({ package: z.string(), mode: AppRuleMode, dailyMinutes: z.int().nullable() })),
     }),
   })
   .meta({ id: 'DeviceState' });

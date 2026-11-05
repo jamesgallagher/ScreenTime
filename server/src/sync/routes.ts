@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { createRoute } from '@hono/zod-openapi';
-import { and, asc, desc, eq, gt, gte, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, gte, inArray, isNull, ne, sql } from 'drizzle-orm';
 import {
   type AvatarColor,
   type AppRuleMode,
@@ -17,6 +17,7 @@ import { requireFamilyParent } from '../auth/guards.js';
 import { withFamily } from '../db/family.js';
 import {
   appRules,
+  appUsageDaily,
   devices,
   families,
   grants,
@@ -178,10 +179,27 @@ export function registerSyncRoutes(app: Router, deps: AppDeps) {
       const rules =
         device.platform === 'android'
           ? await tx
-              .select({ package: appRules.package, mode: appRules.mode })
+              .select({ package: appRules.package, mode: appRules.mode, dailyMinutes: appRules.dailyMinutes })
               .from(appRules)
               .where(eq(appRules.kidId, kidId))
               .orderBy(asc(appRules.package))
+          : [];
+
+      const limited = rules.filter((r) => r.mode === 'limit').map((r) => r.package);
+      const appUsage =
+        limited.length > 0
+          ? await tx
+              .select({ package: appUsageDaily.package, deviceId: appUsageDaily.deviceId, seconds: appUsageDaily.seconds })
+              .from(appUsageDaily)
+              .where(
+                and(
+                  eq(appUsageDaily.kidId, kidId),
+                  eq(appUsageDaily.day, day.date),
+                  inArray(appUsageDaily.package, limited),
+                  ne(appUsageDaily.deviceId, deviceId),
+                ),
+              )
+              .orderBy(asc(appUsageDaily.package), asc(appUsageDaily.deviceId))
           : [];
 
       return {
@@ -203,6 +221,7 @@ export function registerSyncRoutes(app: Router, deps: AppDeps) {
               startedAt: s.startedAt.toISOString(),
               endedAt: s.endedAt?.toISOString() ?? null,
             })),
+            appUsage,
           },
           parentMode: parentMode
             ? { active: true, endsAt: parentMode.endsAt?.toISOString() ?? null, byName: parentMode.byName }
@@ -211,7 +230,7 @@ export function registerSyncRoutes(app: Router, deps: AppDeps) {
           activeSos: sos ? { id: sos.id, startedAt: sos.startedAt.toISOString() } : null,
           apps: {
             newAppApproval: device.platform === 'android' && kid.newAppApproval,
-            rules: rules.map((r) => ({ package: r.package, mode: r.mode as AppRuleMode })),
+            rules: rules.map((r) => ({ package: r.package, mode: r.mode as AppRuleMode, dailyMinutes: r.dailyMinutes })),
           },
         },
       };

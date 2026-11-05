@@ -33,6 +33,7 @@ describe.skipIf(!url)('database', () => {
     );
     expect(result.rows.map((r) => r.table_name).sort()).toEqual([
       'app_rules',
+      'app_usage_daily',
       'device_apps',
       'devices',
       'enrolment_codes',
