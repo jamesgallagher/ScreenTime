@@ -109,3 +109,4 @@ export {
   KidApps,
   KidAppSettings,
 } from './apps.js';
+export { AppUpdateAnswer, AppUpdateCheck, AppUpdateOffer } from './appupdate.js';

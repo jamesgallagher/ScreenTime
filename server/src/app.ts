@@ -22,6 +22,7 @@ import { createRouter } from './router.js';
 import { registerSosRoutes } from './sos/routes.js';
 import { registerSyncRoutes } from './sync/routes.js';
 import { registerAppRoutes } from './apps/routes.js';
+import { registerAppUpdateRoutes } from './appupdate/routes.js';
 import { registerTamperRoutes } from './tamper/routes.js';
 import { registerWeb } from './web.js';
 
@@ -97,6 +98,7 @@ export function createApp(appDeps: AppDeps) {
   registerParentModeRoutes(app, deps);
   registerTamperRoutes(app, deps);
   registerAppRoutes(app, deps);
+  registerAppUpdateRoutes(app, deps);
   registerSosRoutes(app, deps);
   registerNotifyRoutes(app, deps);
   registerAdminRoutes(app, deps);

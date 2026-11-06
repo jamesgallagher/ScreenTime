@@ -19,6 +19,7 @@ export const NotificationKind = z
     'app.first_used',
     'device.offline',
     'device.enrolled',
+    'device.removed',
     'grant.by_other_parent',
   ])
   .meta({ id: 'NotificationKind' });
