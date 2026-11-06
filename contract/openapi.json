@@ -2394,6 +2394,64 @@
           "removedAt"
         ]
       },
+      "AppUpdateAnswer": {
+        "type": "object",
+        "properties": {
+          "offer": {
+            "$ref": "#/components/schemas/AppUpdateOffer"
+          }
+        },
+        "required": [
+          "offer"
+        ]
+      },
+      "AppUpdateOffer": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "versionCode": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "versionName": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "sizeBytes": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "versionCode",
+          "versionName",
+          "sha256",
+          "sizeBytes"
+        ]
+      },
+      "AppUpdateCheck": {
+        "type": "object",
+        "properties": {
+          "versionCode": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "versionName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          }
+        },
+        "required": [
+          "versionCode",
+          "versionName"
+        ]
+      },
       "Sos": {
         "type": "object",
         "properties": {
@@ -2777,6 +2835,7 @@
           "app.first_used",
           "device.offline",
           "device.enrolled",
+          "device.removed",
           "grant.by_other_parent"
         ]
       },
@@ -2798,7 +2857,7 @@
           ]
         },
         "minItems": 1,
-        "maxItems": 13
+        "maxItems": 14
       },
       "EventPage": {
         "type": "object",
@@ -6787,6 +6846,91 @@
           },
           "422": {
             "description": "The request is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/device/app-update/check": {
+      "post": {
+        "tags": [
+          "device"
+        ],
+        "summary": "Report the app version and ask for a newer one",
+        "description": "Stores the version for the parents to see. `offer` is null when there is nothing newer, and always on a device that is not Android.",
+        "security": [
+          {
+            "deviceAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppUpdateCheck"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A newer version for this device, or none.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppUpdateAnswer"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the code or token is wrong or expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/device/removed": {
+      "post": {
+        "tags": [
+          "device"
+        ],
+        "summary": "Screen Time is being taken off this device",
+        "description": "After a right parent code on the device. Revokes the device and tells the parents.",
+        "security": [
+          {
+            "deviceAuth": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Revoked."
+          },
+          "401": {
+            "description": "Not signed in, or the code or token is wrong or expired.",
             "content": {
               "application/json": {
                 "schema": {

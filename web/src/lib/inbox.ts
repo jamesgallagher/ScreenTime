@@ -141,6 +141,8 @@ export function eventView(event: EventItem, timeZone: string): EventView {
       };
     case 'app.first_used':
       return { text: `${kid} opened ${str(p, 'label') ?? 'an app'} for the first time`, detail: `On ${device}`, tone: 'info' };
+    case 'device.removed':
+      return { text: `Screen Time was removed from ${device}`, detail: 'With the parent code, on the device', tone: 'alert' };
     case 'device.enrolled':
       return { text: `${str(p, 'name') ?? device} was added for ${kid}`, detail: null, tone: 'info' };
     default:

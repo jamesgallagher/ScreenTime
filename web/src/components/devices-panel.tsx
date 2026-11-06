@@ -190,7 +190,8 @@ function DeviceRow({
   const parentMode = live?.parentMode ?? null;
   // The model is left out while it is still the name (a device's first name is its model).
   const model = device.model && !device.name.includes(device.model) ? device.model : null;
-  const facts = [`${POOL_NAMES[device.pool]} time`, model, device.osVersion].filter(Boolean).join(' · ');
+  const version = device.appVersion ? `Version ${device.appVersion}` : null;
+  const facts = [`${POOL_NAMES[device.pool]} time`, model, device.osVersion, version].filter(Boolean).join(' · ');
 
   return (
     <div className="flex items-center gap-4 border-t border-outline py-4 last:pb-0">
