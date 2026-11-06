@@ -124,7 +124,8 @@ Android phones and tablets only. These come before cards 054 and 055, although t
 | Card | Title | Depends on | Size | James | Spec |
 |---|---|---|---|---|---|
 | 053 | Deploy to Unraid: compose, tunnel route, backups, `docs/guides/deploy.md` | 027 | M | Unraid, Cloudflare | 4.2 |
-| 054 | Guides: Android provisioning (with the usage access step), Windows install | 038, 052, 056 | S | | 12 |
+| 059 | Release builds: signing, the kid app updating itself from the server (`publish-kid.ps1`, one device first), Remove Screen Time with the parent code, the app version on the devices panel. Comes before 054, although its number is higher, because the guide describes it | 058 | L | | 12.1 |
+| 054 | Guides: Android provisioning (with the usage access step and the release path), Windows install | 038, 052, 056, 059 | S | | 12 |
 | 055 | Household rollout and end-to-end acceptance checklist | all | S | All devices | all |
 
 ## Pending decisions that block cards
