@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -31,10 +33,25 @@ android {
         applicationId = "au.screentime.kid"
         minSdk = 34
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = (findProperty("kidVersionCode") as String).toInt()
+        versionName = findProperty("kidVersionName") as String
         for (name in listOf("FIREBASE_APP_ID", "FIREBASE_API_KEY", "FIREBASE_PROJECT_ID", "FIREBASE_SENDER_ID")) {
             buildConfigField("String", name, "\"${firebase[name].orEmpty()}\"")
+        }
+    }
+
+    // The release key lives outside the repo (docs/guides/android-provisioning.md). Without the file a release build stays unsigned.
+    val signing = rootProject.file("keystore.properties").takeIf { it.exists() }?.let { f ->
+        Properties().apply { f.inputStream().use { load(it) } }
+    }
+    signingConfigs {
+        if (signing != null) {
+            create("release") {
+                storeFile = file(signing.getProperty("storeFile"))
+                storePassword = signing.getProperty("storePassword")
+                keyAlias = signing.getProperty("keyAlias")
+                keyPassword = signing.getProperty("keyPassword")
+            }
         }
     }
 
@@ -42,8 +59,10 @@ android {
         debug {
             // The Android emulator reaches the developer's PC at 10.0.2.2 (`pnpm dev:server` or docker compose).
             buildConfigField("String", "DEFAULT_SERVER", "\"http://10.0.2.2:8080\"")
+            manifestPlaceholders["kidTestOnly"] = findProperty("kidTestOnly") ?: "true"
         }
         release {
+            if (signing != null) signingConfig = signingConfigs.getByName("release")
             buildConfigField("String", "DEFAULT_SERVER", "\"https://screentime.gallagherhome.au\"")
         }
     }

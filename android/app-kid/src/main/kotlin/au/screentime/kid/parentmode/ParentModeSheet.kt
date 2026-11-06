@@ -32,6 +32,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -55,7 +56,9 @@ import au.screentime.kid.live.ParentModeNews
 import au.screentime.kid.service.KidService
 import au.screentime.kid.status.KidStatus
 import au.screentime.kid.status.StatusHub
+import au.screentime.kid.update.removeFromDevice
 import java.util.UUID
+import kotlinx.coroutines.launch
 
 private enum class Step { WAITING, CODE, HOW_LONG }
 
@@ -244,6 +247,67 @@ fun ParentModeBanner(status: KidStatus, modifier: Modifier = Modifier) {
                 .height(56.dp),
         ) {
             Text("End now", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        }
+        Spacer(Modifier.height(8.dp))
+        var removing by remember { mutableStateOf(false) }
+        TextButton(onClick = { removing = true }, modifier = Modifier.fillMaxWidth()) {
+            Text("Remove Screen Time", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        if (removing) RemoveSheet(status.parentCodeSecret) { removing = false }
+    }
+}
+
+/**
+ * **Remove Screen Time** (docs/SPEC.md §12.1). The parent code is asked here even when parent mode is already on,
+ * because a parent can turn parent mode on from far away with the kid holding the device.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun RemoveSheet(secret: String, onDone: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var sure by remember { mutableStateOf(false) }
+    var working by remember { mutableStateOf(false) }
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(onDismissRequest = onDone, sheetState = sheetState) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .imePadding()
+                .verticalScroll(rememberScrollState())
+                .padding(start = 24.dp, end = 24.dp, bottom = 24.dp),
+        ) {
+            when {
+                working -> {
+                    SheetTitle("Removing…")
+                    Spacer(Modifier.height(16.dp))
+                    CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 3.dp)
+                }
+                !sure -> {
+                    SheetTitle("Remove Screen Time?")
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = "This device will have no limits and no SOS. Your family's history stays. To use Screen Time here again you need the computer setup.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(24.dp))
+                    FilledTonalButton(
+                        onClick = { sure = true },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
+                    ) {
+                        Text("Remove it", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    TextButton(onClick = onDone, modifier = Modifier.fillMaxWidth()) { Text("Keep it") }
+                }
+                else -> CodeEntry(secret) {
+                    working = true
+                    scope.launch { withApi(context, Unit) { removeFromDevice(context, it) } }
+                }
+            }
         }
     }
 }
