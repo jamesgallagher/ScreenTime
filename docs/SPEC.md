@@ -506,6 +506,9 @@ App control routes (Android only, section 12.4):
 | POST | `/v1/device/sos/{id}/end` | kid held "I'm safe" → 204, writes `sos.ended`. Already ended is fine |
 | PUT | `/v1/device/apps` | `{ apps: [{ package, label, source, installer, blockable, installedAt, firstUsedAt }] }` (`installer` and `firstUsedAt` may be null) 1 to 500, the device's **whole** list → 204. Android only (a PC → 409). What it stores and raises is in 12.4 |
 | POST | `/v1/device/app-usage` | `{ days: [{ day, apps: [{ package, seconds }] }] }` at most 8 days and 500 apps a day → 204. Android only (a PC → 409). Upsert keeps the larger value |
+| POST | `/v1/device/app-update/check` | `{ versionCode, versionName }` → `{ offer: { versionCode, versionName, sha256, sizeBytes } \| null }`. Stores the version. `offer` is null when nothing newer is published for this device, and always for a PC |
+| GET | `/v1/device/app-update/apk` | The published APK as plain bytes, not in the contract. 404 when there is none for this device |
+| POST | `/v1/device/removed` | After a right parent code on the device → 204. Revokes the device and writes `device.removed` |
 | GET | `/v1/device/ws` | WebSocket upgrade, `Authorization: Bearer <deviceToken>`. A wrong or revoked token gets 401 and no socket; a request that is not an upgrade gets 422. Details in section 10 |
 
 Device state snapshot:
@@ -641,10 +644,10 @@ Each kid device gets an opaque 32-byte token at enrolment, stored hashed on the 
 4. The app then applies restrictions, and USB debugging is turned off by `DISALLOW_DEBUGGING_FEATURES`.
 5. Also turn on Android's own Emergency SOS with the parents as emergency contacts.
 
-**Device Owner policies applied at startup** (once enrolment is confirmed, then on every start; CARD-030 applies the restrictions, auto time and permission grants, CARD-033 and CARD-036 the Lock Task packages; FRP comes in a later card; a **debug** build is test-only, keeps USB debugging on and does not block uninstalling, so a developer can always undo it with `adb shell dpm remove-active-admin`):
+**Device Owner policies applied at startup** (once enrolment is confirmed, then on every start; CARD-030 applies the restrictions, auto time and permission grants, CARD-033 and CARD-036 the Lock Task packages; a **debug** build is test-only, keeps USB debugging on and does not block uninstalling, so a developer can always undo it with `adb shell dpm remove-active-admin`):
 
 - `setUninstallBlocked(self)`, user restrictions `DISALLOW_APPS_CONTROL`, `DISALLOW_SAFE_BOOT`, `DISALLOW_FACTORY_RESET`, `DISALLOW_CONFIG_DATE_TIME`, `DISALLOW_DEBUGGING_FEATURES`, `DISALLOW_ADD_USER`, `DISALLOW_AIRPLANE_MODE`. Auto time and auto time zone forced on.
-- Factory Reset Protection (`setFactoryResetProtectionPolicy`) set to **James's Google account** (decided 22 Oct 2026). The account's numeric Google ID is entered during provisioning and stored as a server family setting, never committed to the repo.
+- Factory Reset Protection is **not built** (James, 6 Nov 2026): a known gap. Reset from Settings is blocked, but a reset from the recovery menu takes Screen Time off the device. It would need James's numeric Google ID as a family setting and a way to take it off again.
 - Self-grant runtime permissions (phone, SMS, location, notifications, camera for QR) with `setPermissionGrantState`.
 - Lock Task packages: our app, plus the system dialer / in-call UI package (resolved at runtime from `TelecomManager.getDefaultDialerPackage()`) only on devices with cellular.
 
@@ -673,6 +676,10 @@ From the block screen:
 - **Tablets and Wi-Fi devices:** no call, emergency or SOS buttons (Q28, Q31).
 
 Messages and requests are sent through the server. If the phone has no data, the message is offered as an SMS to all parents instead ("No internet. Send as a text?").
+
+**Updates (CARD-059, James, 6 Nov 2026).** A release build has USB debugging off and cannot be uninstalled, so the kid app updates itself from the family's server. `android/publish-kid.ps1` puts a signed APK and `kid.json` in the server's releases folder (`RELEASES_DIR`, a read-only mount), the file first and `kid.json` last; `-DeviceId` offers it to one device first, so a bad version does not reach every device. After a sync the service asks `POST /v1/device/app-update/check` (every 6 hours; every minute in a debug build), which also stores the app version for the parents to see. It downloads on a network that is not metered, checks the size and SHA-256, and installs with `PackageInstaller`, without asking because it is Device Owner, when the screen is off and no SOS is running. Android itself refuses a file with another signature or an older version. The signing key is in `android/keystore.properties` and a keystore outside the repo: **losing it means no more updates without setting every device up again.** A debug build is test-only, which Android refuses to update silently, so a run that proves updating builds with `-PkidTestOnly=false`.
+
+**Removal (CARD-059).** In parent mode the main screen has **Remove Screen Time**. It always asks for the parent code, even though parent mode is already on, because parent mode can be turned on remotely while the kid holds the device. Then the app tells the server (`POST /v1/device/removed`: the device is revoked and parents get `device.removed`; offline it carries on, and the device stays listed until a parent removes it), frees every blocked app, clears its policies, gives up Device Owner, forgets its enrolment and opens Android's uninstall question. If that question is cancelled, the app shows the setup screen. Without Device Owner the service does not start, since Android refuses its foreground type.
 
 **minSdk = 34 (Android 14)**, decided 22 Oct 2026: the XPPen tablet runs Android 14 and the Pixel 7 is newer. This lets the app use foreground service type `systemExempted` everywhere with no fallback code. `targetSdk` = 36 and `compileSdk` = 37 (Compose 1.12, in BOM 2026.09, requires compileSdk 37; found 22 Oct 2026). The parent app uses the same minSdk.
 
@@ -775,6 +782,7 @@ Parent notifications go to the Android parent app by FCM. The web app shows the 
 | `app.first_used` | An app was used for the first time on that device (Android, 12.4) | No |
 | `device.offline` | Not seen for 6 h during allowed hours | No |
 | `device.enrolled` | New device added | No |
+| `device.removed` | Screen Time removed on the device, with the parent code (payload `{ deviceName }`) | No |
 | `grant.by_other_parent` | The other parent changed time (from the `grant.added` event every grant writes, payload `{ grantId, pool, minutes, byName, lockNow }`) | No |
 
 Rule (James, 22 Oct 2026, confirmed 25 Oct for "ask for more time"): SOS and every request that waits for a parent's answer (`parent_mode.request`, `time_request`, `app.approval`) are essential; every informational kind can be switched off per parent. Sign-in code emails are always sent. Tamper and parent-mode-used are informational (confirmed). Muting only stops the push: **every** kind is always written to `events` and always shown in the event history (Inbox) in the parent app and web app.
