@@ -102,6 +102,7 @@ const KIND_NAME: Record<NotificationKind, string> = {
   'app.first_used': 'Apps used for the first time',
   'device.offline': 'Device offline',
   'device.enrolled': 'Device added',
+  'device.removed': 'Screen Time removed',
   'grant.by_other_parent': 'Time changed by another parent',
 };
 

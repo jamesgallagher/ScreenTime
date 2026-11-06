@@ -20,6 +20,8 @@ export interface Config {
   firebaseServiceAccountJson: string | null;
   /** The folder with the built web app (`web/dist`). Null when WEB_DIR is unset: the server is the API only. */
   webDir: string | null;
+  /** The folder with `kid.json` and the kid app's APK. Null when RELEASES_DIR is unset: no self-updates. */
+  releasesDir: string | null;
 }
 
 /** Reads settings from environment variables. Throws if a required one is missing. Empty values count as unset. */
@@ -58,6 +60,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
         : null,
     firebaseServiceAccountJson: firebase,
     webDir: env.WEB_DIR?.trim() || null,
+    releasesDir: env.RELEASES_DIR?.trim() || null,
   };
 }
 

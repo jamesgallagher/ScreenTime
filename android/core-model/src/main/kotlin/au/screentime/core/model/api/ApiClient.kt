@@ -633,6 +633,26 @@ class ApiClient(
     }
 
     /**
+     * Report the app version and ask for a newer one.
+     *
+     * `POST /v1/device/app-update/check`
+     */
+    suspend fun postDeviceAppUpdateCheck(
+        body: AppUpdateCheck,
+    ): AppUpdateAnswer {
+        return call(HttpMethod.Post, "/v1/device/app-update/check", auth = true, body = body, bodyType = typeInfo<AppUpdateCheck>()).body()
+    }
+
+    /**
+     * Screen Time is being taken off this device.
+     *
+     * `POST /v1/device/removed`
+     */
+    suspend fun postDeviceRemoved() {
+        call(HttpMethod.Post, "/v1/device/removed", auth = true)
+    }
+
+    /**
      * Start an SOS.
      *
      * `POST /v1/device/sos`

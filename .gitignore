@@ -46,3 +46,7 @@ windows/**/obj/
 
 # The installer build (windows/installer/build-msi.ps1)
 windows/out/
+
+# Release signing and published APKs (docs/guides/android-provisioning.md)
+android/keystore.properties
+deploy/releases/

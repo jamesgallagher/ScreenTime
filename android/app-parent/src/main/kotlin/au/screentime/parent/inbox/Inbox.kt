@@ -140,6 +140,7 @@ fun eventView(e: EventItem, zone: ZoneId): EventView {
             EventView("$byOrParent $what ${text(p, "label") ?: "an app"} for $kid", null, EventTone.INFO)
         }
         "app.first_used" -> EventView("$kid opened ${text(p, "label") ?: "an app"} for the first time", "On $device", EventTone.INFO)
+        "device.removed" -> EventView("Screen Time was removed from $device", "With the parent code, on the device", EventTone.ALERT)
         "device.enrolled" -> EventView("${text(p, "name") ?: device} was added for $kid", null, EventTone.INFO)
         else -> if (e.kind.startsWith("tamper.")) {
             val what = when (e.kind) {

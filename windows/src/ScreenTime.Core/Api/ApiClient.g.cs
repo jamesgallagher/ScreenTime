@@ -70,6 +70,16 @@ public sealed class ApiClient(HttpClient http, Func<string?> token) : ApiClientB
     public Task PostDeviceAppUsageAsync(DeviceAppUsageUpload body, CancellationToken cancellationToken = default) =>
         SendAsync(HttpMethod.Post, "v1/device/app-usage", auth: true, body, ApiJsonContext.Default.DeviceAppUsageUpload, cancellationToken);
 
+    /// <summary>Report the app version and ask for a newer one.</summary>
+    /// <remarks><c>POST /v1/device/app-update/check</c></remarks>
+    public Task<AppUpdateAnswer> PostDeviceAppUpdateCheckAsync(AppUpdateCheck body, CancellationToken cancellationToken = default) =>
+        SendAsync(HttpMethod.Post, "v1/device/app-update/check", auth: true, body, ApiJsonContext.Default.AppUpdateCheck, ApiJsonContext.Default.AppUpdateAnswer, cancellationToken);
+
+    /// <summary>Screen Time is being taken off this device.</summary>
+    /// <remarks><c>POST /v1/device/removed</c></remarks>
+    public Task PostDeviceRemovedAsync(CancellationToken cancellationToken = default) =>
+        SendAsync(HttpMethod.Post, "v1/device/removed", auth: true, cancellationToken);
+
     /// <summary>Start an SOS.</summary>
     /// <remarks><c>POST /v1/device/sos</c></remarks>
     public Task<Sos> PostDeviceSosAsync(SosStart body, CancellationToken cancellationToken = default) =>

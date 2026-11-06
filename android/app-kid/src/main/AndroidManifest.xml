@@ -10,6 +10,9 @@
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" />
     <!-- Scanning the enrolment QR code. Device Owner grants it, so the kid is never asked (docs/SPEC.md §12.1). -->
     <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Self-update (docs/SPEC.md §12.1). As Device Owner the install asks nobody. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <!-- The always-on service (docs/SPEC.md §12.1). systemExempted is allowed because the app is Device Owner. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -89,6 +92,10 @@
             android:exported="false"
             android:excludeFromRecents="true"
             android:taskAffinity="au.screentime.kid.block" />
+
+        <receiver
+            android:name=".update.UpdateResultReceiver"
+            android:exported="false" />
 
         <service
             android:name=".service.KidService"

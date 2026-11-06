@@ -46,6 +46,7 @@ import au.screentime.kid.status.WarningTracker
 import au.screentime.kid.status.kidStatus
 import au.screentime.kid.status.nextCheckAtMs
 import au.screentime.kid.sync.Syncer
+import au.screentime.kid.update.AppUpdater
 import au.screentime.kid.sync.TrustedClock
 import au.screentime.kid.tamper.CaughtActivity
 import au.screentime.kid.apps.AppWatcher
@@ -96,6 +97,7 @@ class KidService : Service() {
     private lateinit var segments: RoomSegmentStore
     private lateinit var states: FileStateStore
     private lateinit var syncer: Syncer
+    private var updater: AppUpdater? = null
     private lateinit var notifier: Notifier
     private lateinit var parentStore: ParentModeStore
     private var parentApi: ParentModeApi? = null
@@ -180,6 +182,11 @@ class KidService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        // Without Device Owner (Screen Time was just removed) Android refuses this kind of foreground service.
+        if (!Policies.isDeviceOwner(this)) {
+            stopSelf()
+            return
+        }
         // A service started with startForegroundService must call startForeground first, even if it stops at once.
         notifier = Notifier(this)
         startForeground(Notifier.STATUS_ID, notifier.starting(), ServiceInfo.FOREGROUND_SERVICE_TYPE_SYSTEM_EXEMPTED)
@@ -210,6 +217,7 @@ class KidService : Service() {
         tamper = TamperStore(this)
         tamperApi = TamperApi(client)
         apps = AppWatcher(this, client)
+        updater = AppUpdater(this, client, enrolment.serverUrl, token = { enrolment.deviceToken })
         kidName = enrolment.kidName
         sos.resume()
         syncer = Syncer(client, segments, states, clock, log = { Log.w(TAG, it) })
@@ -476,6 +484,7 @@ class KidService : Service() {
             val ok = syncer.sync()
             lastSyncElapsed = SystemClock.elapsedRealtime()
             lastSyncOk = ok
+            if (ok) updater?.tick(screenOn(), sos.pending)
             if (ok) {
                 segments.prune(clock.nowMs() - KEEP_DAYS * 24 * 60 * MINUTE)
             } else {
@@ -603,6 +612,7 @@ class KidService : Service() {
         private const val ACTION_CALL_BLOCKED = "au.screentime.kid.action.CALL_BLOCKED"
 
         fun start(context: Context) {
+            if (!Policies.isDeviceOwner(context)) return
             context.startForegroundService(Intent(context, KidService::class.java))
         }
 
@@ -613,6 +623,7 @@ class KidService : Service() {
 
         /** A push frame, handed to the service like a WebSocket frame (docs/SPEC.md §10, CARD-034b). */
         fun push(context: Context, frame: String) {
+            if (!Policies.isDeviceOwner(context)) return
             context.startForegroundService(
                 Intent(context, KidService::class.java).setAction(ACTION_PUSH).putExtra(EXTRA_FRAME, frame),
             )
@@ -620,6 +631,7 @@ class KidService : Service() {
 
         /** The FCM token changed: send it to the server (docs/SPEC.md §10, CARD-034b). */
         fun newToken(context: Context) {
+            if (!Policies.isDeviceOwner(context)) return
             context.startForegroundService(Intent(context, KidService::class.java).setAction(ACTION_PUSH_TOKEN))
         }
 

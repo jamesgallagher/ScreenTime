@@ -81,6 +81,19 @@ object Policies {
         }
     }
 
+    /** Takes off everything [apply] put on, before the app gives up Device Owner (docs/SPEC.md §12.1). */
+    @Synchronized
+    fun clear(context: Context) {
+        val dpm = context.getSystemService(DevicePolicyManager::class.java)
+        val admin = KidDeviceAdminReceiver.component(context)
+        for (restriction in RESTRICTIONS + UserManager.DISALLOW_DEBUGGING_FEATURES) {
+            dpm.clearUserRestriction(admin, restriction)
+        }
+        dpm.setUninstallBlocked(admin, context.packageName, false)
+        dpm.setLockTaskPackages(admin, emptyArray())
+        dpm.setShortSupportMessage(admin, null)
+    }
+
     /**
      * The policies that were on after the last [apply] and found off before this one, since the service last asked;
      * empty when none. Asking forgets them.

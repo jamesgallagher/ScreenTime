@@ -14,6 +14,7 @@ describe('loadConfig', () => {
       smtp: null,
       firebaseServiceAccountJson: null,
       webDir: null,
+      releasesDir: null,
     });
   });
 

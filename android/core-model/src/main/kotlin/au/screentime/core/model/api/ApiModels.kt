@@ -807,6 +807,25 @@ data class KidAppDevice(
 )
 
 @Serializable
+data class AppUpdateAnswer(
+    val offer: AppUpdateOffer?,
+)
+
+@Serializable
+data class AppUpdateOffer(
+    val versionCode: Int,
+    val versionName: String,
+    val sha256: String,
+    val sizeBytes: Int,
+)
+
+@Serializable
+data class AppUpdateCheck(
+    val versionCode: Int,
+    val versionName: String,
+)
+
+@Serializable
 data class Sos(
     val id: String,
     val kidId: String,
@@ -938,6 +957,7 @@ enum class NotificationKind(override val wire: String) : ApiEnum {
     @SerialName("app.first_used") APP_FIRST_USED("app.first_used"),
     @SerialName("device.offline") DEVICE_OFFLINE("device.offline"),
     @SerialName("device.enrolled") DEVICE_ENROLLED("device.enrolled"),
+    @SerialName("device.removed") DEVICE_REMOVED("device.removed"),
     @SerialName("grant.by_other_parent") GRANT_BY_OTHER_PARENT("grant.by_other_parent");
 }
 

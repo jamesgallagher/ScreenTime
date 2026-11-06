@@ -17,6 +17,7 @@ export const NOTIFICATION_TEXT: Record<NotificationKind, { title: string; detail
   'app.installed': { title: 'New apps', detail: 'When an app is installed on an Android device.' },
   'app.first_used': { title: 'Apps used for the first time', detail: 'When an app is opened for the first time on an Android device.' },
   'device.enrolled': { title: 'Device added', detail: 'When a new device is added for a kid.' },
+  'device.removed': { title: 'Screen Time removed', detail: 'When Screen Time is taken off a device with the parent code.' },
   'grant.by_other_parent': { title: 'Time changed by another parent', detail: 'When another parent adds or takes away time.' },
 };
 

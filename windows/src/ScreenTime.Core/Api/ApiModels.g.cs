@@ -356,6 +356,19 @@ public sealed record DeviceAppUsageUploadDaysItemAppsItem(
     [property: JsonPropertyName("package")] string Package,
     [property: JsonPropertyName("seconds")] int Seconds);
 
+public sealed record AppUpdateAnswer(
+    [property: JsonPropertyName("offer")] AppUpdateOffer? Offer);
+
+public sealed record AppUpdateOffer(
+    [property: JsonPropertyName("versionCode")] int VersionCode,
+    [property: JsonPropertyName("versionName")] string VersionName,
+    [property: JsonPropertyName("sha256")] string Sha256,
+    [property: JsonPropertyName("sizeBytes")] int SizeBytes);
+
+public sealed record AppUpdateCheck(
+    [property: JsonPropertyName("versionCode")] int VersionCode,
+    [property: JsonPropertyName("versionName")] string VersionName);
+
 public sealed record Sos(
     [property: JsonPropertyName("id")] string Id,
     [property: JsonPropertyName("kidId")] string KidId,
@@ -489,6 +502,9 @@ public sealed record PushTokenPut(
 [JsonSerializable(typeof(DeviceAppUsageUpload))]
 [JsonSerializable(typeof(DeviceAppUsageUploadDaysItem))]
 [JsonSerializable(typeof(DeviceAppUsageUploadDaysItemAppsItem))]
+[JsonSerializable(typeof(AppUpdateAnswer))]
+[JsonSerializable(typeof(AppUpdateOffer))]
+[JsonSerializable(typeof(AppUpdateCheck))]
 [JsonSerializable(typeof(Sos))]
 [JsonSerializable(typeof(SosEndedBy))]
 [JsonSerializable(typeof(SosStatus))]
