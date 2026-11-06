@@ -681,11 +681,15 @@ Messages and requests are sent through the server. If the phone has no data, the
 
 **Removal (CARD-059).** In parent mode the main screen has **Remove Screen Time**. It always asks for the parent code, even though parent mode is already on, because parent mode can be turned on remotely while the kid holds the device. Then the app tells the server (`POST /v1/device/removed`: the device is revoked and parents get `device.removed`; offline it carries on, and the device stays listed until a parent removes it), frees every blocked app, clears its policies, gives up Device Owner, forgets its enrolment and opens Android's uninstall question. If that question is cancelled, the app shows the setup screen. Without Device Owner the service does not start, since Android refuses its foreground type.
 
+**The parent app (CARD-054)** is signed with the same key file, is installed once with adb and does not update itself; it needs no Device Owner.
+
 **minSdk = 34 (Android 14)**, decided 22 Oct 2026: the XPPen tablet runs Android 14 and the Pixel 7 is newer. This lets the app use foreground service type `systemExempted` everywhere with no fallback code. `targetSdk` = 36 and `compileSdk` = 37 (Compose 1.12, in BOM 2026.09, requires compileSdk 37; found 22 Oct 2026). The parent app uses the same minSdk.
 
 ### 12.2 Windows kid enforcer
 
 **Install** (documented in `docs/guides/windows-install.md`): kids use **standard** accounts, parents use admin accounts. A parent runs the MSI as admin. The installer asks for the server hostname, then lists local standard accounts; for each kid account the parent enters an enrolment code. The service is registered for automatic start, restart on failure (0 s, 5 s, 30 s) and Safe Mode (`SafeBoot\Minimal` and `Network` registry keys). As built (CARD-052b): the asking is a setup window in the tray program (`Tray\ScreenTime.Tray.exe --setup`, Start menu "Screen Time Setup"), which restarts itself as administrator (UAC). It checks the server (`GET /health`), lists the enabled local accounts without Windows' built-in ones (administrators show as parents, never limited), enrols each with `ScreenTime.Service.exe enrol`, and Finish restarts the service.
+
+**Updates and removal (CARD-054, tried in Windows Sandbox):** a PC does not update itself. A newer MSI, from CI's build, replaces the old one in place and keeps the accounts connected. Uninstalling removes the service and gives the time zone right back, and leaves `C:\ProgramData\ScreenTime`. The version a PC reports to the server is the service's own, not the MSI's.
 
 **ScreenTime.Service** (LocalSystem, Native AOT):
 
