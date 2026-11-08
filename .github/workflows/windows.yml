@@ -1,6 +1,8 @@
 name: Windows
 
 on:
+  # A fresh MSI on request: GitHub keeps each one 14 days (docs/guides/windows-install.md).
+  workflow_dispatch:
   pull_request:
     paths:
       - "windows/**"

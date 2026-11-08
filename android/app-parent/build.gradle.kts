@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -37,12 +39,28 @@ android {
         }
     }
 
+    // The same key file as the kid app (docs/guides/android-provisioning.md). Without it a release build stays unsigned.
+    val signing = rootProject.file("keystore.properties").takeIf { it.exists() }?.let { f ->
+        Properties().apply { f.inputStream().use { load(it) } }
+    }
+    signingConfigs {
+        if (signing != null) {
+            create("release") {
+                storeFile = file(signing.getProperty("storeFile"))
+                storePassword = signing.getProperty("storePassword")
+                keyAlias = signing.getProperty("keyAlias")
+                keyPassword = signing.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         debug {
             // The Android emulator reaches the developer's PC at 10.0.2.2 (`pnpm dev:server` or docker compose).
             buildConfigField("String", "SERVER", "\"http://10.0.2.2:8080\"")
         }
         release {
+            if (signing != null) signingConfig = signingConfigs.getByName("release")
             buildConfigField("String", "SERVER", "\"https://screentime.gallagherhome.au\"")
         }
     }
@@ -55,6 +73,11 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+
+    // MainActivity is a ComponentActivity, so the old Fragment library that Firebase brings along plays no part in it.
+    lint {
+        disable += "InvalidFragmentVersionForActivityResult"
     }
 
     testOptions {
