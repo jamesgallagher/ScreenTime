@@ -79,7 +79,7 @@ function CodeStep({
       </DialogTitle>
       <DialogDescription>
         {form === 'pc'
-          ? `On the PC, a parent runs the ScreenTime installer and types this code for ${kidName}'s Windows account.`
+          ? `On the PC, a parent opens Screen Time Setup and types this code for ${kidName}'s Windows account.`
           : `On ${kidName}'s ${formWord(form)}, open Screen Time and tap Scan QR code, or type the code.`}
       </DialogDescription>
       {form !== 'pc' && (
