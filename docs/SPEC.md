@@ -1004,7 +1004,7 @@ Pages: Sign in (email, then 6-digit code boxes), Today (kid cards as 16.4 in a r
 | P4 | ~~Public hostname~~ Decided: `screentime.gallagherhome.au` (not configured yet) | none |
 | P5 | ~~Windows edition~~ Decided: Windows 11 Pro on both PCs | none |
 | P6 | ~~XPPen Play services~~ Decided: yes, it has the Play Store, so FCM works on all Android devices | none |
-| P7 | ~~FRP account~~ Decided: James's own Google account | none |
+| P7 | ~~FRP account~~ Dropped 6 Nov 2026: Factory Reset Protection is not built (section 12.1) | none |
 | P8 | ~~Firebase project~~ Done: project "ScreenTime", ID `screentime-d307c` (James's Gmail account) | none |
 | P9 | ~~Architect's proposed details~~ Accepted by James 22 Oct 2026: time request amounts 15/30/60, "Lock now" as negative grant, SMS fallback for messages, remote parent mode, 12-hour times, package name | none |
 
