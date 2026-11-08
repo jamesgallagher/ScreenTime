@@ -8,6 +8,7 @@ How it fits together:
 - **The stack** lives in `/mnt/user/appdata/screentime/`: `docker-compose.yml`, `backup.sh` (both from `deploy/unraid/` in the repo) and `.env` (secrets, only on the server). Three containers: `db` (PostgreSQL 18, data in `/mnt/user/appdata/screentime/postgres`), `api`, and `backup`.
 - **The API is published on Unraid's port 8086** (bridge networking, `8086:8080`). Port 8080 on Unraid belongs to qBittorrent.
 - **The tunnel route** `screentime.gallagherhome.au` → `http://192.168.0.148:8086` is set in the Cloudflare dashboard (it already exists). Do **not** put Cloudflare Access in front of it: kid devices sign in with their own tokens on `/v1/*`.
+- **Kid app releases** go in `/mnt/user/appdata/screentime/releases`, which `api` reads (see Kid app releases below).
 - **Backups:** the `backup` container runs `pg_dump` every night at 02:30 (Sydney) into `/mnt/user/Backup/screentime/`, keeping 30 days.
 
 All commands below run on the Unraid server over SSH (`ssh root@192.168.0.148`) unless they say otherwise.
@@ -17,7 +18,7 @@ All commands below run on the Unraid server over SSH (`ssh root@192.168.0.148`) 
 ### 1. The folder and the files
 
 ```sh
-mkdir -p /mnt/user/appdata/screentime/postgres /mnt/user/Backup/screentime
+mkdir -p /mnt/user/appdata/screentime/postgres /mnt/user/appdata/screentime/releases /mnt/user/Backup/screentime
 cd /mnt/user/appdata/screentime
 base=https://raw.githubusercontent.com/jamesgallagher/ScreenTime/main/deploy/unraid
 curl -fsSLO "$base/docker-compose.yml" && curl -fsSLO "$base/backup.sh" && curl -fsSL "$base/.env.example" -o .env.example
@@ -73,7 +74,7 @@ Saving it also makes the DNS record. Check from any PC: `curl https://screentime
 
 ### 5. The family
 
-Open https://screentime.gallagherhome.au, sign in with `SUPER_ADMIN_EMAIL` (the code arrives by email), and in **Admin** create the family with its time zone, emergency number and first parent. Then add the kids, and their devices (docs/guides/android-provisioning.md, and for a PC the MSI and **Screen Time Setup**).
+Open https://screentime.gallagherhome.au, sign in with `SUPER_ADMIN_EMAIL` (the code arrives by email), and in **Admin** create the family with its time zone, emergency number and first parent. Then add the kids, and their devices (docs/guides/android-provisioning.md, and for a PC docs/guides/windows-install.md).
 
 ## Updating
 
@@ -88,6 +89,20 @@ docker compose logs --tail 20 api
 Migrations run when the new `api` starts. If `docker-compose.yml` or `backup.sh` changed in the repo, fetch them again first (step 1's `curl` lines).
 
 **Going back:** set `API_TAG=<commit sha>` in `.env` (any commit that published an image), then `docker compose up -d --wait`. Set it back to `latest` afterwards. A migration that already ran is not undone: restore a backup if a release broke the data.
+
+## Kid app releases
+
+The kid app updates itself from this server (docs/guides/android-provisioning.md, Updating the kid app). `android/publish-kid.ps1` on the PC copies the APK and `kid.json` into `/mnt/user/appdata/screentime/releases` over SSH. `api` reads that folder as `/releases`, read-only, so no restart is needed. With no `kid.json` there, devices are offered nothing.
+
+A stack set up before this folder existed needs the new `docker-compose.yml` (step 1's `curl` lines), then:
+
+```sh
+cd /mnt/user/appdata/screentime
+mkdir -p releases
+docker compose pull api && docker compose up -d --wait
+```
+
+The APKs are not in the nightly backup and need not be: the repo and the release key make them again. **The release key itself is not on this server** and is backed up by hand (docs/guides/android-provisioning.md, step 1).
 
 ## Backups
 
