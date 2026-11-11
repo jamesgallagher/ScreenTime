@@ -1,5 +1,6 @@
 package au.screentime.kid.service
 
+import android.app.ActivityManager
 import android.app.KeyguardManager
 import android.app.Service
 import android.content.BroadcastReceiver
@@ -41,6 +42,9 @@ import au.screentime.kid.sos.SOS_TICK_MS
 import au.screentime.kid.sos.SosApi
 import au.screentime.kid.sos.SosController
 import au.screentime.kid.sos.sosNewsOf
+import au.screentime.core.time.LockReason
+import au.screentime.kid.apps.cutAt
+import au.screentime.kid.status.FreeApp
 import au.screentime.kid.status.StatusHub
 import au.screentime.kid.status.WarningTracker
 import au.screentime.kid.status.kidStatus
@@ -135,6 +139,12 @@ class KidService : Service() {
     /** An SOS was on at the last run: nothing counts (docs/SPEC.md §15 step 8). */
     private var sosOn = false
 
+    /** An always-allowed app was in front at the last run: its time does not count (docs/SPEC.md §12.4). */
+    private var free = false
+
+    /** Where the device's time was cut when an always-allowed app came to the front. */
+    private var freeCutAt: Long? = null
+
     /** A tamper attempt was recorded and the kid has not seen the caught screen for it yet. */
     private var caughtWanted = false
 
@@ -217,7 +227,9 @@ class KidService : Service() {
         tamper = TamperStore(this)
         tamperApi = TamperApi(client)
         apps = AppWatcher(this, client)
-        updater = AppUpdater(this, client, enrolment.serverUrl, token = { enrolment.deviceToken })
+        updater = AppUpdater(this, client, enrolment.serverUrl, token = { enrolment.deviceToken }, onReady = notifier::showUpdate)
+        // This version may be the update that notice was about.
+        notifier.cancelUpdate()
         kidName = enrolment.kidName
         sos.resume()
         syncer = Syncer(client, segments, states, clock, log = { Log.w(TAG, it) })
@@ -262,6 +274,8 @@ class KidService : Service() {
                 val untilNext = (nextCheckAt - clock.nowMs()).coerceIn(SECOND, MINUTE)
                 val normal = when {
                     inUse() -> minOf(untilNext, APP_TICK_MS)
+                    // In an always-allowed app: look again soon, so time counts again once the kid leaves it.
+                    free && !blocked && screenOn() -> minOf(untilNext, APP_TICK_MS)
                     paused && screenOn() -> untilNext
                     blocked && screenOn() -> if (live?.connected == true) untilNext else minOf(untilNext, BLOCKED_POLL)
                     else -> MINUTE
@@ -277,6 +291,10 @@ class KidService : Service() {
                     inUse() -> {
                         apps?.tick()
                         recorder.tick(clock.nowMs())
+                        if (SystemClock.elapsedRealtime() - lastSyncElapsed >= 5 * MINUTE) sync() else report()
+                    }
+                    free && !blocked && screenOn() -> {
+                        apps?.tick()
                         if (SystemClock.elapsedRealtime() - lastSyncElapsed >= 5 * MINUTE) sync() else report()
                     }
                     blocked && screenOn() -> if (live?.connected == true) report() else sync()
@@ -319,6 +337,12 @@ class KidService : Service() {
                 report()
             }
             ACTION_CALL_BLOCKED -> scope.launch { onTamper(DeviceEventKind.TAMPER_CALL_BLOCKED) }
+            // **Update now** in the update notice: install the downloaded version now, screen on or not.
+            ACTION_UPDATE_NOW -> scope.launch {
+                Log.i(TAG, "update: asked to install now")
+                updater?.askNow()
+                updater?.tick(screenOn(), sos.pending || sos.active)
+            }
         }
         return START_STICKY
     }
@@ -345,7 +369,10 @@ class KidService : Service() {
      * §12, §15).
      */
     private fun inUse(): Boolean =
-        screenOn() && !getSystemService(KeyguardManager::class.java).isKeyguardLocked && !blocked && !paused && !sosOn
+        screenOn() && !getSystemService(KeyguardManager::class.java).isKeyguardLocked && !blocked && !paused && !sosOn && !free
+
+    private fun inLockTask(): Boolean =
+        getSystemService(ActivityManager::class.java).lockTaskModeState != ActivityManager.LOCK_TASK_MODE_NONE
 
     private suspend fun onScreenOn(at: Long) {
         showCaughtIfWanted()
@@ -520,9 +547,11 @@ class KidService : Service() {
         val status = kidStatus(cached.state, result, now, lastSyncOk, SystemClock.elapsedRealtime(), parentMode)
         sos.onSnapshot(cached.state, serverTimeMs)
 
-        // Counting stops when the device becomes blocked, parent mode starts or an SOS starts, and starts again after
-        // all three.
-        val wasCounting = !blocked && !paused && !sosOn
+        // Counting stops when the device becomes blocked, parent mode starts, an SOS starts or an always-allowed app
+        // comes to the front, and starts again after all four.
+        val wasCounting = !blocked && !paused && !sosOn && !free
+        val wasOtherwiseCounting = !blocked && !paused && !sosOn
+        val wasFree = free
         blocked = status.locked
         if (paused != (parentMode != null)) Log.i(TAG, "parent mode: ${if (parentMode != null) "on" else "off"}")
         paused = parentMode != null
@@ -537,15 +566,38 @@ class KidService : Service() {
                 notifier.showAppLimit(it)
             }
         }
-        val counting = !blocked && !paused && !sosOn
-        if (wasCounting && !counting) recorder.stop(now)
-        if (!wasCounting && counting && inUse()) recorder.start(now)
+        // Always-allowed apps (docs/SPEC.md §12.4): their time never counts. The block screen offers them only while
+        // time is up, never from bedtime to wake-up, and only they may run in Lock Task then.
+        val front = appsNow?.freeFront ?: au.screentime.kid.apps.FreeFront(null, null)
+        free = front.sinceMs != null
+        if (free != wasFree) Log.i(TAG, "apps: always-allowed app ${if (free) "in front" else "left"}")
+        val outOfTime = status.lockReason == LockReason.OUT_OF_TIME
+        val offered = if (outOfTime) appsNow?.free.orEmpty() else emptyMap()
+        StatusHub.freeApps.value = offered.map { FreeApp(it.key, it.value) }.sortedBy { it.label.lowercase() }
+        Policies.allowInLockTask(this, offered.keys)
+
+        val otherwiseCounting = !blocked && !paused && !sosOn
+        val counting = otherwiseCounting && !free
+        if (wasCounting && !counting) {
+            // Only an always-allowed app came to the front: the time stops where it did, not when the service looked.
+            val at = if (otherwiseCounting) cutAt(front.sinceMs, now, segments.open()?.startedAtMs ?: now) else now
+            if (otherwiseCounting) freeCutAt = at
+            recorder.stop(at)
+        }
+        if (!wasCounting && counting && inUse()) {
+            // Only the always-allowed app left: the time starts again where it did.
+            val at = if (wasFree && wasOtherwiseCounting) cutAt(front.endedMs, now, freeCutAt ?: now) else now
+            recorder.start(at)
+        }
 
         StatusHub.status.value = status
         showCaughtIfWanted()
         // The block screen closes itself when StatusHub says unlocked. While the caught screen is up, it waits:
-        // showing it would close the caught screen, which sits on top of it.
-        if (blocked && screenOn() && StatusHub.caught.value == null) BlockActivity.show(this)
+        // showing it would close the caught screen, which sits on top of it. While time is up it also stays down for an
+        // always-allowed app the kid opened from it, which runs in Lock Task.
+        val openedJustNow = StatusHub.freeOpenedAt.value?.let { SystemClock.elapsedRealtime() - it < FREE_OPEN_GRACE_MS } == true
+        val inFreeApp = outOfTime && ((free && inLockTask()) || openedJustNow)
+        if (blocked && screenOn() && StatusHub.caught.value == null && !inFreeApp) BlockActivity.show(this)
         updateLive(waiting = status.pendingMinutes != null || StatusHub.parentModeAsked.value)
         notifier.showStatus(status, now, StatusHub.sos.value)
         if (status.locked) {
@@ -594,6 +646,9 @@ class KidService : Service() {
         /** How often usage events are read while in use: a first use shows within this (docs/SPEC.md §12.4). */
         private const val APP_TICK_MS = 30_000L
 
+        /** How long the block screen stays down after the kid opens an always-allowed app from it. */
+        private const val FREE_OPEN_GRACE_MS = 5_000L
+
         /** Sent segments are kept this long, then forgotten (docs/SPEC.md §8.3, offline buffer). */
         private const val KEEP_DAYS = 30L
 
@@ -610,6 +665,9 @@ class KidService : Service() {
         private const val ACTION_SOS_START = "au.screentime.kid.action.SOS_START"
         private const val ACTION_SOS_END = "au.screentime.kid.action.SOS_END"
         private const val ACTION_CALL_BLOCKED = "au.screentime.kid.action.CALL_BLOCKED"
+
+        /** **Update now** in the update notice uses it. */
+        const val ACTION_UPDATE_NOW = "au.screentime.kid.action.UPDATE_NOW"
 
         fun start(context: Context) {
             if (!Policies.isDeviceOwner(context)) return

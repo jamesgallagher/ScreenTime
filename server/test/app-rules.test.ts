@@ -122,11 +122,11 @@ describe.skipIf(!url)('app rules', () => {
   it('puts the rules and the switch in the snapshot, and changes its version', async () => {
     await put([app('a.game')]);
     const before = await api.get('/v1/device/state', phone.token);
-    expect(before.body.apps).toEqual({ newAppApproval: false, rules: [] });
+    expect(before.body.apps).toEqual({ newAppApproval: false, rules: [], alwaysAllowed: [] });
     await rule('a.game', 'blocked');
     await settings(true);
     const after = await api.get('/v1/device/state', phone.token);
-    expect(after.body.apps).toEqual({ newAppApproval: true, rules: [{ package: 'a.game', mode: 'blocked', dailyMinutes: null }] });
+    expect(after.body.apps).toEqual({ newAppApproval: true, rules: [{ package: 'a.game', mode: 'blocked', dailyMinutes: null }], alwaysAllowed: [] });
     expect(after.body.stateVersion).not.toBe(before.body.stateVersion);
   });
 
@@ -135,7 +135,7 @@ describe.skipIf(!url)('app rules', () => {
     await rule('a.game', 'blocked');
     await settings(true);
     const state = await api.get('/v1/device/state', pc.token);
-    expect(state.body.apps).toEqual({ newAppApproval: false, rules: [] });
+    expect(state.body.apps).toEqual({ newAppApproval: false, rules: [], alwaysAllowed: [] });
   });
 
   it('tells the devices when a rule or the switch changes', async () => {

@@ -6,6 +6,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -22,6 +24,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -156,7 +159,12 @@ fun AppsScreen(kid: Kid, vm: KidsViewModel, zone: ZoneId, onBack: () -> Unit) {
                         }
                     }
                     items(loaded, key = { it.packageName }) { app ->
-                        AppRow(app, zone, !busy) { rule, minutes -> change { vm.saveAppRule(kid.id, app.packageName, rule, minutes) } }
+                        AppRow(
+                            app,
+                            zone,
+                            !busy,
+                            onAlwaysAllowed = { deviceId, on -> change { vm.saveAlwaysAllowed(deviceId, app.packageName, on) } },
+                        ) { rule, minutes -> change { vm.saveAppRule(kid.id, app.packageName, rule, minutes) } }
                     }
                     if (loaded.isNotEmpty()) {
                         item {
@@ -213,7 +221,7 @@ private fun ApprovalCard(kid: Kid, on: Boolean, enabled: Boolean, onChange: (Boo
 private fun RuleControl(app: KidApp, enabled: Boolean, onRule: (AppRule, Int?) -> Unit) {
     when (val choice = appChoice(app)) {
         AppChoice.FIXED -> Text(
-            text = "Always allowed",
+            text = "Part of the device: never blocked",
             style = MaterialTheme.typography.bodySmall,
             color = ScreenTimeTheme.colors.muted,
         )
@@ -282,9 +290,49 @@ private fun RuleControl(app: KidApp, enabled: Boolean, onRule: (AppRule, Int?) -
     }
 }
 
+/**
+ * "Also when time is up, on" with one chip per device (docs/SPEC.md §12.4, §16.4): an always-allowed app still runs
+ * there once the kid's time is used up, but not from bedtime to wake-up, and its time never counts.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun AlwaysAllowedControl(app: KidApp, enabled: Boolean, onChange: (deviceId: String, on: Boolean) -> Unit) {
+    val devices = alwaysAllowedDevices(app)
+    if (devices.isEmpty()) return
+    Spacer(Modifier.height(8.dp))
+    Text(
+        text = "Also when time is up, on",
+        style = MaterialTheme.typography.bodySmall,
+        color = ScreenTimeTheme.colors.muted,
+    )
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        for (d in devices) {
+            FilterChip(
+                selected = d.alwaysAllowed,
+                onClick = { onChange(d.deviceId, !d.alwaysAllowed) },
+                enabled = enabled,
+                label = { Text(d.deviceName) },
+            )
+        }
+    }
+    if (devices.any { it.alwaysAllowed }) {
+        Text(
+            text = "Not from bedtime to wake-up. Time in it doesn't count.",
+            style = MaterialTheme.typography.bodySmall,
+            color = ScreenTimeTheme.colors.muted,
+        )
+    }
+}
+
 /** One app: a circle with its initial, its name, where it came from, first use, today's time or "Removed", and its rule. */
 @Composable
-private fun AppRow(app: KidApp, zone: ZoneId, enabled: Boolean, onRule: (AppRule, Int?) -> Unit) {
+private fun AppRow(
+    app: KidApp,
+    zone: ZoneId,
+    enabled: Boolean,
+    onAlwaysAllowed: (deviceId: String, on: Boolean) -> Unit,
+    onRule: (AppRule, Int?) -> Unit,
+) {
     val removed = isRemoved(app)
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -345,6 +393,7 @@ private fun AppRow(app: KidApp, zone: ZoneId, enabled: Boolean, onRule: (AppRule
         if (!removed) {
             Column(modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp)) {
                 RuleControl(app, enabled, onRule)
+                AlwaysAllowedControl(app, enabled, onAlwaysAllowed)
             }
         }
     }

@@ -1,6 +1,6 @@
 import type { EventItem } from '@screentime/schemas';
 import { describe, expect, it } from 'vitest';
-import { appChoice, firstUsedLine, stepLimit, installedLine, isRemoved, type KidApp, type KidAppDevice, sortApps, todayLine } from '../src/lib/apps';
+import { alwaysAllowedDevices, appChoice, firstUsedLine, stepLimit, installedLine, isRemoved, type KidApp, type KidAppDevice, sortApps, todayLine } from '../src/lib/apps';
 import { eventView, pendingAppApprovals } from '../src/lib/inbox';
 import { NOTIFICATION_TEXT } from '../src/lib/settings';
 
@@ -13,6 +13,7 @@ function device(over: Partial<KidAppDevice> = {}): KidAppDevice {
     installedAt: '2026-11-03T06:00:00Z',
     firstUsedAt: null,
     removedAt: null,
+    alwaysAllowed: false,
     ...over,
   };
 }
@@ -144,6 +145,20 @@ describe('the choice on a row', () => {
     const newest = app({ label: 'Newest', devices: [device({ installedAt: '2026-11-05T00:00:00Z' })] });
     const waiting = app({ label: 'Waiting', devices: [device({ installedAt: '2026-11-01T00:00:00Z' })], rule: { mode: 'held', dailyMinutes: null } });
     expect(sortApps([newest, waiting]).map((a) => a.label)).toEqual(['Waiting', 'Newest']);
+  });
+});
+
+describe('always allowed', () => {
+  it('is offered per device where the app is now, for an allowed or limited app', () => {
+    const two = app({ devices: [device(), device({ deviceId: 'tablet', deviceName: 'XPPen tablet', removedAt: '2026-11-04T00:00:00Z' })] });
+    expect(alwaysAllowedDevices(two).map((d) => d.deviceName)).toEqual(['Pixel 7']);
+    expect(alwaysAllowedDevices(app({ rule: { mode: 'limit', dailyMinutes: 30 } }))).toHaveLength(1);
+  });
+
+  it('is not offered for a blocked or waiting app, or one that is part of the device', () => {
+    expect(alwaysAllowedDevices(app({ rule: { mode: 'blocked', dailyMinutes: null } }))).toEqual([]);
+    expect(alwaysAllowedDevices(app({ rule: { mode: 'held', dailyMinutes: null } }))).toEqual([]);
+    expect(alwaysAllowedDevices(app({ blockable: false }))).toEqual([]);
   });
 });
 

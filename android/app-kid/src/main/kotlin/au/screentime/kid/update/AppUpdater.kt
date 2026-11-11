@@ -28,7 +28,8 @@ enum class UpdateStep { NOTHING, DOWNLOAD, INSTALL }
 
 /**
  * [offer] is what the server last offered, [downloaded] whether its file is here and checked. A download waits for a
- * network that is not metered; an install waits for the screen to be off and no SOS, so it never interrupts the kid.
+ * network that is not metered; an install waits for the screen to be off and no SOS, so it never interrupts the kid,
+ * unless someone tapped **Update now** ([asked]). An SOS always comes first.
  */
 fun nextUpdateStep(
     offer: AppUpdateOffer?,
@@ -37,10 +38,12 @@ fun nextUpdateStep(
     metered: Boolean,
     screenOn: Boolean,
     sosActive: Boolean,
+    asked: Boolean = false,
 ): UpdateStep = when {
     offer == null || offer.versionCode <= currentCode -> UpdateStep.NOTHING
     !downloaded -> if (metered) UpdateStep.NOTHING else UpdateStep.DOWNLOAD
-    screenOn || sosActive -> UpdateStep.NOTHING
+    sosActive -> UpdateStep.NOTHING
+    screenOn && !asked -> UpdateStep.NOTHING
     else -> UpdateStep.INSTALL
 }
 
@@ -71,12 +74,22 @@ class AppUpdater(
     private val api: ApiClient,
     private val serverUrl: String,
     private val token: () -> String?,
+    /** A checked file is ready: the service shows **Update now** (docs/SPEC.md §12.1), once per version. */
+    private val onReady: (versionName: String) -> Unit = {},
 ) {
     private var lastCheck: Long? = null
     private var lastInstall: Long? = null
     private var offer: AppUpdateOffer? = null
+    private var announced: Int? = null
+    private var asked = false
 
     private fun fileFor(o: AppUpdateOffer) = File(File(context.cacheDir, "update"), "kid-${o.versionCode}.apk")
+
+    /** Someone tapped **Update now**: the next [tick] installs, even with the screen on. */
+    fun askNow() {
+        asked = true
+        lastInstall = null
+    }
 
     /** Called after each sync. Failures are logged and tried again later. */
     suspend fun tick(screenOn: Boolean, sosActive: Boolean) {
@@ -91,13 +104,19 @@ class AppUpdater(
             val file = o?.let { fileFor(it) }
             // The emulator's only network is metered, so a debug build ignores it. Tests cover the rule itself.
             val metered = !BuildConfig.DEBUG && context.getSystemService(ConnectivityManager::class.java).isActiveNetworkMetered
-            when (nextUpdateStep(o, BuildConfig.VERSION_CODE, file?.exists() == true, metered, screenOn, sosActive)) {
+            when (nextUpdateStep(o, BuildConfig.VERSION_CODE, file?.exists() == true, metered, screenOn, sosActive, asked)) {
                 UpdateStep.NOTHING -> Unit
                 UpdateStep.DOWNLOAD -> download(o!!, file!!)
                 UpdateStep.INSTALL -> if (lastInstall == null || now - lastInstall!! >= CHECK_EVERY_MS) {
                     lastInstall = now
+                    asked = false
                     install(file!!)
                 }
+            }
+            // Ready and waiting: say so once, so a parent or the kid can tap Update now.
+            if (o != null && o.versionCode > BuildConfig.VERSION_CODE && file?.exists() == true && announced != o.versionCode) {
+                announced = o.versionCode
+                onReady(o.versionName)
             }
         } catch (e: CancellationException) {
             throw e

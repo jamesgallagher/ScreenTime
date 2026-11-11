@@ -165,12 +165,46 @@ class Notifier(private val context: Context) {
         manager.cancel(WARNING_ID)
     }
 
+    /**
+     * "An update to Screen Time is ready" with **Update now** (docs/SPEC.md §12.1). Nobody has to tap it: it installs
+     * by itself the next time the screen is off. The new version clears it when it starts.
+     */
+    fun showUpdate(versionName: String) {
+        manager.createNotificationChannel(
+            NotificationChannel(UPDATE_CHANNEL, "Updates", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                setSound(null, null)
+                enableVibration(false)
+            },
+        )
+        val updateNow = PendingIntent.getService(
+            context,
+            2,
+            Intent(context, KidService::class.java).setAction(KidService.ACTION_UPDATE_NOW),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val notification = Notification.Builder(context, UPDATE_CHANNEL)
+            .setSmallIcon(R.drawable.ic_status)
+            .setContentTitle("An update to Screen Time is ready")
+            .setContentText("Version $versionName. It installs by itself when the screen is off.")
+            .setCategory(Notification.CATEGORY_RECOMMENDATION)
+            .setContentIntent(updateNow)
+            .addAction(Notification.Action.Builder(null, "Update now", updateNow).build())
+            .build()
+        manager.notify(UPDATE_ID, notification)
+    }
+
+    fun cancelUpdate() {
+        manager.cancel(UPDATE_ID)
+    }
+
     companion object {
         const val STATUS_ID = 1
         private const val WARNING_ID = 2
         private const val ANSWER_ID = 3
         private const val GRANT_ID = 4
         private const val APP_LIMIT_ID = 5
+        private const val UPDATE_ID = 6
+        private const val UPDATE_CHANNEL = "updates"
         private const val STATUS_CHANNEL = "status"
         private const val WARNING_CHANNEL = "warnings"
         private const val ANSWER_CHANNEL = "answers"

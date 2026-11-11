@@ -445,6 +445,7 @@ data class DeviceStateActiveSos(
 data class DeviceStateApps(
     val newAppApproval: Boolean,
     val rules: List<DeviceStateAppsRulesItem>,
+    val alwaysAllowed: List<String>? = null,
 )
 
 @Serializable
@@ -770,6 +771,11 @@ enum class AppRulePutMode(override val wire: String) : ApiEnum {
 }
 
 @Serializable
+data class AlwaysAllowedPut(
+    val alwaysAllowed: Boolean,
+)
+
+@Serializable
 data class KidAppSettings(
     val newAppApproval: Boolean,
 )
@@ -804,6 +810,7 @@ data class KidAppDevice(
     val installedAt: String,
     val firstUsedAt: String?,
     val removedAt: String?,
+    val alwaysAllowed: Boolean,
 )
 
 @Serializable

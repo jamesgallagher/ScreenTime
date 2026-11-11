@@ -1,6 +1,6 @@
 import { createRoute, z } from '@hono/zod-openapi';
 import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
-import { type AppRuleMode, AppRulePut, AppRuleSaved, DeviceAppsPut, DeviceAppUsageUpload, KidApps, KidAppSettings, type KidApp } from '@screentime/schemas';
+import { AlwaysAllowedPut, type AppRuleMode, AppRulePut, AppRuleSaved, DeviceAppsPut, DeviceAppUsageUpload, KidApps, KidAppSettings, type KidApp } from '@screentime/schemas';
 import type { AppDeps } from '../app.js';
 import { requireFamilyParent } from '../auth/guards.js';
 import { withFamily } from '../db/family.js';
@@ -58,6 +58,18 @@ const putRuleRoute = createRoute({
   security: bearer,
   request: { params: z.object({ kidId: z.uuid(), package: z.string().min(1).max(255) }), body: jsonBody(AppRulePut) },
   responses: { 200: jsonResponse('The rule.', AppRuleSaved), ...errorResponses(401, 403, 404, 409, 422) },
+});
+
+const putAlwaysAllowedRoute = createRoute({
+  method: 'put',
+  path: '/v1/devices/{deviceId}/apps/{package}/always-allowed',
+  tags: ['devices'],
+  summary: 'Let an app run on one device when its time is up',
+  description:
+    'Not from bedtime to wake-up, and its time never counts. A block or a used-up daily limit still wins. An app not on the device gets 404; one that cannot be blocked, or is blocked or waiting for a parent, gets 409 when turned on.',
+  security: bearer,
+  request: { params: z.object({ deviceId: z.uuid(), package: z.string().min(1).max(255) }), body: jsonBody(AlwaysAllowedPut) },
+  responses: { 204: { description: 'Saved.' }, ...errorResponses(401, 403, 404, 409, 422) },
 });
 
 const putSettingsRoute = createRoute({
@@ -233,6 +245,38 @@ export function registerAppRoutes(app: Router, deps: AppDeps) {
     return c.json({ mode, dailyMinutes }, 200);
   });
 
+  app.openapi(putAlwaysAllowedRoute, async (c) => {
+    const { familyId } = await requireFamilyParent(c, db, config.jwtSecret);
+    const { deviceId, package: pkg } = c.req.valid('param');
+    const { alwaysAllowed } = c.req.valid('json');
+    const kidId = await withFamily(db, familyId, async (tx) => {
+      const [row] = await tx
+        .select({ app: deviceApps })
+        .from(deviceApps)
+        .innerJoin(devices, eq(devices.id, deviceApps.deviceId))
+        .where(and(eq(deviceApps.deviceId, deviceId), eq(deviceApps.package, pkg), isNull(deviceApps.removedAt), isNull(devices.revokedAt)));
+      if (!row) throw new ApiError('not_found', 'That app is not on this device.');
+      if (alwaysAllowed) {
+        // Settings, the launcher and the phone apps are never blocked, so they cannot be let through either.
+        if (!row.app.blockable) throw new ApiError('conflict', 'That app is part of the device and cannot be always allowed.');
+        const [rule] = await tx
+          .select({ mode: appRules.mode })
+          .from(appRules)
+          .where(and(eq(appRules.kidId, row.app.kidId), eq(appRules.package, pkg)));
+        if (rule?.mode === 'blocked' || rule?.mode === 'held') {
+          throw new ApiError('conflict', 'That app is blocked. Allow it first.');
+        }
+      }
+      await tx
+        .update(deviceApps)
+        .set({ alwaysAllowed })
+        .where(and(eq(deviceApps.deviceId, deviceId), eq(deviceApps.package, pkg)));
+      return row.app.kidId;
+    });
+    await stateChanged(deps, familyId, { kidId });
+    return c.body(null, 204);
+  });
+
   app.openapi(putSettingsRoute, async (c) => {
     const { familyId } = await requireFamilyParent(c, db, config.jwtSecret);
     const { kidId } = c.req.valid('param');
@@ -288,6 +332,7 @@ export function registerAppRoutes(app: Router, deps: AppDeps) {
         installedAt: row.installedAt.toISOString(),
         firstUsedAt: row.firstUsedAt?.toISOString() ?? null,
         removedAt: row.removedAt?.toISOString() ?? null,
+        alwaysAllowed: row.alwaysAllowed,
       });
       apps.set(row.package, entry);
     }

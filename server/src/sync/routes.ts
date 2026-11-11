@@ -18,6 +18,7 @@ import { withFamily } from '../db/family.js';
 import {
   appRules,
   appUsageDaily,
+  deviceApps,
   devices,
   families,
   grants,
@@ -185,6 +186,21 @@ export function registerSyncRoutes(app: Router, deps: AppDeps) {
               .orderBy(asc(appRules.package))
           : [];
 
+      // A block, or an app waiting for a parent, wins over always allowed (docs/SPEC.md §12.4).
+      const stopped = new Set(rules.filter((r) => r.mode === 'blocked' || r.mode === 'held').map((r) => r.package));
+      const alwaysAllowed =
+        device.platform === 'android'
+          ? (
+              await tx
+                .select({ package: deviceApps.package })
+                .from(deviceApps)
+                .where(and(eq(deviceApps.deviceId, deviceId), eq(deviceApps.alwaysAllowed, true), isNull(deviceApps.removedAt)))
+                .orderBy(asc(deviceApps.package))
+            )
+              .map((r) => r.package)
+              .filter((p) => !stopped.has(p))
+          : [];
+
       const limited = rules.filter((r) => r.mode === 'limit').map((r) => r.package);
       const appUsage =
         limited.length > 0
@@ -231,6 +247,7 @@ export function registerSyncRoutes(app: Router, deps: AppDeps) {
           apps: {
             newAppApproval: device.platform === 'android' && kid.newAppApproval,
             rules: rules.map((r) => ({ package: r.package, mode: r.mode as AppRuleMode, dailyMinutes: r.dailyMinutes })),
+            alwaysAllowed,
           },
         },
       };

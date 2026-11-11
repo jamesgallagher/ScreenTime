@@ -21,7 +21,20 @@ data class KidAppDevice(
     val installedAt: String,
     val firstUsedAt: String?,
     val removedAt: String?,
+    val deviceId: String = "",
+    /** Runs on this device when its time is up, not from bedtime to wake-up (docs/SPEC.md §12.4). */
+    val alwaysAllowed: Boolean = false,
 )
+
+/**
+ * The devices an app can be always allowed on: where it is installed now, and only when it is allowed or limited. A
+ * blocked or waiting app, and one that is part of the device, has none.
+ */
+fun alwaysAllowedDevices(app: KidApp): List<KidAppDevice> {
+    val choice = appChoice(app)
+    if (choice != AppChoice.ALLOWED && choice != AppChoice.LIMIT) return emptyList()
+    return app.devices.filter { it.removedAt == null }
+}
 
 /** One row of the Apps page, across the kid's Android devices. */
 data class KidApp(
@@ -133,7 +146,7 @@ fun appRow(app: au.screentime.core.model.api.KidApp): KidApp = KidApp(
         au.screentime.core.model.api.AppSource.OTHER -> AppSource.OTHER
     },
     todaySeconds = app.todaySeconds,
-    devices = app.devices.map { KidAppDevice(it.deviceName, it.installedAt, it.firstUsedAt, it.removedAt) },
+    devices = app.devices.map { KidAppDevice(it.deviceName, it.installedAt, it.firstUsedAt, it.removedAt, it.deviceId, it.alwaysAllowed) },
     blockable = app.blockable,
     rule = when (app.rule?.mode) {
         AppRuleMode.ALLOWED -> AppRule.ALLOWED

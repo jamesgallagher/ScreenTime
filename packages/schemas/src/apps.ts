@@ -58,6 +58,11 @@ export const AppRuleSaved = z.object({ mode: AppRuleMode, dailyMinutes: z.int().
 
 export type KidAppRule = z.infer<typeof KidAppRule>;
 
+/** Body of PUT /v1/devices/{deviceId}/apps/{package}/always-allowed (docs/SPEC.md §12.4). */
+export const AlwaysAllowedPut = z.object({ alwaysAllowed: z.boolean() }).meta({ id: 'AlwaysAllowedPut' });
+
+export type AlwaysAllowedPut = z.infer<typeof AlwaysAllowedPut>;
+
 /** Body of PUT /v1/kids/{kidId}/app-settings. */
 export const KidAppSettings = z.object({ newAppApproval: z.boolean() }).meta({ id: 'KidAppSettings' });
 
@@ -88,6 +93,8 @@ export const KidAppDevice = z
     installedAt: z.iso.datetime(),
     firstUsedAt: z.iso.datetime().nullable(),
     removedAt: z.iso.datetime().nullable(),
+    /** Runs on this device when its time is up, but not from bedtime to wake-up. A block or a used-up limit still wins. */
+    alwaysAllowed: z.boolean(),
   })
   .meta({ id: 'KidAppDevice' });
 

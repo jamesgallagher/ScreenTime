@@ -28,6 +28,21 @@ export function stepLimit(minutes: number, direction: 1 | -1): number {
   return Math.min(MAX_LIMIT_MINUTES, Math.max(LIMIT_STEP_MINUTES, minutes + direction * LIMIT_STEP_MINUTES));
 }
 
+/** PUT /v1/devices/{deviceId}/apps/{package}/always-allowed (docs/SPEC.md §12.4). */
+export async function saveAlwaysAllowed(deviceId: string, pkg: string, on: boolean): Promise<void> {
+  await api.put(`/v1/devices/${deviceId}/apps/${encodeURIComponent(pkg)}/always-allowed`, { alwaysAllowed: on });
+}
+
+/**
+ * The devices an app can be always allowed on: where it is installed now, and only when it is allowed or limited. A
+ * blocked or waiting app, and one that is part of the device, has none.
+ */
+export function alwaysAllowedDevices(app: KidApp): KidAppDevice[] {
+  const choice = appChoice(app);
+  if (choice !== 'allowed' && choice !== 'limit') return [];
+  return app.devices.filter((d) => d.removedAt === null);
+}
+
 export async function saveNewAppApproval(kidId: string, on: boolean): Promise<void> {
   await api.put(`/v1/kids/${kidId}/app-settings`, { newAppApproval: on });
 }
