@@ -29,13 +29,23 @@ Copy `ScreenTime.msi` to the kid's PC, for example on a USB stick.
 
 ## 3. Install
 
-Signed in as a parent, double-click `ScreenTime.msi`. If Windows says it protected your PC, choose **More info**, then **Run anyway**: the installer is not signed. Allow the administrator question. It shows a progress bar and asks nothing else.
+Signed in as a parent, double-click `ScreenTime.msi`. If Windows says it protected your PC, choose **More info**, then **Run anyway**: the installer is not signed.
+
+![The first page: Screen Time, and what it does](images/windows-installer-welcome.png)
+
+1. **Screen Time** explains what it does. Press **Next**.
+2. **Ready to install Screen Time**: press **Install**, and allow the administrator question. A progress bar runs for about a minute.
+3. **Screen Time is installed** says it installed successfully, and that you complete the installation with Start › **Screen Time Setup**. **Open Screen Time Setup now** is ticked: press **Finish** and the setup window opens (step 4), asking the administrator question again.
+
+![The last page: Screen Time is installed, with Open Screen Time Setup now ticked](images/windows-installer-finished.png)
+
+If something goes wrong, the installer shows the error, then **Screen Time Setup did not finish**: Screen Time is not installed. Try again; if it fails again, the reason is in Event Viewer › Windows Logs › Application, from **MsiInstaller**.
 
 That installs the service, sets it to start with Windows, to restart if it stops and to run in Safe Mode too, and takes the "Change the time zone" right from standard accounts. Nothing is limited yet.
 
 ## 4. Connect the accounts
 
-1. Open the Start menu › **Screen Time Setup**, and allow the administrator question.
+1. Open **Screen Time Setup**: from the installer's last page, or later from the Start menu. Allow the administrator question.
 2. Under **Your Screen Time server** type `screentime.gallagherhome.au` and press **Check**. It says **Screen Time answers at** the address.
 3. **The accounts on this PC** lists the accounts. Administrators say **A parent: never limited**. If a kid's account says that, go back to step 1.
 4. For each kid's account: in the parent app, open the kid › **Add device** › **PC**. Type the 6 digits next to the account and press **Connect**. A code works once, for 10 minutes.
@@ -68,7 +78,7 @@ A locked PC cannot show buttons. The kid asks in person or from their phone; a p
 
 ## Updating
 
-The PC does not update itself. Get the newer `ScreenTime.msi` (step 2) and install it the same way (step 3), over the old one. It replaces the old version, the accounts stay connected and the limits carry on, so you do not need **Screen Time Setup** again.
+The PC does not update itself. Get the newer `ScreenTime.msi` (step 2) and install it the same way (step 3), over the old one. Its last page leaves **Open Screen Time Setup now** unticked. It replaces the old version, the accounts stay connected and the limits carry on, so you do not need **Screen Time Setup** again.
 
 To see what is installed, look in Settings › Apps › Installed apps › **Screen Time**. The **Version** in the parent app's Devices panel is the service's own number and does not change with each installer.
 

@@ -1,0 +1,70 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <!--
+    The installer's pages (WixToolset.UI.wixext). WixUI_Minimal without its licence page:
+      install:      Welcome > Ready to install > progress > "Screen Time is installed", with "Open Screen Time Setup now"
+      maintenance:  Welcome > Repair or Remove > Ready > progress > done
+      failure:      MSI's error message, then "Screen Time Setup did not finish" (FatalError)
+    The words are in Strings.wxl. A silent install (msiexec /qn) shows none of it.
+  -->
+  <Fragment>
+    <UI Id="ScreenTimeUI">
+      <TextStyle Id="WixUI_Font_Normal" FaceName="Tahoma" Size="8" />
+      <TextStyle Id="WixUI_Font_Bigger" FaceName="Tahoma" Size="12" />
+      <TextStyle Id="WixUI_Font_Title" FaceName="Tahoma" Size="9" Bold="yes" />
+      <Property Id="DefaultUIFont" Value="WixUI_Font_Normal" />
+
+      <DialogRef Id="ErrorDlg" />
+      <DialogRef Id="FatalError" />
+      <DialogRef Id="FilesInUse" />
+      <DialogRef Id="MsiRMFilesInUse" />
+      <DialogRef Id="PrepareDlg" />
+      <DialogRef Id="ProgressDlg" />
+      <DialogRef Id="ResumeDlg" />
+      <DialogRef Id="UserExit" />
+      <DialogRef Id="WelcomeDlg" />
+
+      <Publish Dialog="WelcomeDlg" Control="Next" Event="NewDialog" Value="VerifyReadyDlg" />
+      <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="WelcomeDlg" Condition="NOT Installed" />
+      <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="MaintenanceTypeDlg" Condition="Installed" />
+
+      <Publish Dialog="MaintenanceWelcomeDlg" Control="Next" Event="NewDialog" Value="MaintenanceTypeDlg" />
+      <Publish Dialog="MaintenanceTypeDlg" Control="RepairButton" Property="StDoneTitle" Value="Screen Time is repaired" />
+      <Publish Dialog="MaintenanceTypeDlg" Control="RepairButton" Property="StDoneText" Value="Its files and service are back as they were installed." />
+      <Publish Dialog="MaintenanceTypeDlg" Control="RepairButton" Event="NewDialog" Value="VerifyReadyDlg" />
+      <Publish Dialog="MaintenanceTypeDlg" Control="RemoveButton" Property="StDoneTitle" Value="Screen Time is removed" />
+      <Publish Dialog="MaintenanceTypeDlg" Control="RemoveButton" Property="StDoneText" Value="Its service, tray and Start menu shortcut are gone. Remove this PC's devices in the parent app too." />
+      <Publish Dialog="MaintenanceTypeDlg" Control="RemoveButton" Event="NewDialog" Value="VerifyReadyDlg" />
+      <Publish Dialog="MaintenanceTypeDlg" Control="Back" Event="NewDialog" Value="MaintenanceWelcomeDlg" />
+
+      <!-- The finish page: the box opens the setup window, which asks Windows for an administrator itself (CARD-052b). -->
+      <Publish Dialog="ExitDialog" Control="Finish" Event="DoAction" Value="LaunchSetup" Order="1"
+               Condition="WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 AND NOT Installed" />
+      <Publish Dialog="ExitDialog" Control="Finish" Event="EndDialog" Value="Return" Order="999" />
+
+      <Property Id="ARPNOMODIFY" Value="1" />
+    </UI>
+
+    <UIRef Id="WixUI_Common" />
+
+    <!-- The pictures, in place of WiX's red disc (make-bitmaps.ps1 draws them). -->
+    <WixVariable Id="WixUIDialogBmp" Value="$(sys.SOURCEFILEDIR)dialog.bmp" />
+    <WixVariable Id="WixUIBannerBmp" Value="$(sys.SOURCEFILEDIR)banner.bmp" />
+
+    <!-- What the finish page says. A new install ticks "Open Screen Time Setup now"; an update over an older version
+         leaves it unticked, because the accounts stay connected (docs/guides/windows-install.md, Updating). -->
+    <Property Id="StDoneTitle" Value="Screen Time is installed" />
+    <Property Id="StDoneText" Value="Screen Time installed successfully." />
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Open Screen Time Setup now" />
+    <SetProperty Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1" Sequence="ui" After="FindRelatedProducts"
+                 Condition="NOT Installed AND NOT WIX_UPGRADE_DETECTED" />
+    <SetProperty Action="StNewInstallText" Id="WIXUI_EXITDIALOGOPTIONALTEXT" Sequence="ui" After="FindRelatedProducts"
+                 Condition="NOT Installed AND NOT WIX_UPGRADE_DETECTED"
+                 Value="To complete the installation, click Start, then Screen Time Setup, and connect this PC and each kid's account with a code from the parent app. Nothing is limited until then.&#xD;&#xA;&#xD;&#xA;Or leave the box below ticked to open it now." />
+    <SetProperty Action="StUpdateText" Id="WIXUI_EXITDIALOGOPTIONALTEXT" Sequence="ui" After="FindRelatedProducts"
+                 Condition="NOT Installed AND WIX_UPGRADE_DETECTED"
+                 Value="It replaced the older version. The accounts on this PC stay connected and the limits carry on, so you do not need Screen Time Setup again." />
+
+    <CustomAction Id="LaunchSetup" Directory="TRAYFOLDER" ExeCommand="&quot;[TRAYFOLDER]ScreenTime.Tray.exe&quot; --setup"
+                  Return="asyncNoWait" />
+  </Fragment>
+</Wix>

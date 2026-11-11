@@ -1,0 +1,15 @@
+<WixLocalization Culture="en-US" Codepage="1252" xmlns="http://wixtoolset.org/schemas/v4/wxl">
+  <!-- The installer's words (UI.wxs), in place of WixUI's own. -->
+  <String Id="WelcomeDlgTitle" Value="{\WixUI_Font_Bigger}Screen Time" />
+  <String Id="WelcomeDlgDescription" Value="Screen Time keeps this PC to the family's limits. When a kid's time is up, the PC locks, and the tray shows each kid the time they have left.&#xD;&#xA;&#xD;&#xA;Click Next to install it." />
+  <String Id="VerifyReadyDlgInstallTitle" Value="{\WixUI_Font_Title}Ready to install Screen Time" />
+  <String Id="VerifyReadyDlgInstallText" Value="Click Install. Windows asks for an administrator, then it takes about a minute." />
+  <String Id="ExitDialogTitle" Value="{\WixUI_Font_Bigger}[StDoneTitle]" />
+  <String Id="ExitDialogDescription" Value="[StDoneText]" />
+  <String Id="FatalErrorTitle" Value="{\WixUI_Font_Bigger}Screen Time Setup did not finish" />
+  <String Id="FatalErrorDescription1" Value="Something went wrong, and Screen Time is not installed." />
+  <String Id="FatalErrorDescription2" Value="Click Finish, then try again. If it fails again, the reason is in Event Viewer, under Windows Logs, Application, from MsiInstaller." />
+  <String Id="UserExitTitle" Value="{\WixUI_Font_Bigger}Screen Time Setup was cancelled" />
+  <String Id="UserExitDescription1" Value="Screen Time is not installed." />
+  <String Id="UserExitDescription2" Value="Click Finish to close Setup." />
+</WixLocalization>
