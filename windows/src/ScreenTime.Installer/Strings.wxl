@@ -7,9 +7,9 @@
   <String Id="ExitDialogTitle" Value="{\WixUI_Font_Bigger}[StDoneTitle]" />
   <String Id="ExitDialogDescription" Value="[StDoneText]" />
   <String Id="FatalErrorTitle" Value="{\WixUI_Font_Bigger}Screen Time Setup did not finish" />
-  <String Id="FatalErrorDescription1" Value="Something went wrong, so Setup undid its changes. This PC is as it was before." />
+  <String Id="FatalErrorDescription1" Value="Something went wrong, and Screen Time is not installed." />
   <String Id="FatalErrorDescription2" Value="Click Finish, then try again. If it fails again, the reason is in Event Viewer, under Windows Logs, Application, from MsiInstaller." />
   <String Id="UserExitTitle" Value="{\WixUI_Font_Bigger}Screen Time Setup was cancelled" />
-  <String Id="UserExitDescription1" Value="Nothing was changed on this PC." />
+  <String Id="UserExitDescription1" Value="Screen Time is not installed." />
   <String Id="UserExitDescription2" Value="Click Finish to close Setup." />
 </WixLocalization>

@@ -31,11 +31,15 @@ Copy `ScreenTime.msi` to the kid's PC, for example on a USB stick.
 
 Signed in as a parent, double-click `ScreenTime.msi`. If Windows says it protected your PC, choose **More info**, then **Run anyway**: the installer is not signed.
 
+![The first page: Screen Time, and what it does](images/windows-installer-welcome.png)
+
 1. **Screen Time** explains what it does. Press **Next**.
 2. **Ready to install Screen Time**: press **Install**, and allow the administrator question. A progress bar runs for about a minute.
 3. **Screen Time is installed** says it installed successfully, and that you complete the installation with Start › **Screen Time Setup**. **Open Screen Time Setup now** is ticked: press **Finish** and the setup window opens (step 4), asking the administrator question again.
 
-If something goes wrong, the installer shows the error, then **Screen Time Setup did not finish**, and puts the PC back as it was. Try again; if it fails again, the reason is in Event Viewer › Windows Logs › Application, from **MsiInstaller**.
+![The last page: Screen Time is installed, with Open Screen Time Setup now ticked](images/windows-installer-finished.png)
+
+If something goes wrong, the installer shows the error, then **Screen Time Setup did not finish**: Screen Time is not installed. Try again; if it fails again, the reason is in Event Viewer › Windows Logs › Application, from **MsiInstaller**.
 
 That installs the service, sets it to start with Windows, to restart if it stops and to run in Safe Mode too, and takes the "Change the time zone" right from standard accounts. Nothing is limited yet.
 

@@ -26,9 +26,11 @@ Set-Content $wsb @"
 "@
 "--- the Sandbox (a window opens and closes by itself; do not use it)"
 Start-Process $wsb
+# Waits for done.txt, not by reading results.txt: a host holding that file open stops the Sandbox writing to it.
+# msiexec takes about 2 minutes to show each install's first page in the Sandbox, so the whole run takes 15 to 25.
 $results = Join-Path $out "results.txt"
 $waited = 0
-while (-not ((Test-Path $results) -and (Select-String -Path $results -Pattern "^done" -Quiet)) -and $waited -lt 900) { Start-Sleep 5; $waited += 5 }
+while (-not (Test-Path (Join-Path $out "done.txt")) -and $waited -lt 2400) { Start-Sleep 10; $waited += 10 }
 "--- what the Sandbox saw"
 Get-Content $results
 "--- (pictures and logs in $out)"

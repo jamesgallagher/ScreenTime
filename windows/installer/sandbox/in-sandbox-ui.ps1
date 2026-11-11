@@ -14,6 +14,7 @@ Add-Type -Namespace W -Name U -MemberDefinition @'
 [System.Runtime.InteropServices.DllImport("user32.dll")] public static extern bool PostMessage(System.IntPtr h, uint m, System.IntPtr w, System.IntPtr l);
 [System.Runtime.InteropServices.DllImport("user32.dll")] public static extern System.IntPtr SendMessage(System.IntPtr h, uint m, System.IntPtr w, System.IntPtr l);
 [System.Runtime.InteropServices.DllImport("user32.dll")] public static extern int GetWindowLong(System.IntPtr h, int i);
+[System.Runtime.InteropServices.DllImport("user32.dll")] public static extern bool PrintWindow(System.IntPtr h, System.IntPtr hdc, uint flags);
 '@
 [W.U]::SetProcessDPIAware() | Out-Null
 $A = [System.Windows.Automation.AutomationElement]
@@ -31,30 +32,36 @@ function Page([string]$name) {
 # MSI's controls are plain Win32 windows: UI Automation finds them, but they have no patterns, so the window styles
 # say what is visible, disabled or ticked, and BM_CLICK presses a button.
 function Style($e) { [W.U]::GetWindowLong([IntPtr]$e.Current.NativeWindowHandle, -16) }
-function Visible($e) { (Style $e) -band 0x10000000 }
+# Visible and enabled: MSI's "Preparing" page shows a disabled Next for a moment before the Welcome page.
+function Usable($e) { ((Style $e) -band 0x18000000) -eq 0x10000000 }
 function Find($win, [string]$name) {
   $cond = New-Object System.Windows.Automation.PropertyCondition($A::NameProperty, $name)
-  foreach ($e in $win.FindAll("Descendants", $cond)) { if (Visible $e) { return $e } }
+  try { foreach ($e in $win.FindAll("Descendants", $cond)) { if (Usable $e) { return $e } } } catch { }
   $null
 }
-function WaitPage([string]$name, [int]$seconds = 120) {
+# In the Sandbox msiexec takes about 2 minutes to show its first page, so the waits are long.
+function WaitPage([string]$name, [int]$seconds = 600) {
   for ($i = 0; $i -lt $seconds * 2; $i++) { $w = Page $name; if ($w) { Start-Sleep -Milliseconds 700; return $w }; Start-Sleep -Milliseconds 500 }
   Say "  (no page with '$name' after $seconds s)"
   $null
 }
+# PrintWindow draws the window itself, so the picture is right even when the Start menu or another window covers it
+# (a script cannot bring a window to the front).
 function Shot($win, [string]$file) {
-  [W.U]::SetForegroundWindow([IntPtr]$win.Current.NativeWindowHandle) | Out-Null
-  Start-Sleep -Milliseconds 400
+  if (-not $win) { return }
   $r = $win.Current.BoundingRectangle
   $bmp = New-Object System.Drawing.Bitmap ([int]$r.Width), ([int]$r.Height)
   $g = [System.Drawing.Graphics]::FromImage($bmp)
-  $g.CopyFromScreen([int]$r.X, [int]$r.Y, 0, 0, $bmp.Size)
+  $hdc = $g.GetHdc()
+  [W.U]::PrintWindow([IntPtr]$win.Current.NativeWindowHandle, $hdc, 2) | Out-Null
+  $g.ReleaseHdc($hdc)
   $bmp.Save("C:\out\$file", [System.Drawing.Imaging.ImageFormat]::Png)
   $g.Dispose(); $bmp.Dispose()
   Say "  picture: $file"
 }
 # Every visible text, button and box on the page, so results.txt says what the picture shows.
 function Texts($win) {
+  if (-not $win) { return }
   foreach ($e in $win.FindAll("Descendants", [System.Windows.Automation.Condition]::TrueCondition)) {
     $c = $e.Current
     $style = Style $e
@@ -68,7 +75,8 @@ function Texts($win) {
   }
 }
 function Press($win, [string]$name) {
-  $b = Find $win $name
+  $b = $null
+  for ($i = 0; $i -lt 20 -and $win -and -not $b; $i++) { $b = Find $win $name; if (-not $b) { Start-Sleep -Milliseconds 500 } }
   if (-not $b) { Say "  (no '$name' button)"; return }
   [W.U]::PostMessage([IntPtr]$b.Current.NativeWindowHandle, 0xF5, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
   Say "  pressed $name"
@@ -122,7 +130,7 @@ Say "  silent install of the older MSI exit $(Silent @('/i', 'C:\in\ScreenTime-o
 $p = Msiexec @("/i", $msi, "/l*v", "C:\out\2-update.log")
 $w = WaitPage "Next"; Press $w "Next"
 $w = WaitPage "Install"; Press $w "Install"
-$w = WaitPage "Finish" 300; Texts $w; Shot $w "6-updated.png"
+$w = WaitPage "Finish"; Texts $w; Shot $w "6-updated.png"
 Press $w "Finish"
 $p.WaitForExit(60000) | Out-Null
 Say "  msiexec exit $($p.ExitCode); installed: $(Installed); service: $(ServiceState)"
@@ -134,7 +142,7 @@ $p = Msiexec @("/i", $msi, "/l*v", "C:\out\3-remove.log")
 $w = WaitPage "Next"; Texts $w; Press $w "Next"
 $w = WaitPage "Repair"; Texts $w; Press $w "Remove"
 $w = WaitPage "Ready to remove Screen Time"; Press $w "Remove"
-$w = WaitPage "Finish" 300; Texts $w; Shot $w "7-removed.png"
+$w = WaitPage "Finish"; Texts $w; Shot $w "7-removed.png"
 Press $w "Finish"
 $p.WaitForExit(60000) | Out-Null
 Say "  msiexec exit $($p.ExitCode); installed: $(Installed); service: $(ServiceState); files: $(Test-Path 'C:\Program Files\ScreenTime')"
@@ -147,8 +155,9 @@ Set-ItemProperty $ifeo Debugger "C:\no-such-folder\no-such.exe"
 $p = Msiexec @("/i", $msi, "/l*v", "C:\out\4-failed.log")
 $w = WaitPage "Next"; Press $w "Next"
 $w = WaitPage "Install"; Press $w "Install"
-$w = WaitPage "OK" 300; if ($w) { Texts $w; Shot $w "8-error.png"; Press $w "OK" }
-$w = WaitPage "Finish" 300; Texts $w; Shot $w "9-did-not-finish.png"
+for ($i = 0; $i -lt 1200 -and -not (Page "OK") -and -not (Page "Finish"); $i++) { Start-Sleep -Milliseconds 500 }
+$w = Page "OK"; if ($w) { Start-Sleep 1; Texts $w; Shot $w "8-error.png"; Press $w "OK" } else { Say "  (no error message before the last page)" }
+$w = WaitPage "Finish"; Texts $w; Shot $w "9-did-not-finish.png"
 Press $w "Finish"
 $p.WaitForExit(60000) | Out-Null
 Remove-Item $ifeo -Force
@@ -158,4 +167,5 @@ Say "  $(TimeZoneRight)"
 foreach ($line in (Select-String -Path C:\out\4-failed.log -Pattern "Error 17\d\d|Return value 3" | Select-Object -First 3)) { Say "  log: $($line.Line.Trim())" }
 
 Say "done"
+Set-Content C:\out\done.txt "done"
 Stop-Computer -Force
