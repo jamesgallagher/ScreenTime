@@ -70,11 +70,17 @@
     <CustomAction Id="Recovery" Directory="System64Folder" Execute="deferred" Impersonate="no" Return="check"
                   ExeCommand="&quot;[System64Folder]sc.exe&quot; failure ScreenTime reset= 86400 actions= restart/0/restart/5000/restart/30000" />
 
-    <!-- Hardening: run as SYSTEM after the files are in place; undone before they are removed. -->
+    <!--
+      Hardening: run as SYSTEM after the files are in place; undone before they are removed. If the install fails after
+      Harden (Recovery failing, say), RollbackHarden gives the right back. Rollback runs the script backwards, so it
+      runs before InstallFiles' rollback deletes ScreenTime.Service.exe.
+    -->
+    <CustomAction Id="RollbackHarden" FileRef="ServiceExe" ExeCommand="unharden" Execute="rollback" Impersonate="no" Return="ignore" />
     <CustomAction Id="Harden" FileRef="ServiceExe" ExeCommand="harden" Execute="deferred" Impersonate="no" Return="check" />
     <CustomAction Id="Unharden" FileRef="ServiceExe" ExeCommand="unharden" Execute="deferred" Impersonate="no" Return="ignore" />
     <InstallExecuteSequence>
       <Custom Action="Recovery" After="InstallServices" Condition="NOT REMOVE" />
+      <Custom Action="RollbackHarden" Before="Harden" Condition="NOT REMOVE" />
       <Custom Action="Harden" After="InstallFiles" Condition="NOT REMOVE" />
       <Custom Action="Unharden" Before="RemoveFiles" Condition="REMOVE=&quot;ALL&quot;" />
     </InstallExecuteSequence>
