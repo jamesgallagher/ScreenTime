@@ -5,11 +5,12 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Title="Screen Time setup">
 
-    <!-- docs/SPEC.md §12.2 install: the server, then the PC's accounts with a code each. 600 × 720, Mica. Every control a
-         test run drives has an AutomationProperties.AutomationId; the account rows get theirs in code (Code_<user>,
-         Connect_<user>, State_<user>, Change_<user>). -->
+    <!-- docs/SPEC.md §12.2 install: the server, then a parent signs in once, then the kid for each account. 600 × 800,
+         Mica. Every control a test run drives has an AutomationProperties.AutomationId; the account rows get theirs in
+         code (Kid_<user>, Connect_<user>, Code_<user>, State_<user>, Change_<user>, Cancel_<user>, Error_<user>). -->
     <Grid Padding="32,28,32,20" RowSpacing="0">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -19,11 +20,11 @@
         <StackPanel Grid.Row="0" Spacing="6">
             <TextBlock FontSize="24" FontWeight="SemiBold" Text="Set up Screen Time" />
             <TextBlock FontSize="14" Foreground="{ThemeResource StMutedBrush}" TextWrapping="Wrap"
-                       Text="Connect this PC to your family, then give each kid's account a code from the parent app." />
+                       Text="Connect this PC to your family, sign in as a parent, then pick the kid who uses each account." />
         </StackPanel>
 
         <!-- 1. The server -->
-        <StackPanel Grid.Row="1" Spacing="10" Margin="0,28,0,0">
+        <StackPanel Grid.Row="1" Spacing="10" Margin="0,24,0,0">
             <StackPanel Orientation="Horizontal" Spacing="10">
                 <Border Width="24" Height="24" CornerRadius="12" Background="{ThemeResource StPlentyBrush}">
                     <TextBlock Text="1" FontSize="13" FontWeight="SemiBold" Foreground="{ThemeResource StOnPrimaryBrush}"
@@ -38,7 +39,7 @@
                 </Grid.ColumnDefinitions>
                 <TextBox x:Name="ServerBox" AutomationProperties.AutomationId="ServerBox" AutomationProperties.Name="Server address"
                          PlaceholderText="screentime.example.com" IsSpellCheckEnabled="False" TextChanged="OnServerChanged" KeyDown="OnServerKey" />
-                <Button x:Name="CheckButton" Grid.Column="1" AutomationProperties.AutomationId="CheckButton" MinWidth="96"
+                <Button x:Name="CheckButton" Grid.Column="1" AutomationProperties.AutomationId="CheckButton" MinWidth="120"
                         Content="Check" Click="OnCheck" />
             </Grid>
             <StackPanel Orientation="Horizontal" Spacing="8" Margin="34,0,0,0" MinHeight="20">
@@ -48,8 +49,54 @@
             </StackPanel>
         </StackPanel>
 
-        <!-- 2. The accounts -->
-        <Grid x:Name="AccountsSection" Grid.Row="2" Margin="0,24,0,0" RowSpacing="10" Opacity="0.45" IsHitTestVisible="False">
+        <!-- 2. Sign in as a parent (once for the whole PC), or type codes instead -->
+        <StackPanel x:Name="SignInSection" Grid.Row="2" Spacing="10" Margin="0,22,0,0" Opacity="0.45" IsHitTestVisible="False">
+            <StackPanel Orientation="Horizontal" Spacing="10">
+                <Border Width="24" Height="24" CornerRadius="12" Background="{ThemeResource StPlentyBrush}">
+                    <TextBlock Text="2" FontSize="13" FontWeight="SemiBold" Foreground="{ThemeResource StOnPrimaryBrush}"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
+                <TextBlock FontSize="16" FontWeight="SemiBold" Text="Sign in as a parent" VerticalAlignment="Center" />
+            </StackPanel>
+            <StackPanel x:Name="SignInForm" Spacing="8" Margin="34,0,0,0">
+                <Grid ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBox x:Name="EmailBox" AutomationProperties.AutomationId="EmailBox" AutomationProperties.Name="Parent's email"
+                             PlaceholderText="Your email for the parent app" IsSpellCheckEnabled="False"
+                             TextChanged="OnEmailChanged" KeyDown="OnEmailKey" />
+                    <Button x:Name="SendCodeButton" Grid.Column="1" AutomationProperties.AutomationId="SendCodeButton" MinWidth="120"
+                            Content="Email me a code" Click="OnSendCode" />
+                </Grid>
+                <Grid x:Name="SignInCodeRow" ColumnSpacing="8" Visibility="Collapsed">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBox x:Name="SignInCodeBox" AutomationProperties.AutomationId="SignInCodeBox" AutomationProperties.Name="Code from the email"
+                             PlaceholderText="6-digit code from the email" MaxLength="6" FontFamily="Consolas" IsSpellCheckEnabled="False"
+                             TextChanged="OnSignInCodeChanged" KeyDown="OnSignInCodeKey" />
+                    <Button x:Name="SignInButton" Grid.Column="1" AutomationProperties.AutomationId="SignInButton" MinWidth="120"
+                            Style="{StaticResource AccentButtonStyle}" Content="Sign in" IsEnabled="False" Click="OnSignIn" />
+                </Grid>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="8" Margin="34,0,0,0" MinHeight="20">
+                <ProgressRing x:Name="SignInRing" Width="16" Height="16" IsActive="False" Visibility="Collapsed" />
+                <TextBlock x:Name="SignInStatus" AutomationProperties.AutomationId="SignInStatus" FontSize="13" TextWrapping="Wrap" MaxWidth="480"
+                           Foreground="{ThemeResource StMutedBrush}" Text="Use the email you sign in to the parent app with. We'll email you a code." />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="16" Margin="34,-6,0,0">
+                <HyperlinkButton x:Name="SignOutLink" AutomationProperties.AutomationId="SignOutLink" Content="Sign out" FontSize="12"
+                                 Padding="0,2,0,2" Visibility="Collapsed" Click="OnSignOut" />
+                <HyperlinkButton x:Name="CodeModeLink" AutomationProperties.AutomationId="CodeModeLink" Content="Have a code instead?" FontSize="12"
+                                 Padding="0,2,0,2" Click="OnCodeMode" />
+            </StackPanel>
+        </StackPanel>
+
+        <!-- 3. The accounts -->
+        <Grid x:Name="AccountsSection" Grid.Row="3" Margin="0,22,0,0" RowSpacing="10" Opacity="0.45" IsHitTestVisible="False">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
@@ -57,13 +104,13 @@
             </Grid.RowDefinitions>
             <StackPanel Orientation="Horizontal" Spacing="10">
                 <Border Width="24" Height="24" CornerRadius="12" Background="{ThemeResource StPlentyBrush}">
-                    <TextBlock Text="2" FontSize="13" FontWeight="SemiBold" Foreground="{ThemeResource StOnPrimaryBrush}"
+                    <TextBlock Text="3" FontSize="13" FontWeight="SemiBold" Foreground="{ThemeResource StOnPrimaryBrush}"
                                HorizontalAlignment="Center" VerticalAlignment="Center" />
                 </Border>
                 <TextBlock FontSize="16" FontWeight="SemiBold" Text="The accounts on this PC" VerticalAlignment="Center" />
             </StackPanel>
-            <TextBlock Grid.Row="1" Margin="34,0,0,0" FontSize="13" Foreground="{ThemeResource StMutedBrush}" TextWrapping="Wrap"
-                       Text="For each kid: in the parent app, open the kid, choose Add device, then PC, and type the 6 digits here. A code works once, for 10 minutes." />
+            <TextBlock x:Name="AccountsHelp" Grid.Row="1" Margin="34,0,0,0" FontSize="13" Foreground="{ThemeResource StMutedBrush}" TextWrapping="Wrap"
+                       Text="Sign in above, then pick the kid who uses each account." />
             <Border Grid.Row="2" Margin="34,4,0,0" CornerRadius="8" BorderThickness="1" BorderBrush="{ThemeResource StOutlineBrush}"
                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -73,7 +120,7 @@
         </Grid>
 
         <!-- Finish -->
-        <Grid Grid.Row="3" Margin="0,20,0,0" ColumnSpacing="12">
+        <Grid Grid.Row="4" Margin="0,20,0,0" ColumnSpacing="12">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />

@@ -1,3 +1,5 @@
+using ScreenTime.Core.Setup;
+
 namespace ScreenTime.Tray.Setup;
 
 /// <summary>One local account people sign in with, as the setup window lists it.</summary>
@@ -8,17 +10,18 @@ namespace ScreenTime.Tray.Setup;
 public sealed record SetupAccount(string UserName, string FullName, bool IsAdmin, string? KidName);
 
 /// <summary>What one enrolment gave: the kid's name when it worked, else a short sentence for the parent.</summary>
-public sealed record EnrolAnswer(string? KidName, string? Error)
+/// <param name="SignInAgain">The parent's sign-in ran out: the window asks them to sign in again.</param>
+public sealed record EnrolAnswer(string? KidName, string? Error, bool SignInAgain = false)
 {
     public static EnrolAnswer Enrolled(string kidName) => new(kidName, null);
-    public static EnrolAnswer Failed(string error) => new(null, error);
+    public static EnrolAnswer Failed(string error, bool signInAgain = false) => new(null, error, signInAgain);
 }
 
 /// <summary>
-/// What the setup window (docs/SPEC.md §12.2: "the installer asks for the server hostname, then lists local standard
-/// accounts; for each kid account the parent enters an enrolment code") needs from the PC and the server. The demo
-/// has a fake one; CARD-052b implements it. Errors are short sentences, never codes. Every call may take seconds: the
-/// window shows it is busy and never calls two at once.
+/// What the setup window (docs/SPEC.md §12.2: the server, then a parent signs in once and picks the kid for each
+/// standard account) needs from the PC and the server. The demo has a fake one. Errors are short sentences, never
+/// codes. Every call may take seconds: the window shows it is busy and never calls two at once. The parent's sign-in
+/// lives only in the backend's memory, never on disk.
 /// </summary>
 public interface ISetupBackend
 {
@@ -31,8 +34,23 @@ public interface ISetupBackend
     /// <summary>The PC's local accounts, standard and administrator, without Windows' built-in ones, in name order.</summary>
     Task<IReadOnlyList<SetupAccount>> AccountsAsync();
 
-    /// <summary>Enrols <paramref name="userName"/> with a 6-digit code from the parent app, on the server that was checked.</summary>
+    /// <summary>Emails a 6-digit sign-in code to the parent. Null when sent, else a sentence.</summary>
+    Task<string?> RequestSignInCodeAsync(string address, string email);
+
+    /// <summary>Signs the parent in with the emailed code (any earlier sign-in ends). Null when signed in, else a sentence.</summary>
+    Task<string?> SignInAsync(string address, string email, string code);
+
+    /// <summary>The family's kids, oldest first, for the signed-in parent.</summary>
+    Task<SetupAnswer<IReadOnlyList<SetupKid>>> KidsAsync();
+
+    /// <summary>Enrols <paramref name="userName"/> as the kid: makes a PC code for them as the signed-in parent, then enrols with it.</summary>
+    Task<EnrolAnswer> ConnectAsync(string address, string userName, string kidId);
+
+    /// <summary>Enrols <paramref name="userName"/> with a 6-digit code typed from the parent app (no sign-in: "Have a code instead?").</summary>
     Task<EnrolAnswer> EnrolAsync(string address, string userName, string code);
+
+    /// <summary>Ends the parent's sign-in (best effort; it runs out by itself after 15 minutes).</summary>
+    Task SignOutAsync();
 
     /// <summary>Restarts the service so it uses the server and the accounts now. Null when it worked, else a sentence.</summary>
     Task<string?> FinishAsync();
@@ -49,7 +67,17 @@ internal sealed class NotWiredSetupBackend : ISetupBackend
 
     public Task<IReadOnlyList<SetupAccount>> AccountsAsync() => Task.FromResult<IReadOnlyList<SetupAccount>>([]);
 
+    public Task<string?> RequestSignInCodeAsync(string address, string email) => Task.FromResult<string?>(NotYet);
+
+    public Task<string?> SignInAsync(string address, string email, string code) => Task.FromResult<string?>(NotYet);
+
+    public Task<SetupAnswer<IReadOnlyList<SetupKid>>> KidsAsync() => Task.FromResult(new SetupAnswer<IReadOnlyList<SetupKid>>(null, NotYet));
+
+    public Task<EnrolAnswer> ConnectAsync(string address, string userName, string kidId) => Task.FromResult(EnrolAnswer.Failed(NotYet));
+
     public Task<EnrolAnswer> EnrolAsync(string address, string userName, string code) => Task.FromResult(EnrolAnswer.Failed(NotYet));
+
+    public Task SignOutAsync() => Task.CompletedTask;
 
     public Task<string?> FinishAsync() => Task.FromResult<string?>(NotYet);
 }

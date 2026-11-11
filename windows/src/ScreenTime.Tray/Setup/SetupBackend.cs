@@ -8,9 +8,10 @@ using ScreenTime.Core.Store;
 namespace ScreenTime.Tray.Setup;
 
 /// <summary>
-/// The real <see cref="ISetupBackend"/> (CARD-052b). Runs elevated (App restarts <c>--setup</c> as administrator).
+/// The real <see cref="ISetupBackend"/> (CARD-052b; parent sign-in added later). Runs elevated (App restarts <c>--setup</c> as administrator).
 /// Reads the service's config.json and state.db in C:\ProgramData\ScreenTime, lists the local accounts, enrols by
-/// running the installed <c>ScreenTime.Service.exe enrol</c> (one tested path, the same as the command line), and
+/// running the installed <c>ScreenTime.Service.exe enrol</c> (one tested path, the same as the command line) with a code
+/// it makes as the signed-in parent (<see cref="ParentSetupApi"/>) or one the parent typed, and
 /// restarts the service on Finish so it uses the new server and accounts.
 /// </summary>
 internal sealed class SetupBackend : ISetupBackend
@@ -51,6 +52,51 @@ internal sealed class SetupBackend : ISetupBackend
         var picked = SetupRules.Accounts(local, KidsBySid());
         return (IReadOnlyList<SetupAccount>)picked.Select(a => new SetupAccount(a.UserName, a.FullName, a.IsAdmin, a.KidName)).ToList();
     });
+
+    /// <summary>The parent signed in on this window (memory only), and the server it is for.</summary>
+    private ParentSetupApi? _parent;
+    private string? _parentServer;
+
+    public async Task<string?> RequestSignInCodeAsync(string address, string email)
+    {
+        if (SetupRules.ServerUrl(address) is not { } url) return SetupRules.NotAnAddress;
+        return await ParentFor(url).RequestCodeAsync(email);
+    }
+
+    public async Task<string?> SignInAsync(string address, string email, string code)
+    {
+        if (SetupRules.ServerUrl(address) is not { } url) return SetupRules.NotAnAddress;
+        return await ParentFor(url).SignInAsync(email, code, SetupRules.SignInLabel(Environment.MachineName));
+    }
+
+    public async Task<SetupAnswer<IReadOnlyList<SetupKid>>> KidsAsync() =>
+        _parent is { SignedIn: true } parent ? await parent.KidsAsync() : new(null, SetupRules.SignInAgain, true);
+
+    public async Task<EnrolAnswer> ConnectAsync(string address, string userName, string kidId)
+    {
+        if (_parent is not { SignedIn: true } parent) return EnrolAnswer.Failed(SetupRules.SignInAgain, signInAgain: true);
+        var code = await parent.PcCodeAsync(kidId);
+        if (code.Value is not { } pcCode) return EnrolAnswer.Failed(code.Error ?? SetupRules.ServerProblem, code.SignInAgain);
+        // The same tested path as a typed code: the service's enrol command, with a code the parent never sees.
+        return await EnrolAsync(address, userName, pcCode);
+    }
+
+    public async Task SignOutAsync()
+    {
+        if (_parent is null) return;
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await _parent.SignOutAsync(timeout.Token);
+    }
+
+    /// <summary>The parent client for the server at <paramref name="url"/>: a new one (signed out) when the server changed.</summary>
+    private ParentSetupApi ParentFor(string url)
+    {
+        if (_parent is not null && _parentServer == url) return _parent;
+        // The web client's refresh token comes as a cookie: with no cookie store it is dropped, so nothing outlives the window.
+        var http = new HttpClient(new HttpClientHandler { UseCookies = false }) { BaseAddress = new Uri(url), Timeout = TimeSpan.FromSeconds(20) };
+        _parentServer = url;
+        return _parent = new ParentSetupApi(http);
+    }
 
     public async Task<EnrolAnswer> EnrolAsync(string address, string userName, string code)
     {
