@@ -49,13 +49,13 @@
     <!-- What the finish page says. A new install ticks "Open Screen Time Setup now"; an update over an older version
          leaves it unticked, because the accounts stay connected (docs/guides/windows-install.md, Updating). -->
     <Property Id="StDoneTitle" Value="Screen Time is installed" />
-    <Property Id="StDoneText" Value="Its service is running on this PC." />
+    <Property Id="StDoneText" Value="Screen Time installed successfully." />
     <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Open Screen Time Setup now" />
     <SetProperty Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1" Sequence="ui" After="FindRelatedProducts"
                  Condition="NOT Installed AND NOT WIX_UPGRADE_DETECTED" />
     <SetProperty Action="StNewInstallText" Id="WIXUI_EXITDIALOGOPTIONALTEXT" Sequence="ui" After="FindRelatedProducts"
                  Condition="NOT Installed AND NOT WIX_UPGRADE_DETECTED"
-                 Value="Next, connect this PC to your Screen Time server, and each kid's Windows account to that kid, with a code from the parent app. Screen Time Setup does that, and it is in the Start menu too. Nothing is limited until then." />
+                 Value="To complete the installation, click Start, then Screen Time Setup, and connect this PC and each kid's account with a code from the parent app. Nothing is limited until then.&#xD;&#xA;&#xD;&#xA;Or leave the box below ticked to open it now." />
     <SetProperty Action="StUpdateText" Id="WIXUI_EXITDIALOGOPTIONALTEXT" Sequence="ui" After="FindRelatedProducts"
                  Condition="NOT Installed AND WIX_UPGRADE_DETECTED"
                  Value="It replaced the older version. The accounts on this PC stay connected and the limits carry on, so you do not need Screen Time Setup again." />
