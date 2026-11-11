@@ -666,6 +666,15 @@ class ApiClient(
     }
 
     /**
+     * The latest kid app, parent app and PC installer.
+     *
+     * `GET /v1/downloads`
+     */
+    suspend fun getDownloads(): Downloads {
+        return call(HttpMethod.Get, "/v1/downloads", auth = false).body()
+    }
+
+    /**
      * Start an SOS.
      *
      * `POST /v1/device/sos`

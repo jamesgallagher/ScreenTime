@@ -2473,6 +2473,52 @@
           "versionName"
         ]
       },
+      "Downloads": {
+        "type": "object",
+        "properties": {
+          "kid": {
+            "$ref": "#/components/schemas/DownloadFile"
+          },
+          "parent": {
+            "$ref": "#/components/schemas/DownloadFile"
+          },
+          "windows": {
+            "$ref": "#/components/schemas/DownloadFile"
+          }
+        },
+        "required": [
+          "kid",
+          "parent",
+          "windows"
+        ]
+      },
+      "DownloadFile": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "versionName": {
+            "type": "string"
+          },
+          "sizeBytes": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "fileName": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "versionName",
+          "sizeBytes",
+          "fileName",
+          "url"
+        ]
+      },
       "Sos": {
         "type": "object",
         "properties": {
@@ -7056,6 +7102,27 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/downloads": {
+      "get": {
+        "tags": [
+          "public"
+        ],
+        "summary": "The latest kid app, parent app and PC installer",
+        "description": "No sign-in: the download page at /app uses it. An app nothing has been published for is null.",
+        "responses": {
+          "200": {
+            "description": "The latest of each.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Downloads"
                 }
               }
             }

@@ -23,6 +23,7 @@ import { registerSosRoutes } from './sos/routes.js';
 import { registerSyncRoutes } from './sync/routes.js';
 import { registerAppRoutes } from './apps/routes.js';
 import { registerAppUpdateRoutes } from './appupdate/routes.js';
+import { registerDownloadRoutes } from './downloads/routes.js';
 import { registerTamperRoutes } from './tamper/routes.js';
 import { registerWeb } from './web.js';
 
@@ -99,6 +100,7 @@ export function createApp(appDeps: AppDeps) {
   registerTamperRoutes(app, deps);
   registerAppRoutes(app, deps);
   registerAppUpdateRoutes(app, deps);
+  registerDownloadRoutes(app, deps);
   registerSosRoutes(app, deps);
   registerNotifyRoutes(app, deps);
   registerAdminRoutes(app, deps);

@@ -111,3 +111,4 @@ export {
   KidAppSettings,
 } from './apps.js';
 export { AppUpdateAnswer, AppUpdateCheck, AppUpdateOffer } from './appupdate.js';
+export { DownloadApp, DownloadFile, Downloads } from './downloads.js';

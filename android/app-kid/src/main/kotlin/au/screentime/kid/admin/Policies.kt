@@ -168,14 +168,60 @@ object Policies {
     }
 
     /**
-     * Grants every runtime permission the manifest asks for, so the kid never sees a permission prompt.
+     * Location is only for an SOS (docs/SPEC.md §15). While the app holds it, Android keeps telling the kid "ST Kid has
+     * location access" (seen over and over on the Redmi pilot, 11 Nov 2026), so it holds it only during an SOS.
+     */
+    val LOCATION = listOf(
+        android.Manifest.permission.ACCESS_FINE_LOCATION,
+        android.Manifest.permission.ACCESS_COARSE_LOCATION,
+        android.Manifest.permission.ACCESS_BACKGROUND_LOCATION,
+    )
+
+    /** True while the app holds any location permission. */
+    fun holdsLocation(context: Context): Boolean =
+        LOCATION.any { context.checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }
+
+    /** An SOS starts: the app may take positions. Fine location first: Android wants it before background location. */
+    fun allowLocation(context: Context) {
+        if (!isDeviceOwner(context)) return
+        val dpm = context.getSystemService(DevicePolicyManager::class.java)
+        val admin = KidDeviceAdminReceiver.component(context)
+        for (permission in LOCATION) {
+            if (!dpm.setPermissionGrantState(admin, context.packageName, permission, DevicePolicyManager.PERMISSION_GRANT_STATE_GRANTED)) {
+                Log.w(TAG, "could not grant $permission")
+            }
+        }
+        Log.i(TAG, "location: allowed for the SOS")
+    }
+
+    /**
+     * No SOS any more: the app gives location back. **Android stops the app's process when a permission is taken away**,
+     * so the service calls this only with the screen off and nothing left to send, and Android starts it again.
+     */
+    fun takeBackLocation(context: Context) {
+        if (!isDeviceOwner(context)) return
+        val dpm = context.getSystemService(DevicePolicyManager::class.java)
+        val admin = KidDeviceAdminReceiver.component(context)
+        Log.i(TAG, "location: taken back, so Android restarts the app")
+        for (permission in LOCATION.reversed()) {
+            val ok = dpm.setPermissionGrantState(admin, context.packageName, permission, DevicePolicyManager.PERMISSION_GRANT_STATE_DENIED)
+            Log.i(TAG, "location: $permission denied=$ok state=${dpm.getPermissionGrantState(admin, context.packageName, permission)}")
+        }
+    }
+
+    /**
+     * Grants every runtime permission the manifest asks for except location, so the kid never sees a permission prompt.
      * Does nothing unless the app is Device Owner. The setup screen calls it before scanning, for the camera.
+     * A permission already granted this way is left alone.
      */
     fun grantRuntimePermissions(context: Context) {
         if (!isDeviceOwner(context)) return
         val dpm = context.getSystemService(DevicePolicyManager::class.java)
         val admin = KidDeviceAdminReceiver.component(context)
-        for (permission in runtimePermissions(context)) {
+        for (permission in runtimePermissions(context) - LOCATION.toSet()) {
+            val now = dpm.getPermissionGrantState(admin, context.packageName, permission)
+            val held = context.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
+            if (now == DevicePolicyManager.PERMISSION_GRANT_STATE_GRANTED && held) continue
             val granted = dpm.setPermissionGrantState(
                 admin,
                 context.packageName,
