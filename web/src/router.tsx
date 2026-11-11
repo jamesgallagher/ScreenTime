@@ -11,6 +11,7 @@ import { AppShell } from '@/components/app-shell';
 import { SosBanner } from '@/components/sos-banner';
 import { useAuth } from '@/lib/auth';
 import { AdminPage } from '@/pages/admin';
+import { DownloadPage } from '@/pages/download';
 import { InboxPage } from '@/pages/inbox';
 import { KidPage } from '@/pages/kid';
 import { KidsPage } from '@/pages/kids';
@@ -52,7 +53,10 @@ const rootRoute = createRootRoute({ component: Outlet, notFoundComponent: NotFou
 
 const signInRoute = createRoute({ getParentRoute: () => rootRoute, path: '/sign-in', component: SignInPage });
 
-const appRoute = createRoute({ getParentRoute: () => rootRoute, id: 'app', component: SignedInLayout });
+/** The download page (docs/SPEC.md §12.5): public, no sign-in. */
+const downloadRoute = createRoute({ getParentRoute: () => rootRoute, path: '/app', component: DownloadPage });
+
+const appRoute = createRoute({ getParentRoute: () => rootRoute, id: 'signed-in', component: SignedInLayout });
 
 const todayRoute = createRoute({ getParentRoute: () => appRoute, path: '/', component: TodayPage });
 const inboxRoute = createRoute({ getParentRoute: () => appRoute, path: '/inbox', component: InboxPage });
@@ -71,6 +75,7 @@ const adminRoute = createRoute({ getParentRoute: () => appRoute, path: '/admin',
 
 const routeTree = rootRoute.addChildren([
   signInRoute,
+  downloadRoute,
   appRoute.addChildren([todayRoute, inboxRoute, kidsRoute, kidRoute, settingsRoute, adminRoute]),
 ]);
 

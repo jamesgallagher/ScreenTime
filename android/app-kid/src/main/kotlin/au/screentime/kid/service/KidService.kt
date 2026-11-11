@@ -164,6 +164,7 @@ class KidService : Service() {
                 Intent.ACTION_SCREEN_OFF -> scope.launch {
                     recorder.stop(at)
                     sync()
+                    giveBackLocationIfDone()
                 }
                 Intent.ACTION_TIME_CHANGED -> scope.launch { onTimeSet() }
             }
@@ -264,6 +265,8 @@ class KidService : Service() {
             recorder.closeOpen()
             if (inUse()) recorder.start(clock.nowMs())
             sync()
+            // Android takes one permission back per restart, so with the screen still off the next one goes at once.
+            giveBackLocationIfDone()
             while (isActive) {
                 // While in use, or in parent mode with the screen on, until the next warning, lock, period or end of
                 // parent mode (at least once a minute; in parent mode a sync then if the live channel is down, to see
@@ -387,6 +390,17 @@ class KidService : Service() {
         if (!inUse() || segments.open() != null) return
         recorder.start(at)
         if (stale) sync() else report()
+    }
+
+    /**
+     * Location is held only during an SOS (docs/SPEC.md §15). Once one has ended and everything is sent, or after an
+     * update from a version that held it all the time, it is given back, here with the screen off: Android stops the
+     * process when a permission is taken away, and starts the service again (it is sticky, and the restart is logged).
+     */
+    private suspend fun giveBackLocationIfDone() {
+        if (sos.pending || screenOn() || !Policies.holdsLocation(this)) return
+        // The open segment ended at screen off and the sync above sent it; nothing is lost by stopping now.
+        Policies.takeBackLocation(this)
     }
 
     /** The phone's clock was set. Trusted time does not move; set more than 2 minutes away from it is an attempt. */

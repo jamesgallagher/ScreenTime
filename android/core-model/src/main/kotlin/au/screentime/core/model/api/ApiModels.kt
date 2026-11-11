@@ -833,6 +833,21 @@ data class AppUpdateCheck(
 )
 
 @Serializable
+data class Downloads(
+    val kid: DownloadFile?,
+    val parent: DownloadFile?,
+    val windows: DownloadFile?,
+)
+
+@Serializable
+data class DownloadFile(
+    val versionName: String,
+    val sizeBytes: Int,
+    val fileName: String,
+    val url: String,
+)
+
+@Serializable
 data class Sos(
     val id: String,
     val kidId: String,

@@ -11,6 +11,7 @@ import android.telephony.SmsManager
 import android.util.Log
 import au.screentime.core.model.api.DeviceState
 import au.screentime.kid.admin.KidDeviceAdminReceiver
+import au.screentime.kid.admin.Policies
 import au.screentime.kid.calls.callablesOf
 import au.screentime.kid.status.StatusHub
 import au.screentime.kid.sync.TrustedClock
@@ -52,6 +53,7 @@ class SosController(private val context: Context, private val clock: TrustedCloc
     /** After a restart of the app: an SOS that was on goes on taking positions. */
     fun resume() {
         if (!active) return
+        Policies.allowLocation(context)
         turnOnLocation()
         locator.start()
     }
@@ -72,6 +74,8 @@ class SosController(private val context: Context, private val clock: TrustedCloc
         var next = startSos(UUID.randomUUID().toString(), clock.nowMs())
         Log.i(TAG, "sos: started")
         update(next)
+        // Location is held only during an SOS (docs/SPEC.md §15): granted now, and given back once it is all sent.
+        Policies.allowLocation(context)
         turnOnLocation()
         locator.start()
         val fix = locator.fresh()
