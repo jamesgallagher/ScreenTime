@@ -28,6 +28,12 @@ public static class SetupRules
     public const string ServerProblem = "The server had a problem. Try again in a minute.";
     public const string NotInstalled = "Screen Time isn't installed properly. Run the installer again.";
     public const string NoRestart = "Couldn't start the limits. Restart this PC to start them.";
+    public const string NotAnEmail = "That doesn't look like an email address.";
+    public const string WrongSignInCode = "That code is wrong or has expired. Check the email, or send a new code.";
+    public const string SignInAgain = "Your sign-in has run out. Sign in again.";
+    public const string NotAParent = "That email can't add PCs. Sign in with a parent's email.";
+    public const string KidGone = "That kid isn't in the family any more. Sign in again to see the kids.";
+    public const string NoKids = "Your family has no kids yet. Add them in the parent app, then sign in again.";
 
     /// <summary>Windows' built-in accounts by their last SID part: Administrator, Guest, DefaultAccount, WDAGUtilityAccount.</summary>
     private static readonly HashSet<string> BuiltInRids = ["500", "501", "503", "504"];
@@ -119,6 +125,54 @@ public static class SetupRules
         409 => PhoneCode,
         429 => TooManyTries,
         400 => BadCode,
+        _ => ServerProblem,
+    };
+
+    /// <summary>Whether <paramref name="text"/> looks like an email address: something@something.something, no spaces.</summary>
+    public static bool IsEmail(string text)
+    {
+        var t = text.Trim();
+        var at = t.IndexOf('@');
+        return t.Length <= 254 && at > 0 && at == t.LastIndexOf('@') && t.IndexOf('.', at) > at + 1 && !t.EndsWith('.') && !t.Any(char.IsWhiteSpace);
+    }
+
+    /// <summary>Whether <paramref name="text"/> is a 6-digit code (spaces around it ignored).</summary>
+    public static bool IsSixDigits(string text) => text.Trim() is { Length: 6 } t && t.All(char.IsAsciiDigit);
+
+    /// <summary>How the parent's list of signed-in sessions names the setup window's sign-in (at most 100 characters).</summary>
+    public static string SignInLabel(string machineName)
+    {
+        var label = $"Screen Time Setup on {machineName.Trim()}".TrimEnd();
+        return label.Length <= 100 ? label : label[..100];
+    }
+
+    /// <summary>The sentence for "email me a code" that failed with <paramref name="status"/> (null: no answer).</summary>
+    public static string RequestCodeError(int? status) => status switch
+    {
+        null => Offline,
+        422 => NotAnEmail,
+        429 => TooManyTries,
+        _ => ServerProblem,
+    };
+
+    /// <summary>The sentence for a sign-in with the emailed code that failed with <paramref name="status"/> (null: no answer).</summary>
+    public static string SignInError(int? status) => status switch
+    {
+        null => Offline,
+        401 => WrongSignInCode,
+        422 => BadCode,
+        429 => TooManyTries,
+        _ => ServerProblem,
+    };
+
+    /// <summary>The sentence for a signed-in call (the kids, a PC code) that failed with <paramref name="status"/> (null: no answer).</summary>
+    public static string ParentCallError(int? status) => status switch
+    {
+        null => Offline,
+        401 => SignInAgain,
+        403 => NotAParent,
+        404 => KidGone,
+        429 => TooManyTries,
         _ => ServerProblem,
     };
 }

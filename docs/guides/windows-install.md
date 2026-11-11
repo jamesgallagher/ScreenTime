@@ -47,17 +47,24 @@ That installs the service, sets it to start with Windows, to restart if it stops
 
 1. Open **Screen Time Setup**: from the installer's last page, or later from the Start menu. Allow the administrator question.
 2. Under **Your Screen Time server** type `screentime.gallagherhome.au` and press **Check**. It says **Screen Time answers at** the address.
-3. **The accounts on this PC** lists the accounts. Administrators say **A parent: never limited**. If a kid's account says that, go back to step 1.
-4. For each kid's account: in the parent app, open the kid › **Add device** › **PC**. Type the 6 digits next to the account and press **Connect**. A code works once, for 10 minutes.
-5. Press **Finish**. The limits start now.
+3. Under **Sign in as a parent** type the email you use for the parent app and press **Email me a code**. Type the 6 digits from the email and press **Sign in**. You sign in once for the whole PC; the sign-in is never saved on the PC.
+4. **The accounts on this PC** lists the accounts. Administrators say **A parent: never limited**. If a kid's account says that, go back to step 1.
+5. For each kid's account, pick the kid and press **Connect**. It says **Limited as** the kid. An account left on **Not limited** is not limited. To move an account to another kid, press **Change**.
+6. Press **Finish**. The limits start now, and you are signed out.
 
 The PC appears in the parent app under Devices, one device for each kid's account.
+
+**No email on this PC?** Press **Have a code instead?** under the sign-in. Then for each kid's account: in the parent app, open the kid › **Add device** › **PC**, type the 6 digits next to the account and press **Connect**. A code works once, for 10 minutes.
 
 | It says | What to do |
 |---|---|
 | Can't reach Screen Time at that address | Check the address, and that this PC is online |
-| That code is wrong or has expired | Make a new one in the parent app |
-| That code is for a phone or tablet | In the parent app, choose **PC** |
+| That code is wrong or has expired. Check the email, or send a new code | Type the code from the newest email, or press **Send again** |
+| That email can't add PCs | Sign in with a parent's email (the one for the parent app) |
+| Your sign-in has run out | Sign in again (a sign-in lasts 15 minutes) |
+| Your family has no kids yet | Add the kids in the parent app, then sign in again |
+| That code is wrong or has expired. Make a new one in the parent app | (Typed codes) Make a new one in the parent app |
+| That code is for a phone or tablet | (Typed codes) In the parent app, choose **PC** |
 | Too many tries | Wait 15 minutes, then try again |
 | This PC has no standard accounts | Make one for each kid (step 1), then press **Check** again |
 
