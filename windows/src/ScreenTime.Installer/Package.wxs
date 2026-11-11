@@ -11,6 +11,9 @@
     <MajorUpgrade DowngradeErrorMessage="A newer Screen Time is already installed." />
     <MediaTemplate EmbedCab="yes" />
 
+    <!-- The pages a parent clicks through (UI.wxs). msiexec /qn still installs silently. -->
+    <UIRef Id="ScreenTimeUI" />
+
     <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="INSTALLFOLDER" Name="ScreenTime">
         <Directory Id="TRAYFOLDER" Name="Tray" />

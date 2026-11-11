@@ -15,4 +15,9 @@
         <SuppressIces>ICE03;ICE60;ICE38;ICE43;ICE57</SuppressIces>
     </PropertyGroup>
 
+    <ItemGroup>
+        <!-- The installer's pages (UI.wxs). Same version as the SDK. -->
+        <PackageReference Include="WixToolset.UI.wixext" Version="5.0.2" />
+    </ItemGroup>
+
 </Project>
