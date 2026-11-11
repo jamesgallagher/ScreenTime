@@ -33,4 +33,16 @@ object StatusHub {
 
     /** What the caught screen says while it is up (docs/SPEC.md §14); it sets it back to null when it closes. */
     val caught = MutableStateFlow<CaughtLine?>(null)
+
+    /** The always-allowed apps the block screen offers: only while time is up, never from bedtime to wake-up (§12.4). */
+    val freeApps = MutableStateFlow<List<FreeApp>>(emptyList())
+
+    /**
+     * `SystemClock.elapsedRealtime()` when the kid opened one from the block screen: the service leaves the block
+     * screen down for a moment, until Android's usage events show the app in front.
+     */
+    val freeOpenedAt = MutableStateFlow<Long?>(null)
 }
+
+/** An always-allowed app on the block screen. */
+data class FreeApp(val packageName: String, val label: String)

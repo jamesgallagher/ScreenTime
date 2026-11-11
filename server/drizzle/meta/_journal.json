@@ -57,6 +57,13 @@
       "when": 1793911283127,
       "tag": "0007_app_limits",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794374996581,
+      "tag": "0008_always_allowed",
+      "breakpoints": true
     }
   ]
 }

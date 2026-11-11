@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import au.screentime.core.model.api.AlwaysAllowedPut
 import au.screentime.core.model.api.ApiException
 import au.screentime.core.model.api.Device
 import au.screentime.core.model.api.DeviceForm
@@ -139,6 +140,21 @@ class KidsViewModel(app: Application) : AndroidViewModel(app) {
         val deferred = viewModelScope.async {
             try {
                 session.call { putKidsAppsRule(kidId, packageName, rulePut(rule, minutes)) }
+                Result.success(Unit)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+        return deferred.await()
+    }
+
+    /** Let an app run on one device when its time is up, or stop that; a failure is a [Result.failure] with the exception. */
+    suspend fun saveAlwaysAllowed(deviceId: String, packageName: String, on: Boolean): Result<Unit> {
+        val deferred = viewModelScope.async {
+            try {
+                session.call { putDevicesAppsAlwaysAllowed(deviceId, packageName, AlwaysAllowedPut(on)) }
                 Result.success(Unit)
             } catch (e: CancellationException) {
                 throw e

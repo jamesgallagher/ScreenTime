@@ -1,0 +1,1 @@
+ALTER TABLE "device_apps" ADD COLUMN "always_allowed" boolean DEFAULT false NOT NULL;

@@ -33,8 +33,17 @@ import kotlinx.coroutines.CancellationException
  * The app list and first use (docs/SPEC.md §12.4). Only the service uses it, one call at a time. What the device knows
  * is kept in SharedPreferences, so a restart neither forgets a first use nor sends an unchanged list again.
  */
-/** What the service needs after a look at the blocks: the main screen's list, what to tell the kid, and when to look again. */
-data class BlocksNow(val limits: List<AppLimitView>, val news: List<String>, val nextLimitMs: Long?)
+/**
+ * What the service needs after a look at the blocks: the main screen's list, what to tell the kid, when to look again,
+ * the always-allowed apps that may run ([free], by name) and whether one is in front ([freeFront]).
+ */
+data class BlocksNow(
+    val limits: List<AppLimitView>,
+    val news: List<String>,
+    val nextLimitMs: Long?,
+    val free: Map<String, String> = emptyMap(),
+    val freeFront: FreeFront = FreeFront(null, null),
+)
 
 class AppWatcher(context: Context, private val api: ApiClient, private val now: () -> Long = System::currentTimeMillis) {
     private val context = context.applicationContext
@@ -52,25 +61,35 @@ class AppWatcher(context: Context, private val api: ApiClient, private val now: 
         val rules = state.apps.rules.associate { it.`package` to it.mode }
         val apps = installed()
         val installed = apps.map { it.packageName }.toSet()
-        val limits = limitsNow(state, parentMode, apps.associate { it.packageName to appLabel(it.label, it.packageName) })
+        val labels = apps.associate { it.packageName to appLabel(it.label, it.packageName) }
         val access = hasUsageAccess()
+        val now = this.now()
+        val dayStart = dayStartMs(state, now)
+        // Today's usage events, read once: the limits and the always-allowed app in front both come from them.
+        val today = if (access) events(dayStart, now) else emptyList()
+        val limits = limitsNow(state, parentMode, labels, today, dayStart, now)
         // Without usage access the time cannot be counted, so limited apps stay blocked until it is back (§12.4).
         val over = limits.limits.filter { it.leftSec <= 0 || !access }.map { it.packageName }.toSet()
+        val knownBefore = prefs.getStringSet(KNOWN, null)
+        val held = heldPackages(state.apps.newAppApproval, knownBefore, installed, rules.keys, prefs.getStringSet(HELD, null).orEmpty())
+        val protected = protectedPackages()
+        val wanted = wantedBlocks(rules, held, protected, parentMode, over).intersect(installed)
+        // Always allowed, unless blocked: a block, an app waiting for a parent or a used-up limit wins (§12.4).
+        val free = freeApps(state.apps.alwaysAllowed.orEmpty(), installed, wantedBlocks(rules, held, protected, false, over), protected)
         val result = BlocksNow(
             limits = limits.limits.map { AppLimitView(it.label, if (access) it.leftSec else 0) },
             news = if (parentMode) emptyList() else takeNews(limits),
             nextLimitMs = if (parentMode || !access) null else nextLimitMs(limits.limits, limits.usage.inFront),
+            free = free.associateWith { labels[it] ?: it },
+            freeFront = freeFront(today, free),
         )
         if (!Policies.isDeviceOwner(context)) return result
-        val knownBefore = prefs.getStringSet(KNOWN, null)
-        val held = heldPackages(state.apps.newAppApproval, knownBefore, installed, rules.keys, prefs.getStringSet(HELD, null).orEmpty())
         val dpm = context.getSystemService(DevicePolicyManager::class.java)
         val admin = KidDeviceAdminReceiver.component(context)
         // Android's word, not what was saved: a reinstalled app comes back free. An app not on this device is skipped:
         // rules are per kid, so it may only be on another one.
         val suspended = prefs.getStringSet(SUSPENDED, null).orEmpty().filter { isSuspended(dpm, it) }.toSet()
         val hidden = prefs.getStringSet(HIDDEN, null).orEmpty().filter { dpm.isApplicationHidden(admin, it) }.toSet()
-        val wanted = wantedBlocks(rules, held, protectedPackages(), parentMode, over).intersect(installed)
         val plan = blockPlan(wanted, suspended + hidden)
         prefs.edit().putStringSet(KNOWN, installed).putStringSet(HELD, held).commit()
         if (plan.block.isEmpty() && plan.release.isEmpty()) return result
@@ -101,10 +120,15 @@ class AppWatcher(context: Context, private val api: ApiClient, private val now: 
     private class LimitsNow(val limits: List<AppLimitNow>, val usage: AppUsageNow)
 
     /** The limits now. It also keeps track of parent mode, whose time does not count. */
-    private fun limitsNow(state: DeviceState, parentMode: Boolean, labels: Map<String, String>): LimitsNow {
-        val now = this.now()
-        val dayStart = dayStartMs(state, now)
-        val usage = usageBetween(dayStart, now, notCounted(parentMode, dayStart, now))
+    private fun limitsNow(
+        state: DeviceState,
+        parentMode: Boolean,
+        labels: Map<String, String>,
+        today: List<UsageEvent>,
+        dayStart: Long,
+        now: Long,
+    ): LimitsNow {
+        val usage = appUsage(today, dayStart, now, notCounted(parentMode, dayStart, now))
         val minutes = state.apps.rules
             .filter { it.mode == AppRuleMode.LIMIT && it.dailyMinutes != null }
             .associate { it.`package` to it.dailyMinutes!! }
@@ -137,6 +161,11 @@ class AppWatcher(context: Context, private val api: ApiClient, private val now: 
 
     private fun usageBetween(from: Long, to: Long, notCounted: List<Span>): AppUsageNow {
         if (!hasUsageAccess()) return AppUsageNow(emptyMap(), emptySet())
+        return appUsage(events(from, to), from, to, notCounted)
+    }
+
+    /** Android's usage events between [from] and [to], oldest first: what came to the front, left it, and screen off. */
+    private fun events(from: Long, to: Long): List<UsageEvent> {
         val events = context.getSystemService(UsageStatsManager::class.java).queryEvents(from, to)
         val event = UsageEvents.Event()
         val out = mutableListOf<UsageEvent>()
@@ -148,7 +177,7 @@ class AppWatcher(context: Context, private val api: ApiClient, private val now: 
                 UsageEvents.Event.SCREEN_NON_INTERACTIVE -> out += UsageEvent(UsageKind.SCREEN_OFF, event.packageName, event.timeStamp)
             }
         }
-        return appUsage(out, from, to, notCounted)
+        return out
     }
 
     /** Sends today's and yesterday's seconds per app when they changed, so a parent sees them and other devices count them. */

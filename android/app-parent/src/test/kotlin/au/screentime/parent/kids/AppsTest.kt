@@ -119,4 +119,14 @@ class AppsTest {
             sortApps(listOf(removed, youtube, older, chrome, newer)).map { it.label },
         )
     }
+
+    @Test
+    fun isAlwaysAllowedOnlyWhereItIsAndWhenAllowedOrLimited() {
+        val two = listOf(device(), device(name = "XPPen", removedAt = "2026-11-04T00:00:00Z"))
+        assertEquals(listOf("Pixel 7"), alwaysAllowedDevices(app(devices = two)).map { it.deviceName })
+        assertEquals(1, alwaysAllowedDevices(app(rule = AppRule.LIMIT, dailyMinutes = 30)).size)
+        assertEquals(emptyList<KidAppDevice>(), alwaysAllowedDevices(app(rule = AppRule.BLOCKED)))
+        assertEquals(emptyList<KidAppDevice>(), alwaysAllowedDevices(app(rule = AppRule.HELD)))
+        assertEquals(emptyList<KidAppDevice>(), alwaysAllowedDevices(app(blockable = false)))
+    }
 }

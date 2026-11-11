@@ -610,6 +610,19 @@ class ApiClient(
     }
 
     /**
+     * Let an app run on one device when its time is up.
+     *
+     * `PUT /v1/devices/{deviceId}/apps/{package}/always-allowed`
+     */
+    suspend fun putDevicesAppsAlwaysAllowed(
+        deviceId: String,
+        `package`: String,
+        body: AlwaysAllowedPut,
+    ) {
+        call(HttpMethod.Put, "/v1/devices/${segment(deviceId)}/apps/${segment(`package`)}/always-allowed", auth = true, body = body, bodyType = typeInfo<AlwaysAllowedPut>())
+    }
+
+    /**
      * Turn new app approval on or off for a kid.
      *
      * `PUT /v1/kids/{kidId}/app-settings`

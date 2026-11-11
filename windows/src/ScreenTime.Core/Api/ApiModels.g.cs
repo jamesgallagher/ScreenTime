@@ -179,7 +179,8 @@ public sealed record DeviceStateActiveSos(
 
 public sealed record DeviceStateApps(
     [property: JsonPropertyName("newAppApproval")] bool NewAppApproval,
-    [property: JsonPropertyName("rules")] IReadOnlyList<DeviceStateAppsRulesItem> Rules);
+    [property: JsonPropertyName("rules")] IReadOnlyList<DeviceStateAppsRulesItem> Rules,
+    [property: JsonPropertyName("alwaysAllowed"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? AlwaysAllowed = null);
 
 public sealed record DeviceStateAppsRulesItem(
     [property: JsonPropertyName("package")] string Package,

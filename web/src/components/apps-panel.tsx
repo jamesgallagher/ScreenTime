@@ -1,11 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AppWindow, Loader2, Minus, Plus, RefreshCw } from 'lucide-react';
+import { AppWindow, Check, Loader2, Minus, Plus, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { ApiError } from '@/lib/api';
 import {
   type AppChoice,
+  alwaysAllowedDevices,
   appChoice,
   DEFAULT_LIMIT_MINUTES,
   fetchKidApps,
@@ -13,6 +14,7 @@ import {
   installedLine,
   isRemoved,
   type KidApp,
+  saveAlwaysAllowed,
   saveAppRule,
   saveNewAppApproval,
   sortApps,
@@ -41,7 +43,7 @@ function RuleControl({ app, choice, kidId }: { app: KidApp; choice: AppChoice; k
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['kid-apps', kidId] }),
   });
   const minutes = app.rule?.dailyMinutes ?? DEFAULT_LIMIT_MINUTES;
-  if (choice === 'fixed') return <p className="text-sm text-muted">Always allowed</p>;
+  if (choice === 'fixed') return <p className="text-sm text-muted">Part of the device: never blocked</p>;
   if (choice === 'waiting') {
     return (
       <div className="flex flex-col items-start gap-2">
@@ -117,6 +119,52 @@ function RuleControl({ app, choice, kidId }: { app: KidApp; choice: AppChoice; k
   );
 }
 
+/**
+ * "When time is up" with one toggle per device (docs/SPEC.md §12.4, §16.5): an always-allowed app still runs there once
+ * the kid's time is used up, but not from bedtime to wake-up, and its time never counts.
+ */
+function AlwaysAllowedControl({ app, kidId }: { app: KidApp; kidId: string }) {
+  const queryClient = useQueryClient();
+  const save = useMutation({
+    mutationFn: ({ deviceId, on }: { deviceId: string; on: boolean }) => saveAlwaysAllowed(deviceId, app.package, on),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['kid-apps', kidId] }),
+  });
+  const devices = alwaysAllowedDevices(app);
+  if (devices.length === 0) return null;
+  return (
+    <div className="flex flex-col items-start gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm text-muted">Also when time is up, on</span>
+        {devices.map((d) => (
+          <button
+            key={d.deviceId}
+            type="button"
+            aria-pressed={d.alwaysAllowed}
+            aria-label={`${app.label}: always allowed on ${d.deviceName}`}
+            disabled={save.isPending}
+            onClick={() => save.mutate({ deviceId: d.deviceId, on: !d.alwaysAllowed })}
+            className={cn(
+              'inline-flex h-8 items-center gap-1.5 rounded-full border border-outline px-3 text-sm font-medium transition-colors outline-none hover:bg-surface-variant focus-visible:ring-2 focus-visible:ring-primary',
+              d.alwaysAllowed && 'border-primary bg-primary/10 text-primary',
+            )}
+          >
+            {d.alwaysAllowed && <Check className="size-4" />}
+            {d.deviceName}
+          </button>
+        ))}
+      </div>
+      {devices.some((d) => d.alwaysAllowed) && (
+        <p className="text-xs text-muted">Not from bedtime to wake-up. Time in it doesn't count.</p>
+      )}
+      {save.error && (
+        <p role="alert" className="text-sm text-danger">
+          {messageOf(save.error)}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function AppRow({ app, kidId, timeZone }: { app: KidApp; kidId: string; timeZone: string }) {
   const removed = isRemoved(app);
   const today = todayLine(app);
@@ -135,6 +183,7 @@ function AppRow({ app, kidId, timeZone }: { app: KidApp; kidId: string; timeZone
           <p className="text-sm text-muted">{firstUsedLine(app, timeZone)}</p>
         </div>
         {!removed && <RuleControl app={app} choice={appChoice(app)} kidId={kidId} />}
+        {!removed && <AlwaysAllowedControl app={app} kidId={kidId} />}
       </div>
       {removed ? (
         <span className="shrink-0 rounded-full bg-surface-variant px-2.5 py-1 text-xs font-medium text-muted">Removed</span>

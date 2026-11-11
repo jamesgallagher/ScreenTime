@@ -18,7 +18,19 @@ class AppUpdaterTest {
         metered: Boolean = false,
         screenOn: Boolean = false,
         sosActive: Boolean = false,
-    ) = nextUpdateStep(offer, currentCode, downloaded, metered, screenOn, sosActive)
+        asked: Boolean = false,
+    ) = nextUpdateStep(offer, currentCode, downloaded, metered, screenOn, sosActive, asked)
+
+    @Test
+    fun updateNowInstallsWithTheScreenOn() {
+        assertEquals(UpdateStep.INSTALL, step(downloaded = true, screenOn = true, asked = true))
+    }
+
+    @Test
+    fun updateNowStillWaitsForAnSosAndForTheFile() {
+        assertEquals(UpdateStep.NOTHING, step(downloaded = true, screenOn = true, sosActive = true, asked = true))
+        assertEquals(UpdateStep.DOWNLOAD, step(screenOn = true, asked = true))
+    }
 
     @Test
     fun noOfferMeansNothing() {

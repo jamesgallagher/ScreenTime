@@ -18,6 +18,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,6 +46,7 @@ import au.screentime.kid.parentmode.ParentButton
 import au.screentime.kid.sos.SosButton
 import au.screentime.kid.sos.SosLayer
 import au.screentime.kid.status.KidStatus
+import au.screentime.kid.status.StatusHub
 import au.screentime.kid.status.clockText
 import java.time.LocalTime
 import kotlinx.coroutines.delay
@@ -104,6 +106,12 @@ private fun Blocked(status: KidStatus, reason: LockReason) {
         if (status.canCall && status.callables.isNotEmpty()) {
             ContactRow(status.callables)
             Spacer(Modifier.height(20.dp))
+        }
+        // Out of time only: from bedtime to wake-up the list is empty, so there is no button.
+        val free by StatusHub.freeApps.collectAsState()
+        if (reason == LockReason.OUT_OF_TIME && free.isNotEmpty()) {
+            FreeAppsButton(free)
+            Spacer(Modifier.height(12.dp))
         }
         AskAndMessage(status, Look.NIGHT)
         if (status.canCall) {

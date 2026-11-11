@@ -447,6 +447,8 @@ export const deviceApps = pgTable(
     firstUsedAt: ts('first_used_at'),
     removedAt: ts('removed_at'),
     baseline: boolean('baseline').notNull(),
+    /** A parent lets this app run on this device when its time is up, but not from bedtime to wake-up (§12.4). */
+    alwaysAllowed: boolean('always_allowed').notNull().default(false),
   },
   (t) => [primaryKey({ columns: [t.deviceId, t.package] }), index('device_apps_kid_idx').on(t.kidId)],
 );

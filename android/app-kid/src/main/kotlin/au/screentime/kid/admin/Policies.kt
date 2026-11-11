@@ -69,6 +69,7 @@ object Policies {
         // power menu and the phone's own lock screen (with its emergency call button) still work. On a phone with a
         // SIM the phone app may run too, for its call screen and the emergency dialer.
         dpm.setLockTaskPackages(admin, (listOf(context.packageName) + phonePackages(context)).distinct().toTypedArray())
+        lockTaskApps = null
         dpm.setLockTaskFeatures(
             admin,
             DevicePolicyManager.LOCK_TASK_FEATURE_GLOBAL_ACTIONS or DevicePolicyManager.LOCK_TASK_FEATURE_KEYGUARD,
@@ -79,6 +80,24 @@ object Policies {
             // Without it every call goes through while blocked. Given with adb at setup (docs/SPEC.md §12.1).
             Log.w(TAG, "calls: not the call redirection app, so calls are not checked while blocked")
         }
+    }
+
+    /** The always-allowed apps last let into Lock Task, so an unchanged list is not set again. */
+    private var lockTaskApps: Set<String>? = null
+
+    /**
+     * Lets the always-allowed apps run in Lock Task while time is up (docs/SPEC.md §12.4), or none: [apps] is empty
+     * from bedtime to wake-up and while the device may be used. An app taken off the list cannot start again.
+     */
+    @Synchronized
+    fun allowInLockTask(context: Context, apps: Set<String>) {
+        if (!isDeviceOwner(context) || apps == lockTaskApps) return
+        val dpm = context.getSystemService(DevicePolicyManager::class.java)
+        val admin = KidDeviceAdminReceiver.component(context)
+        val packages = (listOf(context.packageName) + phonePackages(context) + apps.sorted()).distinct()
+        dpm.setLockTaskPackages(admin, packages.toTypedArray())
+        lockTaskApps = apps
+        Log.i(TAG, "lock task: always allowed ${apps.sorted()}")
     }
 
     /** Takes off everything [apply] put on, before the app gives up Device Owner (docs/SPEC.md §12.1). */

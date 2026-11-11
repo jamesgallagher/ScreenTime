@@ -76,6 +76,12 @@ export const DeviceState = z
     apps: z.object({
       newAppApproval: z.boolean(),
       rules: z.array(z.object({ package: z.string(), mode: AppRuleMode, dailyMinutes: z.int().nullable() })),
+      /**
+       * This device's always-allowed apps, without those blocked or waiting for a parent: they run when time is up,
+       * but not from bedtime to wake-up, and their time never counts (docs/SPEC.md §12.4). The server always sends it;
+       * it is optional so a device can still read a snapshot it saved before this field existed.
+       */
+      alwaysAllowed: z.array(z.string()).optional(),
     }),
   })
   .meta({ id: 'DeviceState' });

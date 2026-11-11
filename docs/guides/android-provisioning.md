@@ -191,7 +191,7 @@ Android only installs a **higher** version, so a version that is already out can
    pwsh -File android\publish-kid.ps1 -DeviceId <the id>
    ```
 
-4. Wait. The device asks after a sync, at most every 6 hours; it downloads only on a network that is not metered (Wi-Fi), and installs only when the screen is off and no SOS is running. The kid sees nothing. The parent web app's Devices panel shows **Version** with the new number once it has restarted and synced.
+4. Wait. The device asks after a sync, at most every 6 hours, and downloads only on a network that is not metered (Wi-Fi). Then it shows **An update to Screen Time is ready**: tapping **Update now** installs it at once, and otherwise it installs by itself the next time the screen is off. It never installs during an SOS. The parent web app's Devices panel shows **Version** with the new number once it has restarted and synced.
 5. Use that device for a day. Check that it still counts time, blocks, and answers an ask.
 6. Publish to every device, which rebuilds the same version:
 
