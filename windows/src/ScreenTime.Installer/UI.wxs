@@ -46,6 +46,10 @@
 
     <UIRef Id="WixUI_Common" />
 
+    <!-- The pictures, in place of WiX's red disc (make-bitmaps.ps1 draws them). -->
+    <WixVariable Id="WixUIDialogBmp" Value="$(sys.SOURCEFILEDIR)dialog.bmp" />
+    <WixVariable Id="WixUIBannerBmp" Value="$(sys.SOURCEFILEDIR)banner.bmp" />
+
     <!-- What the finish page says. A new install ticks "Open Screen Time Setup now"; an update over an older version
          leaves it unticked, because the accounts stay connected (docs/guides/windows-install.md, Updating). -->
     <Property Id="StDoneTitle" Value="Screen Time is installed" />
