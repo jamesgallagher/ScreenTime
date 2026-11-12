@@ -46,7 +46,7 @@ const ABOUT: Record<Kind, { title: string; who: string; steps: string[]; note?: 
       'Download it on the kid\'s PC, signed in as a parent.',
       'Open it. If Windows says it protected your PC, choose More info, then Run anyway.',
       'Press Next, then Install, and allow the administrator question.',
-      'When it says Screen Time is installed, press Finish with Open Screen Time Setup ticked (or later: Start, then Screen Time Setup). Connect each kid\'s account with a code from the parent app.',
+      'When it says Screen Time is installed, press Finish with Open Screen Time Setup ticked (or later: Start, then Screen Time Setup). Sign in there with your parent email, then pick the kid for each account.',
     ],
     note: 'To update, install the newer one over the top. The accounts stay connected.',
   },
