@@ -222,13 +222,16 @@ object Policies {
     /**
      * No SOS any more: the app gives location back. **Android stops the app's process when a permission is taken away**,
      * so the service calls this only with the screen off and nothing left to send, and Android starts it again.
+     * Only a permission still held is taken: HyperOS stops the app even for one already gone, so taking background
+     * location again on every start never reached fine location and restarted the app over and over (Redmi, 13 Nov 2026).
      */
     fun takeBackLocation(context: Context) {
         if (!isDeviceOwner(context)) return
         val dpm = context.getSystemService(DevicePolicyManager::class.java)
         val admin = KidDeviceAdminReceiver.component(context)
+        val held = LOCATION.filter { context.checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }.toSet()
         Log.i(TAG, "location: taken back, so Android restarts the app")
-        for (permission in LOCATION.reversed()) {
+        for (permission in locationToTakeBack(LOCATION, held)) {
             val ok = dpm.setPermissionGrantState(admin, context.packageName, permission, DevicePolicyManager.PERMISSION_GRANT_STATE_DENIED)
             Log.i(TAG, "location: $permission denied=$ok state=${dpm.getPermissionGrantState(admin, context.packageName, permission)}")
         }
@@ -270,3 +273,6 @@ object Policies {
         }
     }
 }
+
+/** The location permissions to take back, background first as Android wants: only those still [held]. */
+fun locationToTakeBack(all: List<String>, held: Set<String>): List<String> = all.reversed().filter { it in held }
