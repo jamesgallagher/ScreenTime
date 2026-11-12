@@ -43,6 +43,9 @@ fun clockJumpMin(wallMs: Long, trustedMs: Long): Long? {
  */
 fun missingPolicies(before: Set<String>, now: Set<String>): List<String> = (before - now).sorted()
 
+/** The policies [apply][au.screentime.kid.admin.Policies.apply] expects to find on, with [name] on or off by design. */
+fun withPolicy(applied: Set<String>, name: String, on: Boolean): Set<String> = if (on) applied + name else applied - name
+
 /** True when an attempt of the same kind was recorded less than a minute before [nowMs]. */
 fun isRepeat(lastAtMs: Long?, nowMs: Long): Boolean = lastAtMs != null && nowMs - lastAtMs in 0 until REPEAT_MS
 
