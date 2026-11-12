@@ -46,6 +46,18 @@ class TamperTest {
     }
 
     @Test
+    fun debuggingLetThroughForParentModeIsNotMissing() {
+        val applied = setOf("no_debugging_features", "no_safe_boot")
+        val during = withPolicy(applied, "no_debugging_features", on = false)
+        assertEquals(setOf("no_safe_boot"), during)
+        // A start during parent mode finds debugging allowed, as expected.
+        assertEquals(emptyList<String>(), missingPolicies(during, setOf("no_safe_boot")))
+        // Once parent mode ends it is expected again, so turning it off by hand would count.
+        val after = withPolicy(during, "no_debugging_features", on = true)
+        assertEquals(listOf("no_debugging_features"), missingPolicies(after, setOf("no_safe_boot")))
+    }
+
+    @Test
     fun theSameKindWithinAMinuteIsTheSameAttempt() {
         assertFalse(isRepeat(null, now))
         assertTrue(isRepeat(now - 59_000, now))

@@ -12,6 +12,7 @@ import android.telecom.TelecomManager
 import android.util.Log
 import au.screentime.kid.BuildConfig
 import au.screentime.kid.tamper.missingPolicies
+import au.screentime.kid.tamper.withPolicy
 
 /** The Device Owner policies of docs/SPEC.md §12.1. Applying them again changes nothing, so the app does it on every start. */
 object Policies {
@@ -70,6 +71,7 @@ object Policies {
         // SIM the phone app may run too, for its call screen and the emergency dialer.
         dpm.setLockTaskPackages(admin, (listOf(context.packageName) + phonePackages(context)).distinct().toTypedArray())
         lockTaskApps = null
+        debuggingAllowed = false
         dpm.setLockTaskFeatures(
             admin,
             DevicePolicyManager.LOCK_TASK_FEATURE_GLOBAL_ACTIONS or DevicePolicyManager.LOCK_TASK_FEATURE_KEYGUARD,
@@ -80,6 +82,29 @@ object Policies {
             // Without it every call goes through while blocked. Given with adb at setup (docs/SPEC.md §12.1).
             Log.w(TAG, "calls: not the call redirection app, so calls are not checked while blocked")
         }
+    }
+
+    /** Whether USB debugging was last let through for parent mode, so an unchanged answer is not set again. */
+    private var debuggingAllowed: Boolean? = null
+
+    /**
+     * Lets USB debugging (and wireless debugging) work while parent mode is on, so a parent can use adb on the kid's
+     * device (James, 12 Nov 2026), and turns it off again when parent mode ends. Android switches the USB debugging
+     * setting off whenever the block comes back, so the parent turns it on in Developer options each time.
+     * A debug build never blocks debugging, so this does nothing there. Lifting the block is not a tamper attempt:
+     * the set [apply] compares against is changed to match, and [apply] at the next start blocks debugging again.
+     */
+    @Synchronized
+    fun allowDebugging(context: Context, allowed: Boolean) {
+        if (BuildConfig.DEBUG || !isDeviceOwner(context) || allowed == debuggingAllowed) return
+        val dpm = context.getSystemService(DevicePolicyManager::class.java)
+        val admin = KidDeviceAdminReceiver.component(context)
+        val debugging = UserManager.DISALLOW_DEBUGGING_FEATURES
+        if (allowed) dpm.clearUserRestriction(admin, debugging) else dpm.addUserRestriction(admin, debugging)
+        val prefs = prefs(context)
+        prefs.getStringSet(APPLIED, null)?.let { prefs.edit().putStringSet(APPLIED, withPolicy(it, debugging, !allowed)).commit() }
+        debuggingAllowed = allowed
+        Log.i(TAG, "debugging: ${if (allowed) "allowed for parent mode" else "blocked"}")
     }
 
     /** The always-allowed apps last let into Lock Task, so an unchanged list is not set again. */

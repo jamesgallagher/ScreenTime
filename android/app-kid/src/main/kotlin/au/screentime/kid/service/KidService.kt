@@ -569,6 +569,8 @@ class KidService : Service() {
         blocked = status.locked
         if (paused != (parentMode != null)) Log.i(TAG, "parent mode: ${if (parentMode != null) "on" else "off"}")
         paused = parentMode != null
+        // A parent may use adb while parent mode is on (docs/SPEC.md §12.1).
+        Policies.allowDebugging(this, paused)
         if (sosOn != sos.active) Log.i(TAG, "sos: ${if (sos.active) "on" else "off"}")
         sosOn = sos.active
         if (apps?.usageAccessLost() == true) onTamper(DeviceEventKind.TAMPER_POLICY, mapOf("missing" to "usage_access"))
