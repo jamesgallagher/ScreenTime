@@ -11,12 +11,13 @@ $serviceDir = Join-Path $out "service"
 $trayDir = Join-Path $out "tray"
 if (Test-Path $out) { Remove-Item -Recurse -Force $out }
 
-$serviceArgs = @("publish", "src\ScreenTime.Service\ScreenTime.Service.csproj", "-c", "Release", "-r", "win-x64", "-o", $serviceDir)
+# The version goes into the service too, which reports it to the server for the parents to see.
+$serviceArgs = @("publish", "src\ScreenTime.Service\ScreenTime.Service.csproj", "-c", "Release", "-r", "win-x64", "-o", $serviceDir, "-p:Version=$Version")
 if ($NoAot) { $serviceArgs += @("-p:PublishAot=false", "--self-contained", "-p:PublishSingleFile=true") }
 dotnet @serviceArgs
 if ($LASTEXITCODE -ne 0) { throw "publishing the service failed" }
 
-dotnet publish src\ScreenTime.Tray\ScreenTime.Tray.csproj -c Release -r win-x64 --self-contained -o $trayDir
+dotnet publish src\ScreenTime.Tray\ScreenTime.Tray.csproj -c Release -r win-x64 --self-contained -o $trayDir "-p:Version=$Version"
 if ($LASTEXITCODE -ne 0) { throw "publishing the tray failed" }
 
 $wix = Join-Path $out "wix"

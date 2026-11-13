@@ -64,6 +64,21 @@ public sealed class TrayKillWatch
     }
 }
 
+/// <summary>
+/// Whether a tray exit counts toward <see cref="TrayKillWatch"/> (docs/SPEC.md §14). Windows closes the tray when the PC
+/// shuts down or the account signs out, before it tells the service, so an exit is judged <see cref="DelayMs"/> later:
+/// it counts only if the session is still going then, still in use, and the PC is not shutting down. On Conor's PC every
+/// shutdown made three exits within seconds and a false "tray app was closed" (13 Nov 2026).
+/// </summary>
+public static class TrayExit
+{
+    /// <summary>How long after an exit it is judged.</summary>
+    public const int DelayMs = 30_000;
+
+    /// <summary>True when the exit was someone closing the tray, not the session or the PC ending.</summary>
+    public static bool Counts(bool sessionEnded, bool shuttingDown, bool sessionActive) => !sessionEnded && !shuttingDown && sessionActive;
+}
+
 /// <summary>A tamper event as the API writes it, and the JSON lines for the outbox.</summary>
 public static class TamperEvents
 {
