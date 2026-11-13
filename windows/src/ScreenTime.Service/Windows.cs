@@ -74,11 +74,50 @@ internal static partial class Win
             ? (uint)value
             : 0;
 
-    /// <summary>The PC's model, or "PC" when it is missing.</summary>
-    internal static string Model() =>
-        ReadValue(@"HARDWARE\DESCRIPTION\System\BIOS", "SystemProductName") is string model && !string.IsNullOrWhiteSpace(model)
-            ? model.Trim()
-            : "PC";
+    /// <summary>What the PC is called in "‹account› on ‹PC›" (<see cref="ScreenTime.Core.Service.DeviceLabel"/>).</summary>
+    internal static string DeviceLabel() =>
+        ScreenTime.Core.Service.DeviceLabel.Pick(HostName(), ReadValue(@"HARDWARE\DESCRIPTION\System\BIOS", "SystemProductName") as string);
+
+    /// <summary>This build's version as the MSI has it (0.1.‹CI run›), and the run number as the version code.</summary>
+    internal static (int Code, string Name) AppVersion()
+    {
+        var v = typeof(Win).Assembly.GetName().Version ?? new Version(0, 1, 0);
+        return (Math.Max(1, v.Build), $"{v.Major}.{v.Minor}.{Math.Max(0, v.Build)}");
+    }
+
+    /// <summary>The computer's name as it was typed (not the upper-case NetBIOS name), or null.</summary>
+    private static string? HostName()
+    {
+        try
+        {
+            return System.Net.Dns.GetHostName();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Whether a session exists and is connected (WTSActive), locked or not. False once it signs out.</summary>
+    internal static bool SessionActive(uint sessionId)
+    {
+        try
+        {
+            if (!WTSQuerySessionInformation(IntPtr.Zero, sessionId, 8, out var buffer, out _)) return false;
+            try
+            {
+                return Marshal.ReadInt32(buffer) == 0;
+            }
+            finally
+            {
+                WTSFreeMemory(buffer);
+            }
+        }
+        catch
+        {
+            return false;
+        }
+    }
 
     /// <summary>The PC's machine GUID, or "unknown" when it is missing.</summary>
     internal static string MachineId() =>

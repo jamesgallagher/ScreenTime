@@ -152,4 +152,15 @@ public class TamperTests
     [Fact]
     public void TheCaughtLineIsJustItsType() =>
         Assert.Equal("""{"type":"caught"}""", PipeMessage.Encode(PipeMessage.Caught()));
+
+    [Fact]
+    public void ATrayExitCountsOnlyWhileTheSessionGoesOn()
+    {
+        Assert.True(TrayExit.Counts(sessionEnded: false, shuttingDown: false, sessionActive: true));
+        // Conor's PC on 13 Nov 2026: shutting down closed the tray three times in seconds.
+        Assert.False(TrayExit.Counts(sessionEnded: false, shuttingDown: true, sessionActive: true));
+        // Signed out: the session is gone, or the service cancelled it at the sign-out.
+        Assert.False(TrayExit.Counts(sessionEnded: false, shuttingDown: false, sessionActive: false));
+        Assert.False(TrayExit.Counts(sessionEnded: true, shuttingDown: false, sessionActive: true));
+    }
 }

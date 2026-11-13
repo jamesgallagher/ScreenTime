@@ -104,7 +104,7 @@ switch (command)
             try
             {
                 var api = new ApiClient(new HttpClient { BaseAddress = new Uri(ServiceFiles.NormaliseServerUrl(server)), Timeout = TimeSpan.FromSeconds(30) }, () => null);
-                var input = new EnrolInput(code, Win.AccountSid(user), user, Win.Model(), Environment.OSVersion.VersionString, "0.1.0", Win.MachineId());
+                var input = new EnrolInput(code, Win.AccountSid(user), user, Win.DeviceLabel(), Environment.OSVersion.VersionString, Win.AppVersion().Name, Win.MachineId());
                 var device = await Enroller.EnrolAsync(api, store, input, Win.Protect, CancellationToken.None);
                 Console.WriteLine($"Enrolled {user} as {device.KidName} (device {device.DeviceId}).");
                 return 0;

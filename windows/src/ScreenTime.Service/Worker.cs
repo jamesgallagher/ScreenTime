@@ -48,6 +48,12 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
     private string _configPath = null!;
     private CancellationToken _stopping;
 
+    /// <summary>Set when Windows says it is shutting down: tray exits from then on are not counted (docs/SPEC.md §14).</summary>
+    private volatile bool _shuttingDown;
+
+    /// <summary>The accounts whose app version the server has been told since the service started.</summary>
+    private readonly HashSet<string> _versionSent = new();
+
     private sealed class KidSession(uint sessionId, string sid, TrayHost tray, CancellationTokenSource cts)
     {
         public uint SessionId { get; } = sessionId;
@@ -247,6 +253,7 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
                 break;
             case SessionChange.Suspend:
             case SessionChange.Shutdown:
+                if (e.Change == SessionChange.Shutdown) _shuttingDown = true;
                 foreach (var each in _sessions.Values)
                 {
                     each.Unlocked = false;
@@ -266,7 +273,7 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
         if (_sessions.TryGetValue(sessionId, out var existing)) return existing;
         if (_store.GetDevice(sid) is null) return null;
         var cts = CancellationTokenSource.CreateLinkedTokenSource(_stopping);
-        var tray = new TrayHost(sessionId, sid, options.TrayExe, options.DryLock, options.AsService, m => OnTrayMessage(sessionId, m), logger, options.TrayOpen, () => OnTrayExit(sessionId));
+        var tray = new TrayHost(sessionId, sid, options.TrayExe, options.DryLock, options.AsService, m => OnTrayMessage(sessionId, m), logger, options.TrayOpen, () => OnTrayExit(sessionId), () => _shuttingDown, options.AsService ? () => Win.SessionActive(sessionId) : null);
         var s = new KidSession(sessionId, sid, tray, cts);
         _sessions[sessionId] = s;
         _ = tray.RunAsync(cts.Token);
@@ -704,6 +711,7 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
         await ReportParentMode(sid, api, ct);
         await ReportEvents(sid, api, ct);
         var synced = await syncer.SyncAsync(ct);
+        if (synced && !_versionSent.Contains(sid)) await ReportVersion(sid, api, ct);
         if (!synced) _tracker.MarkOffline(sid);
         var previous = _lastSync.GetValueOrDefault(sid, (true, null));
         _lastSync[sid] = (synced, synced ? _clock.NowMs() : previous.SyncedAtMs);
@@ -726,6 +734,29 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
                 await SendView(s, view);
                 foreach (var text in toasts) await SendToast(s, text);
             }
+        }
+    }
+
+    /// <summary>
+    /// Tells the server this PC's app version once per account and start, for the parents' Devices panel. Before this
+    /// the server only had the version from enrolment, which was always 0.1.0 (Conor's PC on 0.1.81, 13 Nov 2026).
+    /// </summary>
+    private async Task ReportVersion(string sid, ApiClient api, CancellationToken ct)
+    {
+        try
+        {
+            var (code, name) = Win.AppVersion();
+            await api.PostDeviceAppUpdateCheckAsync(new AppUpdateCheck(code, name), ct);
+            _versionSent.Add(sid);
+            logger.LogInformation("{Kid}: told the server version {Version}", KidName(sid), name);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception e)
+        {
+            logger.LogWarning("{Kid}: could not report the version ({Message})", KidName(sid), e.Message);
         }
     }
 }

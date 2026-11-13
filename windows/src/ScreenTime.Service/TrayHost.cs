@@ -12,7 +12,7 @@ namespace ScreenTime.Service;
 /// The tray of one kid session (docs/SPEC.md §12.2): the named pipe <c>ScreenTime.&lt;sessionId&gt;</c> with JSON lines,
 /// and, when <c>trayExe</c> is set, a loop that starts the tray in the session and starts it again when it exits.
 /// </summary>
-public sealed class TrayHost(uint sessionId, string kidSid, string? trayExe, bool dryLock, bool asService, Func<PipeMessage, Task> onMessage, ILogger logger, string? trayOpen = null, Action? onTrayExit = null)
+public sealed class TrayHost(uint sessionId, string kidSid, string? trayExe, bool dryLock, bool asService, Func<PipeMessage, Task> onMessage, ILogger logger, string? trayOpen = null, Action? onTrayExit = null, Func<bool>? shuttingDown = null, Func<bool>? sessionActive = null)
 {
     private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
     private readonly SemaphoreSlim _write = new(1, 1);
@@ -118,11 +118,37 @@ public sealed class TrayHost(uint sessionId, string kidSid, string? trayExe, boo
                     await process.WaitForExitAsync(ct);
                 }
                 catch (ArgumentException) { }
-                logger.LogInformation("tray {Session}: exited, starting again", sessionId);
-                onTrayExit?.Invoke();
+                logger.LogInformation("tray {Session}: exited", sessionId);
+                _ = JudgeExitAsync(ct);
                 await Task.Delay(TimeSpan.FromSeconds(1), ct);
+                // Not into a session that is ending or a PC that is shutting down: it would only be closed again.
+                while (!InUse())
+                {
+                    logger.LogInformation("tray {Session}: session not in use, waiting to start the tray", sessionId);
+                    await Task.Delay(TimeSpan.FromSeconds(5), ct);
+                }
+                logger.LogInformation("tray {Session}: starting again", sessionId);
             }
         }
         catch (OperationCanceledException) { }
+    }
+
+    /// <summary>True while the session is in use and the PC is not shutting down.</summary>
+    private bool InUse() => !(shuttingDown?.Invoke() ?? false) && (sessionActive?.Invoke() ?? true);
+
+    /// <summary>
+    /// Counts an exit toward a tamper attempt only if, <see cref="TrayExit.DelayMs"/> later, the session is still going
+    /// and in use and the PC is not shutting down (docs/SPEC.md §14). A sign-out cancels <paramref name="ct"/>.
+    /// </summary>
+    private async Task JudgeExitAsync(CancellationToken ct)
+    {
+        try
+        {
+            await Task.Delay(TrayExit.DelayMs, ct);
+        }
+        catch (OperationCanceledException) { }
+        var counts = TrayExit.Counts(ct.IsCancellationRequested, shuttingDown?.Invoke() ?? false, sessionActive?.Invoke() ?? true);
+        logger.LogInformation("tray {Session}: exit {Verdict}", sessionId, counts ? "counted" : "not counted (session or PC ending)");
+        if (counts) onTrayExit?.Invoke();
     }
 }
