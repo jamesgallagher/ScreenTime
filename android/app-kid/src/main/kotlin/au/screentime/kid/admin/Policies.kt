@@ -59,7 +59,10 @@ object Policies {
             dpm.addUserRestriction(admin, restriction)
         }
         if (!BuildConfig.DEBUG) {
-            dpm.addUserRestriction(admin, UserManager.DISALLOW_DEBUGGING_FEATURES)
+            // Parent mode lifted it in this process: the main screen applies again each time it opens, and blocking
+            // here would drop adb and make Android switch USB debugging off (Redmi, 13 Nov 2026). A new process
+            // starts with it blocked, and the service lifts it again if parent mode is still on.
+            if (blocksDebuggingOnApply(debuggingAllowed)) dpm.addUserRestriction(admin, UserManager.DISALLOW_DEBUGGING_FEATURES)
             dpm.setUninstallBlocked(admin, context.packageName, true)
         }
         // The second line of the dialog Android shows when a blocked app is opened (docs/SPEC.md §12.4).
@@ -71,7 +74,7 @@ object Policies {
         // SIM the phone app may run too, for its call screen and the emergency dialer.
         dpm.setLockTaskPackages(admin, (listOf(context.packageName) + phonePackages(context)).distinct().toTypedArray())
         lockTaskApps = null
-        debuggingAllowed = false
+        if (blocksDebuggingOnApply(debuggingAllowed)) debuggingAllowed = false
         dpm.setLockTaskFeatures(
             admin,
             DevicePolicyManager.LOCK_TASK_FEATURE_GLOBAL_ACTIONS or DevicePolicyManager.LOCK_TASK_FEATURE_KEYGUARD,
@@ -276,3 +279,9 @@ object Policies {
 
 /** The location permissions to take back, background first as Android wants: only those still [held]. */
 fun locationToTakeBack(all: List<String>, held: Set<String>): List<String> = all.reversed().filter { it in held }
+
+/**
+ * Whether [Policies.apply] blocks USB debugging: yes, unless parent mode lifted it in this process ([allowed] is
+ * whether it was last allowed; null in a new process, which starts blocked).
+ */
+fun blocksDebuggingOnApply(allowed: Boolean?): Boolean = allowed != true
