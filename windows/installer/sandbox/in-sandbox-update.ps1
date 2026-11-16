@@ -25,6 +25,13 @@ foreach ($line in (sc.exe query ScreenTime | Select-String "STATE")) { Say "  $(
 
 Say "=== 3. enrol this account as Sam"
 $gateway = (Get-NetIPConfiguration | Where-Object IPv4DefaultGateway | Select-Object -First 1).IPv4DefaultGateway.NextHop
+Say "  gateway: $gateway"
+try {
+  $health = Invoke-WebRequest "http://${gateway}:8080/health" -UseBasicParsing -TimeoutSec 5
+  Say "  server health: $($health.StatusCode) $($health.Content)"
+} catch {
+  Say "  server health: FAILED ($($_.Exception.Message))"
+}
 $enrolCode = (Get-Content C:\in\code.txt).Trim()
 $exit = Run $exe @("enrol", "--server", "http://${gateway}:8080", "--code", $enrolCode, "--user", $env:USERNAME)
 Say "  enrol exit $exit"
