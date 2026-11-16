@@ -24,7 +24,10 @@ try {
     if ($runs -match '\d+ \d+ \d+ \d+') { break }
   }
   if (-not ($runs -match '\d+ \d+ \d+ \d+')) { "NOT RUN: CI did not produce two successful runs in 15 minutes"; exit 1 }
-  $aId, $aNum, $bId, $bNum = $runs -split ' '
+  $newId, $newNum, $oldId, $oldNum = $runs -split ' '
+  # A is the lower run number, B the higher (the card's convention).
+  $aId, $aNum = $oldId, $oldNum
+  $bId, $bNum = $newId, $newNum
   "A = run $aId (#$aNum), B = run $bId (#$bNum)"
 } finally {
   Pop-Location

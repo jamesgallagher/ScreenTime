@@ -45,11 +45,14 @@ if (Test-Path $updatesFolder) {
 }
 
 Say "=== 8. update: lines from the service log"
-$svcLog = "C:\ProgramData\ScreenTime\service.log"
-if (Test-Path $svcLog) {
-  foreach ($line in (Get-Content $svcLog | Select-String "update:")) { Say "  $($line.Line)" }
-} else {
-  Say "  service log not found at $svcLog"
+try {
+  $events = Get-EventLog -LogName Application -Source "ScreenTime" -Newest 50 -ErrorAction Stop
+  foreach ($e in $events) {
+    if ($e.Message -match 'update:') { Say "  $($e.Message)" }
+  }
+  if (-not ($events | Where-Object { $_.Message -match 'update:' })) { Say "  no update: lines in the Application log" }
+} catch {
+  Say "  could not read the Application log ($($_.Exception.Message))"
 }
 
 Say "=== 9. pending update in the store"
