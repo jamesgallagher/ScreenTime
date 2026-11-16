@@ -12,17 +12,24 @@ namespace ScreenTime.Service;
 /// The tray of one kid session (docs/SPEC.md §12.2): the named pipe <c>ScreenTime.&lt;sessionId&gt;</c> with JSON lines,
 /// and, when <c>trayExe</c> is set, a loop that starts the tray in the session and starts it again when it exits.
 /// </summary>
-public sealed class TrayHost(uint sessionId, string kidSid, string? trayExe, bool dryLock, bool asService, Func<PipeMessage, Task> onMessage, ILogger logger, string? trayOpen = null, Action? onTrayExit = null, Func<bool>? shuttingDown = null, Func<bool>? sessionActive = null)
+public sealed class TrayHost(uint sessionId, string kidSid, string? trayExe, bool dryLock, bool asService, Func<PipeMessage, Task> onMessage, ILogger logger, string? trayOpen = null, Action? onTrayExit = null, Func<bool>? shuttingDown = null, Func<bool>? sessionActive = null, Func<bool>? updateInProgress = null)
 {
     private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
     private readonly SemaphoreSlim _write = new(1, 1);
     private StreamWriter? _writer;
+    private volatile int _trayPid;
+
+    /// <summary>The PID of the tray this host started, or 0 when none is running.</summary>
+    public int TrayPid => _trayPid;
 
     public Task RunAsync(CancellationToken ct)
     {
         var pipe = PipeLoopAsync(ct);
         return trayExe is null ? pipe : Task.WhenAll(pipe, TrayLoopAsync(trayExe, ct));
     }
+
+    /// <summary>True while an update is starting: the restart loop and exit judging are off for this session.</summary>
+    private bool UpdateInProgress() => updateInProgress?.Invoke() ?? false;
 
     public async Task SendAsync(PipeMessage message)
     {
@@ -111,6 +118,7 @@ public sealed class TrayHost(uint sessionId, string kidSid, string? trayExe, boo
                     await Task.Delay(TimeSpan.FromSeconds(5), ct);
                     continue;
                 }
+                _trayPid = pid;
                 logger.LogInformation("tray {Session}: started pid {Pid}", sessionId, pid);
                 try
                 {
@@ -118,13 +126,26 @@ public sealed class TrayHost(uint sessionId, string kidSid, string? trayExe, boo
                     await process.WaitForExitAsync(ct);
                 }
                 catch (ArgumentException) { }
+                _trayPid = 0;
                 logger.LogInformation("tray {Session}: exited", sessionId);
-                _ = JudgeExitAsync(ct);
+                // Off while an update is starting: the tray is not restarted and its exit is not judged (docs/SPEC.md §12.2).
+                if (!UpdateInProgress())
+                {
+                    _ = JudgeExitAsync(ct);
+                }
                 await Task.Delay(TimeSpan.FromSeconds(1), ct);
                 // Not into a session that is ending or a PC that is shutting down: it would only be closed again.
-                while (!InUse())
+                // While an update is in progress, wait (not start the tray) until it is over.
+                while (!InUse() || UpdateInProgress())
                 {
-                    logger.LogInformation("tray {Session}: session not in use, waiting to start the tray", sessionId);
+                    if (UpdateInProgress())
+                    {
+                        logger.LogInformation("tray {Session}: update in progress, waiting", sessionId);
+                    }
+                    else
+                    {
+                        logger.LogInformation("tray {Session}: session not in use, waiting to start the tray", sessionId);
+                    }
                     await Task.Delay(TimeSpan.FromSeconds(5), ct);
                 }
                 logger.LogInformation("tray {Session}: starting again", sessionId);

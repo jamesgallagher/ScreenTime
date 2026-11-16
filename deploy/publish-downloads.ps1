@@ -10,6 +10,8 @@ param(
     [switch]$Parent,
     [switch]$Windows,
     [string]$To,
+    [string]$DeviceId,
+    [string]$RunId,
     [string]$Ssh = 'root@192.168.0.148',
     [string]$SshDir = '/mnt/user/appdata/screentime/releases',
     [string]$Repo = 'jamesgallagher/ScreenTime'
@@ -38,7 +40,7 @@ function Send-File([string]$path, [string]$file, [string]$jsonName, [hashtable]$
     Write-Output "Published $($release.versionName): $file, $($release.sizeBytes) bytes"
 }
 
-function Describe([string]$path, [string]$file, [string]$versionName, $versionCode) {
+function Describe([string]$path, [string]$file, [string]$versionName, $versionCode, [string]$deviceId) {
     $release = [ordered]@{
         versionName = $versionName
         sha256      = (Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -46,6 +48,7 @@ function Describe([string]$path, [string]$file, [string]$versionName, $versionCo
         file        = $file
     }
     if ($versionCode) { $release.versionCode = [int]$versionCode }
+    if ($deviceId) { $release.deviceIds = @($deviceId) }
     return $release
 }
 
@@ -61,13 +64,21 @@ if ($Parent) {
     if ($LASTEXITCODE -ne 0) { throw 'The parent app did not build.' }
     $apk = "$root\android\app-parent\build\outputs\apk\release\app-parent-release.apk"
     $file = "parent-$code.apk"
-    Send-File $apk $file 'parent.json' (Describe $apk $file $name $code)
+    Send-File $apk $file 'parent.json' (Describe $apk $file $name $code $null)
 }
 
 if ($Windows) {
-    $run = gh run list --repo $Repo --workflow windows.yml --branch main --status success --limit 1 --json databaseId,number --jq '.[0] | "\(.databaseId) \(.number)"'
-    if (-not $run) { throw 'No successful Windows build on main. Start one: gh workflow run windows.yml --repo jamesgallagher/ScreenTime --ref main' }
-    $id, $number = $run -split ' '
+    # -RunId takes the MSI of one CI run (a successful run of windows.yml) instead of the newest on main.
+    if ($RunId) {
+        $run = gh run view $RunId --repo $Repo --json databaseId,number,name,status,conclusion --jq 'select(.name == "Windows") | "\(.databaseId) \(.number) \(.status) \(.conclusion)"'
+        if (-not $run) { throw "Run $RunId is not a Windows.yml run." }
+        $id, $number, $status, $conclusion = $run -split ' '
+        if ($status -ne 'completed' -or $conclusion -ne 'success') { throw "Run $number is not a successful Windows.yml run." }
+    } else {
+        $run = gh run list --repo $Repo --workflow windows.yml --branch main --status success --limit 1 --json databaseId,number --jq '.[0] | "\(.databaseId) \(.number)"'
+        if (-not $run) { throw 'No successful Windows build on main. Start one: gh workflow run windows.yml --repo jamesgallagher/ScreenTime --ref main' }
+        $id, $number = $run -split ' '
+    }
     $dir = Join-Path $work "msi-$number"
     Remove-Item $dir -Recurse -Force -ErrorAction SilentlyContinue
     gh run download $id --repo $Repo --name ScreenTime-msi --dir $dir
@@ -75,5 +86,5 @@ if ($Windows) {
     # CI builds it as version 0.1.<run number> (.github/workflows/windows.yml).
     $version = "0.1.$number"
     $file = "ScreenTime-$version.msi"
-    Send-File (Join-Path $dir 'ScreenTime.msi') $file 'windows.json' (Describe (Join-Path $dir 'ScreenTime.msi') $file $version $null)
+    Send-File (Join-Path $dir 'ScreenTime.msi') $file 'windows.json' (Describe (Join-Path $dir 'ScreenTime.msi') $file $version $number $DeviceId)
 }

@@ -158,4 +158,78 @@ describe.skipIf(!url)('app updates and removal', () => {
     await expect.poll(() => sent.length).toBe(1);
     expect(sent[0]?.token).toBe('dad-phone');
   });
+
+  // Windows (CARD-061): windows.json, GET /v1/device/app-update/msi, and /v1/downloads with the new fields.
+  const winOffer = { versionCode: 7, versionName: '0.1.7', sha256: 'b'.repeat(64), sizeBytes: 8 };
+  const publishWin = (over: Record<string, unknown> = {}) => {
+    writeFileSync(join(releases, 'ScreenTime-0.1.7.msi'), 'msi-file');
+    writeFileSync(join(releases, 'windows.json'), JSON.stringify({ ...winOffer, file: 'ScreenTime-0.1.7.msi', ...over }));
+  };
+  const pcCheck = (versionCode: number, token = pc.token) =>
+    api.post('/v1/device/app-update/check', token, { versionCode, versionName: `v${versionCode}` });
+  const msi = (token: string) => app.request('/v1/device/app-update/msi', { headers: { authorization: `Bearer ${token}` } });
+
+  beforeEach(async () => {
+    rmSync(join(releases, 'windows.json'), { force: true });
+    rmSync(join(releases, 'ScreenTime-0.1.7.msi'), { force: true });
+  });
+
+  it('offers a newer Windows version to a PC, and nothing when it is not newer', async () => {
+    publishWin();
+    expect((await pcCheck(6)).body).toEqual({ offer: winOffer });
+    expect((await pcCheck(7)).body).toEqual({ offer: null });
+    expect((await pcCheck(8)).body).toEqual({ offer: null });
+  });
+
+  it('offers a Windows version for chosen devices only to them', async () => {
+    publishWin({ deviceIds: [randomUUID()] });
+    expect((await pcCheck(1)).body).toEqual({ offer: null });
+    publishWin({ deviceIds: [pc.id] });
+    expect((await pcCheck(1)).body).toEqual({ offer: winOffer });
+  });
+
+  it('gives no Windows offer when windows.json is missing or invalid, and still stores the version', async () => {
+    const res = await pcCheck(1);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ offer: null });
+    let row = await db.select().from(devices).where(eq(devices.id, pc.id));
+    expect(row[0]?.appVersion).toBe('v1');
+    writeFileSync(join(releases, 'windows.json'), '{ not json');
+    expect((await pcCheck(2)).body).toEqual({ offer: null });
+    row = await db.select().from(devices).where(eq(devices.id, pc.id));
+    expect(row[0]?.appVersion).toBe('v2');
+    writeFileSync(join(releases, 'windows.json'), JSON.stringify({ versionName: '0.1.7', sizeBytes: 8, file: 'ScreenTime-0.1.7.msi' }));
+    expect((await pcCheck(3)).body).toEqual({ offer: null });
+  });
+
+  it('serves the MSI to a Windows device it is for, and to no other', async () => {
+    publishWin();
+    const res = await msi(pc.token);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('application/x-msi');
+    expect(res.headers.get('content-length')).toBe('8');
+    expect(await res.text()).toBe('msi-file');
+    expect((await msi(phone.token)).status).toBe(404);
+    publishWin({ deviceIds: [randomUUID()] });
+    expect((await msi(pc.token)).status).toBe(404);
+  });
+
+  it('says 404 when windows.json names a file that is not there', async () => {
+    publishWin();
+    rmSync(join(releases, 'ScreenTime-0.1.7.msi'));
+    expect((await msi(pc.token)).status).toBe(404);
+  });
+
+  it('needs a device token for the MSI', async () => {
+    publishWin();
+    expect((await app.request('/v1/device/app-update/msi')).status).toBe(401);
+  });
+
+  it('lists the Windows file when windows.json has versionCode and deviceIds', async () => {
+    publishWin({ versionCode: 7, deviceIds: [pc.id] });
+    const res = await app.request('/v1/downloads');
+    expect(res.status).toBe(200);
+    const body = JSON.parse(await res.text());
+    expect(body.windows).toEqual({ versionName: '0.1.7', sizeBytes: 8, fileName: 'ScreenTime-0.1.7.msi', url: '/v1/downloads/windows/file' });
+  });
 });

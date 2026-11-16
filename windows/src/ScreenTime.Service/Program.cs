@@ -14,6 +14,7 @@ var dataFolder = Win.DefaultDataFolder();
 var secure = true;
 var command = "";
 var dryLock = false;
+var updateAnytime = false;
 var flags = new Dictionary<string, string>();
 var i = 0;
 while (i < args.Length)
@@ -29,6 +30,11 @@ while (i < args.Length)
     else if (arg == "--dry-lock")
     {
         dryLock = true;
+        i++;
+    }
+    else if (arg == "--update-anytime")
+    {
+        updateAnytime = true;
         i++;
     }
     else if (arg.StartsWith("--"))
@@ -70,12 +76,12 @@ switch (command)
             flags.TryGetValue("fake-timezone-file", out var fakeZone);
             // Dev only: --games-root <folder> is the only place the game finder looks, instead of every fixed drive (docs/SPEC.md §12.6).
             flags.TryGetValue("games-root", out var gamesRoot);
-            if ((session is not null || trayOpen is not null || fakeClock is not null || fakeZone is not null || gamesRoot is not null) && !dryLock)
+            if ((session is not null || trayOpen is not null || fakeClock is not null || fakeZone is not null || gamesRoot is not null || updateAnytime) && !dryLock)
             {
-                Console.Error.WriteLine("--session, --tray-open, --fake-clock-file, --fake-timezone-file and --games-root are for testing and need --dry-lock.");
+                Console.Error.WriteLine("--session, --tray-open, --fake-clock-file, --fake-timezone-file, --games-root and --update-anytime are for testing and need --dry-lock.");
                 return 2;
             }
-            builder.Services.AddSingleton(new ServiceOptions(dataFolder, secure, trayExe, dryLock, WindowsServiceHelpers.IsWindowsService(), session, trayOpen, fakeClock, fakeZone, gamesRoot));
+            builder.Services.AddSingleton(new ServiceOptions(dataFolder, secure, trayExe, dryLock, WindowsServiceHelpers.IsWindowsService(), session, trayOpen, fakeClock, fakeZone, gamesRoot, updateAnytime));
             if (WindowsServiceHelpers.IsWindowsService())
             {
                 builder.Services.AddSingleton<IHostLifetime, SessionLifetime>();

@@ -65,6 +65,9 @@ public sealed record PipeMessage(string Type, string? Id = null, string? Text = 
     /// <summary>A tamper attempt was caught: the tray shows the caught toast and card (service to tray).</summary>
     public static PipeMessage Caught() => new("caught");
 
+    /// <summary>Quit now (service to tray, before an update installs): the tray exits at once.</summary>
+    public static PipeMessage Quit() => new("quit");
+
     /// <summary>The games that get a desktop shortcut, after every sync and on hello; empty takes them all away (service to tray).</summary>
     public static PipeMessage GamesOf(IReadOnlyList<GameShortcut> games) => new("games", Games: games);
 
