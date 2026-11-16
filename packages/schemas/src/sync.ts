@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { AppRuleMode } from './apps.js';
 import { DeviceForm, Pool } from './devices.js';
+import { StateGame } from './games.js';
 import { AvatarColor, Schedule } from './kids.js';
 
 /** Why a pool is locked (docs/SPEC.md §7.3). */
@@ -83,6 +84,11 @@ export const DeviceState = z
        */
       alwaysAllowed: z.array(z.string()).optional(),
     }),
+    /**
+     * The games this PC account gets a desktop shortcut for (docs/SPEC.md §12.6). Empty on Android. The server always
+     * sends it; it is optional so a device can still read a snapshot it saved before this field existed.
+     */
+    games: z.array(StateGame).optional(),
   })
   .meta({ id: 'DeviceState' });
 

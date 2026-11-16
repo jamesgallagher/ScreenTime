@@ -490,3 +490,28 @@ export const appUsageDaily = pgTable(
   },
   (t) => [primaryKey({ columns: [t.deviceId, t.package, t.day] }), index('app_usage_daily_kid_day_idx').on(t.kidId, t.day)],
 );
+
+/**
+ * A game on one Windows PC account (docs/SPEC.md §12.6): found by the PC (`found`) or typed in by a parent (`custom`).
+ * `shortcut` is the parent's choice to put it on the kid's desktop.
+ */
+export const deviceGames = pgTable(
+  'device_games',
+  {
+    familyId: familyId(),
+    kidId: uuid('kid_id')
+      .notNull()
+      .references(() => kids.id),
+    deviceId: uuid('device_id')
+      .notNull()
+      .references(() => devices.id),
+    game: text('game').notNull(),
+    label: text('label').notNull(),
+    exePath: text('exe_path').notNull(),
+    source: text('source').notNull(),
+    shortcut: boolean('shortcut').notNull().default(false),
+    firstSeenAt: ts('first_seen_at').notNull().defaultNow(),
+    removedAt: ts('removed_at'),
+  },
+  (t) => [primaryKey({ columns: [t.deviceId, t.game] }), check('device_games_source', sql`${t.source} in ('found', 'custom')`)],
+);

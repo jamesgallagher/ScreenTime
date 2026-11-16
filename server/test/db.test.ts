@@ -35,6 +35,7 @@ describe.skipIf(!url)('database', () => {
       'app_rules',
       'app_usage_daily',
       'device_apps',
+      'device_games',
       'devices',
       'enrolment_codes',
       'events',

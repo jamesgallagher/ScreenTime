@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using ScreenTime.Core.Games;
 using ScreenTime.Core.Tray;
 
 namespace ScreenTime.Core.Service;
@@ -10,7 +11,7 @@ namespace ScreenTime.Core.Service;
 /// </summary>
 public sealed record PipeMessage(string Type, string? Id = null, string? Text = null, int? Pid = null,
     string? KidName = null, long? RemainingSec = null, [property: JsonPropertyName("locked")] bool? IsLocked = null, bool? Offline = null, TrayStatus? View = null,
-    int? Minutes = null, string? Reason = null, string? PresetId = null, SendResult? Result = null, bool? Approved = null)
+    int? Minutes = null, string? Reason = null, string? PresetId = null, SendResult? Result = null, bool? Approved = null, IReadOnlyList<GameShortcut>? Games = null)
 {
     /// <summary>Lock the PC now (service to tray).</summary>
     public static PipeMessage Lock(string id) => new("lock", Id: id);
@@ -63,6 +64,9 @@ public sealed record PipeMessage(string Type, string? Id = null, string? Text = 
 
     /// <summary>A tamper attempt was caught: the tray shows the caught toast and card (service to tray).</summary>
     public static PipeMessage Caught() => new("caught");
+
+    /// <summary>The games that get a desktop shortcut, after every sync and on hello; empty takes them all away (service to tray).</summary>
+    public static PipeMessage GamesOf(IReadOnlyList<GameShortcut> games) => new("games", Games: games);
 
     /// <summary>One line, no newline at the end.</summary>
     public static string Encode(PipeMessage message) => JsonSerializer.Serialize(message, PipeJsonContext.Default.PipeMessage);

@@ -68,12 +68,14 @@ switch (command)
             flags.TryGetValue("tray-open", out var trayOpen);
             flags.TryGetValue("fake-clock-file", out var fakeClock);
             flags.TryGetValue("fake-timezone-file", out var fakeZone);
-            if ((session is not null || trayOpen is not null || fakeClock is not null || fakeZone is not null) && !dryLock)
+            // Dev only: --games-root <folder> is the only place the game finder looks, instead of every fixed drive (docs/SPEC.md §12.6).
+            flags.TryGetValue("games-root", out var gamesRoot);
+            if ((session is not null || trayOpen is not null || fakeClock is not null || fakeZone is not null || gamesRoot is not null) && !dryLock)
             {
-                Console.Error.WriteLine("--session, --tray-open, --fake-clock-file and --fake-timezone-file are for testing and need --dry-lock.");
+                Console.Error.WriteLine("--session, --tray-open, --fake-clock-file, --fake-timezone-file and --games-root are for testing and need --dry-lock.");
                 return 2;
             }
-            builder.Services.AddSingleton(new ServiceOptions(dataFolder, secure, trayExe, dryLock, WindowsServiceHelpers.IsWindowsService(), session, trayOpen, fakeClock, fakeZone));
+            builder.Services.AddSingleton(new ServiceOptions(dataFolder, secure, trayExe, dryLock, WindowsServiceHelpers.IsWindowsService(), session, trayOpen, fakeClock, fakeZone, gamesRoot));
             if (WindowsServiceHelpers.IsWindowsService())
             {
                 builder.Services.AddSingleton<IHostLifetime, SessionLifetime>();

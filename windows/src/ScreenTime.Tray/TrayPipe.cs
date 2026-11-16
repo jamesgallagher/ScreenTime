@@ -90,6 +90,9 @@ internal sealed partial class TrayPipe(string pipeName, bool dryLock, TrayModel 
                             log($"parent-no: {message.Text}");
                             model.ParentModeNo(message.Text ?? "");
                             break;
+                        case "games":
+                            GameDesk.Apply(message.Games ?? [], log);
+                            break;
                         case "status":
                             log($"status: {message.RemainingSec / 60} min left, locked {message.IsLocked}, offline {message.Offline}");
                             break;
