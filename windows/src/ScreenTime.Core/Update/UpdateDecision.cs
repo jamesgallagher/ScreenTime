@@ -14,7 +14,7 @@ namespace ScreenTime.Core.Update;
 public sealed record Offer(int VersionCode, string VersionName, string Sha256, int SizeBytes);
 
 /// <summary>What this PC knows about an update it is working through, kept in the store's key-value table.</summary>
-public sealed record PendingUpdate(int VersionCode, string VersionName, long StartedAtMs, int Failures = 0);
+public sealed record PendingUpdate(int VersionCode, string VersionName, long StartedAtMs);
 
 /// <summary>The state of a verified download of <see cref="Offer"/>: where the file is and when it was verified.</summary>
 public sealed record VerifiedDownload(string Path, long VerifiedAtMs);
@@ -111,11 +111,6 @@ public static class UpdateAttempt
 
     /// <summary>True when a version is not tried again: it failed <see cref="FailuresBeforeGivingUp"/> times.</summary>
     public static bool GiveUp(int failuresForVersion) => failuresForVersion >= FailuresBeforeGivingUp;
-
-    /// <summary>
-    /// Whether a version is offered again after being given up: only when a higher one is.
-    /// </summary>
-    public static bool Retry(int versionCode, int offeredVersionCode) => offeredVersionCode > versionCode;
 }
 
 /// <summary>The pending update as JSON for the store's key-value table: kept across a service restart.</summary>
@@ -141,77 +136,92 @@ public static class PendingUpdateJson
 
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(PendingUpdate))]
+[JsonSerializable(typeof(UpdateFailures))]
 internal sealed partial class PendingUpdateJsonContext : JsonSerializerContext;
 
-/// <summary>The next action the update loop should take, given the stored state and the current facts.</summary>
+/// <summary>
+/// The failed attempts for one version, kept in the store's key-value table so a restart of the service (which every
+/// attempt causes) does not forget them. Only the latest version tried is remembered: a higher one starts again at 0.
+/// </summary>
+public sealed record UpdateFailures(int VersionCode, int Count)
+{
+    /// <summary>The failures stored for <paramref name="versionCode"/>: 0 when the stored ones are for another version.</summary>
+    public static int For(UpdateFailures? stored, int versionCode) => stored is { } s && s.VersionCode == versionCode ? s.Count : 0;
+
+    /// <summary>The stored failures after one more failed attempt at <paramref name="versionCode"/>.</summary>
+    public static UpdateFailures After(UpdateFailures? stored, int versionCode) => new(versionCode, For(stored, versionCode) + 1);
+
+    public static string Encode(UpdateFailures failures) => JsonSerializer.Serialize(failures, PendingUpdateJsonContext.Default.UpdateFailures);
+
+    /// <summary>The stored failures back from JSON; null when there are none or the JSON is not valid.</summary>
+    public static UpdateFailures? Decode(string? json)
+    {
+        if (json is null) return null;
+        try
+        {
+            return JsonSerializer.Deserialize(json, PendingUpdateJsonContext.Default.UpdateFailures);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+}
+
+/// <summary>The next thing the update loop does.</summary>
 public enum UpdateAction
 {
-    /// <summary>Do nothing this tick.</summary>
+    /// <summary>Nothing this tick.</summary>
     Nothing,
-    /// <summary>Check the server for a newer version (the first, or 6 hours after the last).</summary>
+    /// <summary>Ask the server, for every enrolled account, whether there is a newer version.</summary>
     Check,
-    /// <summary>Download and verify the MSI for the offer.</summary>
+    /// <summary>Download and verify the MSI of the best offer.</summary>
     Download,
-    /// <summary>Install the verified MSI.</summary>
+    /// <summary>Close the trays and start the installer.</summary>
     Install,
-    /// <summary>The pending update succeeded: delete the file and task, clear the store.</summary>
+    /// <summary>The pending update succeeded: delete the file and the task, clear it.</summary>
     RecordSuccess,
-    /// <summary>The pending update failed: count the failure, clear the store.</summary>
+    /// <summary>The pending update failed: count it, clear it, let the trays start again.</summary>
     RecordFailure,
 }
 
-/// <summary>The facts the update loop needs to decide the next action.</summary>
+/// <summary>
+/// What the update loop knows on one tick. <c>VerifiedVersionCode</c> and <c>VerifiedAtMs</c> describe a downloaded
+/// MSI that matched its offer (null when there is none); <c>Failures</c> are the stored failed attempts at the best
+/// offer's version.
+/// </summary>
 public sealed record UpdateState(
-    PendingUpdate? pending,
-    long? lastCheckMs,
-    long? lastVerifiedAtMs,
-    int failuresForVersion,
-    Offer? bestOffer,
-    bool anyoneUsing,
-    bool anytime,
-    int runningVersionCode,
-    long nowMs);
+    PendingUpdate? Pending,
+    long? LastCheckMs,
+    Offer? BestOffer,
+    int? VerifiedVersionCode,
+    long? VerifiedAtMs,
+    int Failures,
+    bool AnyoneUsing,
+    bool Anytime,
+    int RunningVersionCode,
+    long NowMs);
 
 /// <summary>
-/// The update loop's decision (docs/SPEC.md §12.2): from the stored state and the current facts, what to do next.
-/// The service feeds it the facts and does what it says. No Windows calls here.
+/// The update loop's decision (docs/SPEC.md §12.2): from what it knows, the one next thing to do. The service runs it
+/// every tick and again after each step, so a check, a download and an install can follow each other at once.
 /// </summary>
 public static class UpdateDecision
 {
     public static UpdateAction Decide(UpdateState state)
     {
-        var pending = state.pending;
-        var now = state.nowMs;
-
-        // A stored pending update: work out what it says now.
-        if (pending is { } p)
+        // An install was started: wait for its result, which the next service usually sees at start.
+        if (state.Pending is { } pending)
         {
-            var (succeeded, failed) = UpdateAttempt.Result(p, state.runningVersionCode, now);
+            var (succeeded, failed) = UpdateAttempt.Result(pending, state.RunningVersionCode, state.NowMs);
             if (succeeded) return UpdateAction.RecordSuccess;
-            if (failed) return UpdateAction.RecordFailure;
-            // Still going: do nothing until the service restarts (the MSI stops it).
-            return UpdateAction.Nothing;
+            return failed ? UpdateAction.RecordFailure : UpdateAction.Nothing;
         }
-
-        // A check is due: the first, or 6 hours after the last.
-        if (!UpdateCheck.IsDue(state.lastCheckMs, now)) return UpdateAction.Nothing;
-
-        // No offer: do nothing (the offer comes from the server answer, checked at the same tick).
-        if (state.bestOffer is null) return UpdateAction.Nothing;
-
-        // After 3 failed attempts for one versionCode, stop trying it until a higher one is offered.
-        if (UpdateAttempt.GiveUp(state.failuresForVersion)) return UpdateAction.Nothing;
-
-        // The offer is higher than the running version (checked by Best). Download and verify.
-        return UpdateAction.Download;
-    }
-
-    /// <summary>
-    /// After a download: whether the install is due now. The service calls this after a successful download.
-    /// </summary>
-    public static UpdateAction AfterDownload(bool anyoneUsing, long verifiedAtMs, long nowMs, bool anytime)
-    {
-        if (UpdateInstall.IsDue(anyoneUsing, verifiedAtMs, nowMs, anytime)) return UpdateAction.Install;
-        return UpdateAction.Nothing;
+        // Ask the server at the first tick after start, then every 6 hours.
+        if (UpdateCheck.IsDue(state.LastCheckMs, state.NowMs)) return UpdateAction.Check;
+        if (state.BestOffer is not { } offer) return UpdateAction.Nothing;
+        if (UpdateAttempt.GiveUp(state.Failures)) return UpdateAction.Nothing;
+        if (state.VerifiedVersionCode != offer.VersionCode || state.VerifiedAtMs is not { } verifiedAt) return UpdateAction.Download;
+        return UpdateInstall.IsDue(state.AnyoneUsing, verifiedAt, state.NowMs, state.Anytime) ? UpdateAction.Install : UpdateAction.Nothing;
     }
 }
