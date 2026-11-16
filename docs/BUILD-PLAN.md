@@ -135,6 +135,7 @@ Features James asked for once the household was using it.
 | Card | Title | Depends on | Size | James | Spec |
 |---|---|---|---|---|---|
 | 060 | Games on a PC (front end by Claude, PR #180): the service finds known games, `device_games`, `PUT /v1/device/games`, the parent routes and the snapshot's `games`, desktop shortcuts from the tray, `--play` starting a game without asking for an administrator and fixing its `config.ini` | 059 | L | | 6, 8.2, 9.3, 12.6, 16.5 |
+| 061 | Windows updates itself: the server offers `windows.json` to PCs (one PC first with `-DeviceId`), `GET /v1/device/app-update/msi`, the service downloads and verifies the MSI, closes its trays (`quit` pipe line) and installs it from a one-time SYSTEM task when the PC is not in use, no restart; Bob writes the code and tests to the acceptance criteria | 060 | L | | 9.3, 12.2, 12.5 |
 
 ## Pending decisions that block cards
 
