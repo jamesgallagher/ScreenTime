@@ -870,7 +870,12 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
                 case UpdateAction.Download:
                     var offered = best!.Value;
                     logger.LogInformation("update: offered {Version} ({Code})", offered.Offer.VersionName, offered.Offer.VersionCode);
-                    if (!await DownloadAndVerify(offered.Sid, offered.Offer, ct)) return;
+                    if (!await DownloadAndVerify(offered.Sid, offered.Offer, ct))
+                    {
+                        // Tried again at the next check (6 hours), not every minute: a bad file would be downloaded over and over.
+                        _offers.Remove(offered.Sid);
+                        return;
+                    }
                     break;
                 case UpdateAction.Install:
                     if (!options.AsService)
