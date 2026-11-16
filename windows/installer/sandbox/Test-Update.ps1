@@ -54,6 +54,7 @@ New-Item -ItemType Directory -Force $dirA | Out-Null
 gh run download $aId --repo jamesgallagher/ScreenTime --name ScreenTime-msi --dir $dirA
 Copy-Item (Join-Path $dirA "ScreenTime.msi") (Join-Path $in "ScreenTime.msi")
 Copy-Item (Join-Path $here "in-sandbox-update.ps1") $in
+Copy-Item (Join-Path $here "check-update.ps1") $in
 Set-Content (Join-Path $in "old-version.txt") $aNum
 
 $wsb = Join-Path $work "run.wsb"
@@ -98,17 +99,21 @@ try {
   Pop-Location
 }
 
-"--- 6. wait for the update (up to 10 minutes)"
+"--- 6. wait for the update (up to 10 minutes), then check the result in the Sandbox"
 $waited = 0
 while ($waited -lt 600) {
   Start-Sleep 10
   $waited += 10
-  if (Test-Path (Join-Path $out "results.txt")) {
-    $content = Get-Content (Join-Path $out "results.txt") -Raw
-    if ($content -match 'update: installing') { break }
-  }
+  $appVersion = (docker exec screentime-db-1 psql -U screentime -d screentime -t -c "select app_version from devices where platform = 'windows' limit 1" | Select-String '0\.1\.\d+' | ForEach-Object { $_.Matches[0].Value })
+  if ($appVersion -eq "0.1.$bNum") { break }
 }
-"--- what the Sandbox saw (step 5-11)"
+"--- what the Sandbox saw (steps 1-4)"
+Get-Content (Join-Path $out "results.txt")
+# Run a second check inside the Sandbox for the update result.
+$checkCmd = "cmd.exe /c powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\in\check-update.ps1"
+wsb exec --id $wsbId -c $checkCmd -r ExistingLogin 2>&1 | Out-Null
+Start-Sleep 10
+"--- what the Sandbox saw (steps 5-11)"
 Get-Content (Join-Path $out "results.txt")
 
 "--- 7. check the dev database"
