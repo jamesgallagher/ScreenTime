@@ -102,7 +102,10 @@ try {
   Pop-Location
 }
 
-"--- 6. wait for the update (up to 10 minutes), then check the result in the Sandbox"
+"--- 6. restart the service to make it check now, then wait for the update (up to 10 minutes)"
+$restartCmd = "cmd.exe /c powershell.exe -NoProfile -ExecutionPolicy Bypass -Command Restart-Service ScreenTime"
+wsb exec --id $wsbId -c $restartCmd -r ExistingLogin 2>&1 | Out-Null
+Start-Sleep 30
 $waited = 0
 while ($waited -lt 600) {
   Start-Sleep 10
