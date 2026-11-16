@@ -1,6 +1,7 @@
 import type { Device, ParentModeDuration, TodayDevice } from '@screentime/schemas';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
+  Gamepad2,
   Loader2,
   Monitor,
   MoreHorizontal,
@@ -17,6 +18,7 @@ import { type FormEvent, useState } from 'react';
 import { AddDeviceDialog } from '@/components/add-device-dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { GamesBody } from '@/components/games-dialog';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import {
   DropdownMenu,
@@ -58,7 +60,7 @@ function ErrorText({ error }: { error: unknown }) {
   );
 }
 
-type Action = { kind: 'rename' | 'parentMode' | 'remove'; device: Device };
+type Action = { kind: 'rename' | 'parentMode' | 'remove' | 'games'; device: Device };
 
 /** "Parent mode · 10 min" or "Parent mode · until ended". */
 function parentModeText(parentMode: NonNullable<TodayDevice['parentMode']>, now: Date): string {
@@ -237,6 +239,12 @@ function DeviceRow({
             <Pencil />
             Rename…
           </DropdownMenuItem>
+          {device.form === 'pc' && (
+            <DropdownMenuItem onSelect={() => onAction({ kind: 'games', device })}>
+              <Gamepad2 />
+              Games…
+            </DropdownMenuItem>
+          )}
           <DropdownMenuSeparator />
           <DropdownMenuItem danger onSelect={() => onAction({ kind: 'remove', device })}>
             <Trash2 />
@@ -248,7 +256,7 @@ function DeviceRow({
   );
 }
 
-/** docs/SPEC.md §16.4 devices: name, form icon, last seen, Parent mode, rename, remove, and Add device. */
+/** docs/SPEC.md §16.4 devices: name, form icon, last seen, Parent mode, rename, Games on a PC, remove, and Add device. */
 export function DevicesPanel({ kidId, kidName }: { kidId: string; kidName: string }) {
   const devices = useDevices();
   const today = useToday();
@@ -308,6 +316,7 @@ export function DevicesPanel({ kidId, kidName }: { kidId: string; kidName: strin
           {action?.kind === 'rename' && <RenameBody device={action.device} onDone={close} />}
           {action?.kind === 'parentMode' && <ParentModeBody device={action.device} onDone={close} />}
           {action?.kind === 'remove' && <RemoveBody device={action.device} onDone={close} />}
+          {action?.kind === 'games' && <GamesBody device={action.device} kidName={kidName} />}
         </DialogContent>
       </Dialog>
       <AddDeviceDialog
