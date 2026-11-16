@@ -69,8 +69,12 @@ Set-Content $wsb @"
 "--- starting the Sandbox (a window opens and closes by itself; do not use it)"
 Start-Process $wsb
 $waited = 0
-while ($waited -lt 120) { Start-Sleep 5; $waited += 5 }
-$wsbId = (wsb list | Select-String "Running" | Select-Object -First 1 | ForEach-Object { ($_ -split '\s+')[0] })
+while ($waited -lt 180) {
+  Start-Sleep 5
+  $waited += 5
+  $wsbId = (wsb list 2>&1 | Select-Object -First 1).Trim()
+  if ($wsbId) { break }
+}
 if (-not $wsbId) { "NOT RUN: could not get the Sandbox id"; exit 1 }
 "Sandbox id: $wsbId"
 
