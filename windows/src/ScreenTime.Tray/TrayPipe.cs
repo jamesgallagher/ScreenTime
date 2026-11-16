@@ -86,6 +86,10 @@ internal sealed partial class TrayPipe(string pipeName, bool dryLock, TrayModel 
                             log("caught");
                             model.Caught();
                             break;
+                        case "quit":
+                            log("quit");
+                            model.Quit();
+                            return;
                         case "parent-no":
                             log($"parent-no: {message.Text}");
                             model.ParentModeNo(message.Text ?? "");

@@ -7185,7 +7185,7 @@
           "device"
         ],
         "summary": "Report the app version and ask for a newer one",
-        "description": "Stores the version for the parents to see. `offer` is null when there is nothing newer, and always on a device that is not Android.",
+        "description": "Stores the version for the parents to see. `offer` is null when there is nothing newer.",
         "security": [
           {
             "deviceAuth": []

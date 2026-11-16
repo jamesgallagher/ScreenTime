@@ -25,8 +25,17 @@ const KidRelease = AppUpdateOffer.extend({
 
 type KidRelease = z.infer<typeof KidRelease>;
 
+/** `windows.json` in the releases folder, written by `deploy/publish-downloads.ps1 -Windows` after the MSI is in place. */
+const WindowsRelease = AppUpdateOffer.extend({
+  file: z.string().regex(/^[A-Za-z0-9._-]+\.msi$/),
+  /** Only these devices, to try a version on one PC first. Left out: every Windows device. */
+  deviceIds: z.array(z.uuid()).optional(),
+});
+
+type WindowsRelease = z.infer<typeof WindowsRelease>;
+
 /** The published release, or null when there is none or `kid.json` is not valid (which is logged). */
-async function readRelease(dir: string | null): Promise<KidRelease | null> {
+async function readKidRelease(dir: string | null): Promise<KidRelease | null> {
   if (!dir) return null;
   let text: string;
   try {
@@ -42,12 +51,29 @@ async function readRelease(dir: string | null): Promise<KidRelease | null> {
   }
 }
 
+/** The published release, or null when there is none or `windows.json` is not valid (which is logged). */
+async function readWindowsRelease(dir: string | null): Promise<WindowsRelease | null> {
+  if (!dir) return null;
+  let text: string;
+  try {
+    text = await readFile(join(dir, 'windows.json'), 'utf8');
+  } catch {
+    return null;
+  }
+  try {
+    return WindowsRelease.parse(JSON.parse(text));
+  } catch (err) {
+    console.error('windows.json is not valid', err);
+    return null;
+  }
+}
+
 const checkRoute = createRoute({
   method: 'post',
   path: '/v1/device/app-update/check',
   tags: ['device'],
   summary: 'Report the app version and ask for a newer one',
-  description: 'Stores the version for the parents to see. `offer` is null when there is nothing newer, and always on a device that is not Android.',
+  description: 'Stores the version for the parents to see. `offer` is null when there is nothing newer.',
   security: deviceBearer,
   request: { body: jsonBody(AppUpdateCheck) },
   responses: {
@@ -66,7 +92,7 @@ const removedRoute = createRoute({
   responses: { 204: { description: 'Revoked.' }, ...errorResponses(401) },
 });
 
-/** Self-update of the kid app and its removal (docs/SPEC.md §12.1). */
+/** Self-update of the kid app, the PC, and their removal (docs/SPEC.md §12.1, §12.2). */
 export function registerAppUpdateRoutes(app: Router, deps: AppDeps) {
   const { db, config } = deps;
 
@@ -76,23 +102,38 @@ export function registerAppUpdateRoutes(app: Router, deps: AppDeps) {
     const [device] = await withFamily(db, familyId, (tx) =>
       tx.update(devices).set({ appVersion: body.versionName }).where(eq(devices.id, deviceId)).returning({ platform: devices.platform }),
     );
-    const release = await readRelease(config.releasesDir);
-    if (
-      device?.platform !== 'android' ||
-      !release ||
-      release.versionCode <= body.versionCode ||
-      (release.deviceIds && !release.deviceIds.includes(deviceId))
-    ) {
-      return c.json({ offer: null }, 200);
+    const platform = device?.platform;
+    if (platform === 'android') {
+      const release = await readKidRelease(config.releasesDir);
+      if (
+        !release ||
+        release.versionCode <= body.versionCode ||
+        (release.deviceIds && !release.deviceIds.includes(deviceId))
+      ) {
+        return c.json({ offer: null }, 200);
+      }
+      const { versionCode, versionName, sha256, sizeBytes } = release;
+      return c.json({ offer: { versionCode, versionName, sha256, sizeBytes } }, 200);
     }
-    const { versionCode, versionName, sha256, sizeBytes } = release;
-    return c.json({ offer: { versionCode, versionName, sha256, sizeBytes } }, 200);
+    if (platform === 'windows') {
+      const release = await readWindowsRelease(config.releasesDir);
+      if (
+        !release ||
+        release.versionCode <= body.versionCode ||
+        (release.deviceIds && !release.deviceIds.includes(deviceId))
+      ) {
+        return c.json({ offer: null }, 200);
+      }
+      const { versionCode, versionName, sha256, sizeBytes } = release;
+      return c.json({ offer: { versionCode, versionName, sha256, sizeBytes } }, 200);
+    }
+    return c.json({ offer: null }, 200);
   });
 
   // Plain bytes, so it is not in the contract: the kid app fetches it with its own HTTP call.
   app.get('/v1/device/app-update/apk', async (c) => {
     const { deviceId } = await requireDevice(c, db);
-    const release = await readRelease(config.releasesDir);
+    const release = await readKidRelease(config.releasesDir);
     if (!release || (release.deviceIds && !release.deviceIds.includes(deviceId))) {
       throw new ApiError('not_found', 'No update for this device.');
     }
@@ -104,6 +145,26 @@ export function registerAppUpdateRoutes(app: Router, deps: AppDeps) {
     if (size === null) throw new ApiError('not_found', 'No update for this device.');
     return new Response(Readable.toWeb(createReadStream(path)) as ReadableStream, {
       headers: { 'Content-Type': 'application/vnd.android.package-archive', 'Content-Length': String(size) },
+    });
+  });
+
+  // Plain bytes, so it is not in the contract: the Windows service fetches it with its own HTTP call.
+  app.get('/v1/device/app-update/msi', async (c) => {
+    const { deviceId } = await requireDevice(c, db);
+    const [device] = await db.select({ platform: devices.platform }).from(devices).where(eq(devices.id, deviceId));
+    if (device?.platform !== 'windows') throw new ApiError('not_found', 'No update for this device.');
+    const release = await readWindowsRelease(config.releasesDir);
+    if (!release || (release.deviceIds && !release.deviceIds.includes(deviceId))) {
+      throw new ApiError('not_found', 'No update for this device.');
+    }
+    const path = join(config.releasesDir ?? '', release.file);
+    const size = await stat(path).then(
+      (s) => s.size,
+      () => null,
+    );
+    if (size === null) throw new ApiError('not_found', 'No update for this device.');
+    return new Response(Readable.toWeb(createReadStream(path)) as ReadableStream, {
+      headers: { 'Content-Type': 'application/x-msi', 'Content-Length': String(size) },
     });
   });
 
