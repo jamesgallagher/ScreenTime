@@ -70,7 +70,7 @@ if ($Parent) {
 if ($Windows) {
     # -RunId takes the MSI of one CI run (a successful run of windows.yml) instead of the newest on main.
     if ($RunId) {
-        $run = gh run view $RunId --repo $Repo --json databaseId,number,name,status,conclusion --jq '[.[] | select(.name == "Windows") | "\(.databaseId) \(.number) \(.status) \(.conclusion)"] | .[0]'
+        $run = gh run view $RunId --repo $Repo --json databaseId,number,name,status,conclusion --jq 'select(.name == "Windows") | "\(.databaseId) \(.number) \(.status) \(.conclusion)"'
         if (-not $run) { throw "Run $RunId is not a Windows.yml run." }
         $id, $number, $status, $conclusion = $run -split ' '
         if ($status -ne 'completed' -or $conclusion -ne 'success') { throw "Run $number is not a successful Windows.yml run." }

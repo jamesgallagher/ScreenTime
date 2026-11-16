@@ -5,7 +5,7 @@
 # publishes B for the Sandbox PC only, waits for the update, and checks the result.
 $ErrorActionPreference = "Stop"
 $here = $PSScriptRoot
-$root = Split-Path (Split-Path $here)
+$root = Split-Path (Split-Path (Split-Path $here))
 $work = "C:\Users\james\OpenCode\Testing\temp\sandbox-update-$(Get-Date -Format yyyyMMdd-HHmmss)"
 $in = Join-Path $work "in"
 $out = Join-Path $work "out"
