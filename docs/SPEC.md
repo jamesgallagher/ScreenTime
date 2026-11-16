@@ -254,6 +254,10 @@ A Windows device row is one PC **plus** one Windows user account (Q10). Pools an
 
 **app_usage_daily** (one row per device, package and day): `family_id`, `kid_id`, `device_id`, `package`, `day`, `seconds`. Upsert keeps the larger value, so a repeat or an older upload never lowers it.
 
+**Games on a PC (Windows only, section 12.6).**
+
+**device_games** (one row per Windows device and game): `family_id`, `kid_id`, `device_id`, `game` (`genshin`, `starrail`, or `custom-<uuid>` for a program a parent added), `label` (max 60), `exe_path`, `source` (`found` | `custom`), `shortcut` (bool, default false: a parent wants it on the kid's desktop), `first_seen_at`, `removed_at` (nullable; set when the PC no longer finds it, cleared if it comes back).
+
 ### 6.2 Super admin
 
 The super admin is not a table row. The Docker env var `SUPER_ADMIN_EMAIL` names one email. Signing in with that email (normal OTP flow) gives the `superadmin` role, which can list, create and disable families and add the first parent to a family. Creating a family also creates its first parent, the default message presets and a parent-code secret, in one transaction. Disabling a family signs out every parent session in it at once. Removing `SUPER_ADMIN_EMAIL` takes the role away at once, without waiting for tokens to expire. The admin routes use the owner connection, not `withFamily`. A super admin who is also a parent in a family sees that family normally.
@@ -369,6 +373,7 @@ Details:
 - An open segment (no `endedAt`) of a device that has not been heard from for 10 minutes is shown as ending at that device's `last_seen_at`, so a phone that died while in use does not keep using up the pool. Devices upload at least every 5 minutes while in use (8.3), so a working device never looks stale. The stored segment is not changed.
 - `parents` lists every enabled parent, oldest first, with `phoneE164` null when the parent has no phone. `pendingRequest` is the newest pending time request for this kid and pool made today, as `{ id, minutes, createdAt }`. `activeSos` is the kid's newest SOS that has not ended or auto-stopped, as `{ id, startedAt }`.
 - `apps` (section 12.4) holds the kid's `newAppApproval` switch and every rule, `allowed` ones too, so a second device does not hold an app a parent has already approved. `today.appUsage` holds today's seconds per package from the kid's **other** Android devices, only for packages with a `limit` rule, so an upload only changes another device's snapshot when it matters. On a Windows device both are empty.
+- `games` (section 12.6) holds the games this PC account gets a desktop shortcut for, as `{ id, label, exePath }` by id: the ones a parent turned on that the PC still finds. On an Android device it is empty.
 
 ### 8.3 When devices sync
 
@@ -506,6 +511,7 @@ App control routes (Android only, section 12.4):
 | POST | `/v1/device/sos/{id}/end` | kid held "I'm safe" → 204, writes `sos.ended`. Already ended is fine |
 | PUT | `/v1/device/apps` | `{ apps: [{ package, label, source, installer, blockable, installedAt, firstUsedAt }] }` (`installer` and `firstUsedAt` may be null) 1 to 500, the device's **whole** list → 204. Android only (a PC → 409). What it stores and raises is in 12.4 |
 | POST | `/v1/device/app-usage` | `{ days: [{ day, apps: [{ package, seconds }] }] }` at most 8 days and 500 apps a day → 204. Android only (a PC → 409). Upsert keeps the larger value |
+| PUT | `/v1/device/games` | `{ games: [{ id, label, exePath }] }` 0 to 50, every known game the PC finds now → 204. Windows only (an Android device → 409). A game left out is marked removed; programs a parent added are not touched; no `custom-` ids (422). See 12.6 |
 | POST | `/v1/device/app-update/check` | `{ versionCode, versionName }` → `{ offer: { versionCode, versionName, sha256, sizeBytes } \| null }`. Stores the version. `offer` is null when nothing newer is published for this device, and always for a PC |
 | GET | `/v1/device/app-update/apk` | The published APK as plain bytes, not in the contract. 404 when there is none for this device |
 | POST | `/v1/device/removed` | After a right parent code on the device → 204. Revokes the device and writes `device.removed` |
@@ -775,6 +781,44 @@ Not tried yet, so **each card's rehearsal or the rollout must prove it**: a real
 
 `https://screentime.gallagherhome.au/app` needs no sign-in. It reads the browser's user agent: Android with "Mobile" is a phone, Android without it a tablet, "Windows NT" a PC, and anything else gets everything; buttons at the bottom switch by hand. A phone gets **ST Parent** first and **ST Kid** second, a tablet the two side by side, a PC the **MSI** first and both APKs under "Setting up an Android phone or tablet from this PC". Each card has the version, the size, short steps and a link to the guide. `GET /v1/downloads` lists the latest file of each (`kid`, `parent`, `windows`, null when none) and `GET /v1/downloads/{app}/file` serves it as `ScreenTime-Parent-0.1.1.apk`, `ScreenTime-Kid-0.1.1.apk` or `ScreenTime-0.1.70.msi`. They read the releases folder: `kid.json` (from `android/publish-kid.ps1`, also when it is offered to one device only), and `parent.json` and `windows.json` from `deploy/publish-downloads.ps1`, which builds the signed parent app or takes the newest MSI that CI built on `main`. The files hold no secrets.
 
+### 12.6 Games that ask for an administrator (Windows only: James, 16 Nov 2026)
+
+Some games ask for an administrator at every start. Kids have standard accounts, so a parent had to type a password each time. Tried with Genshin Impact and Honkai: Star Rail, the games do not need it: only their launcher does. The PC starts them without it from a desktop shortcut that a parent turns on.
+
+**What was tried.** On James's PC (Genshin 7.2, Google Play Games build) and on a kid's PC (standard account; Genshin 7.2 and Star Rail 4.7, both Epic Games builds), 16 Nov 2026:
+
+| Thing tried | Result |
+|---|---|
+| The launcher (`HYP.exe`, HoYoPlay) | Its manifest says `requireAdministrator`, and `launcher.exe` starts it with an explicit "run as administrator". A per-user `RUNASINVOKER` compatibility flag does not stop the prompt |
+| The game exe's manifest (`GenshinImpact.exe`, `StarRail.exe`) | `requireAdministrator` too. One prompt covers both because the game inherits the launcher's rights |
+| The game exe started directly with the environment variable `__COMPAT_LAYER=RunAsInvoker` | Runs at medium integrity. Genshin on James's PC: signed in, entered the world, no kick. Both games on the kid's PC: reached the sign-in screen |
+| The anti-cheat driver (`HoYoKProtect.sys` in the game folder) | Never seen registered or loaded, elevated or not. "Anti-cheat needs an administrator" was an assumption |
+| A Google Play Games build started directly | Closes with "It will restart through Google Play Games", until `config.ini` next to the exe has `sub_channel=0` (it had `6`) |
+| Star Rail's Epic build started directly | Loops on "Game initialization error", until `config.ini` has `sub_channel=0` (it had `3`). Genshin's Epic build starts as it is |
+| From C#: `Process.Start` with `UseShellExecute = false` on an exe whose manifest demands an administrator | Error 740 without the variable; with it set only in the child's environment, the exe runs and is not elevated |
+| A shortcut written with `IShellLinkW`, its icon set to the game's exe | Works from the tray (not Native AOT), also on a desktop that OneDrive moved |
+
+Not tried: a long play session on the kid's PC, whether a game update puts `config.ini` back (so the fix is applied before every start), whether a purchase on the official channel goes to the kid's Epic account, and any other game.
+
+**Finding games.** The service looks over every fixed drive at start and every 6 hours, beside its other loops: folders nearest the root first, at most 6 folders deep and 200,000 folders, skipping `Windows`, `ProgramData`, `Users`, `Documents and Settings`, `$Recycle.Bin`, `System Volume Information`, `Recovery`, `PerfLogs`, `$WinREAgent`, `WindowsApps`, `node_modules` and `.git`, and never following links. It knows two games by their exe name: `genshin` (Genshin Impact, `GenshinImpact.exe`) and `starrail` (Honkai: Star Rail, `StarRail.exe`). It sends what it found with `PUT /v1/device/games` once per account, and again only when the list changes.
+
+**What the server keeps.** `device_games` has one row per PC account and game. A found game left out of a later list gets `removed_at` and leaves the snapshot, but keeps its `shortcut` choice for when it comes back. A parent can also add a program by its path (`custom`, id `custom-<uuid>`, shortcut on at once), at most 20 per PC account; the PC's list never touches those. Only an `.exe` on a drive letter is taken: `^[a-zA-Z]:\\[^<>:"|?*]*\.exe$`, up to 260 characters. Parent routes, all under a Windows device of the family (404 for none, 409 for an Android device):
+
+| Method | Path | Body → answer |
+|---|---|---|
+| GET | `/v1/devices/{deviceId}/games` | → `{ games: [{ id, label, exePath, source, shortcut, removedAt }] }`, by label |
+| PUT | `/v1/devices/{deviceId}/games/{gameId}/shortcut` | `{ shortcut }` → 204. On for a game that is gone → 409 |
+| POST | `/v1/devices/{deviceId}/games` | `{ label, exePath }` → 201 and the game. The same path again, or a 21st → 409 |
+| DELETE | `/v1/devices/{deviceId}/games/{gameId}` | → 204. A found game → 409 |
+
+Each of them, and a PC's list that changes a game whose shortcut is on, sends `state_changed` to that device only.
+
+**The shortcut.** After every sync, and when the tray connects, the service sends the tray the snapshot's `games` as a `games` pipe line. The tray makes the kid's desktop match: one shortcut per game, named `Play <label>.lnk` without the characters a file name cannot have (two games with one name get ` (2)`), with the game's own icon. The plain name is left to the launcher's shortcut, which asks for an administrator. A shortcut the kid deletes comes back at the next sync; one for a game turned off, or no longer found, is removed. The tray only ever deletes shortcuts it made, which it lists in `%LOCALAPPDATA%\ScreenTime\games.json`.
+
+**Starting.** A shortcut runs `ScreenTime.Tray.exe --play <id>`, which reads `games.json`, starts the exe in its own folder with `__COMPAT_LAYER=RunAsInvoker`, and ends. For a known game it first reads `config.ini` next to the exe and, when `sub_channel` is one that stops a direct start (6 for Genshin, 3 for Star Rail), writes `sub_channel=0` and `cps=hoyoverse`, leaving every other line as it was. A program a parent added is started as it is. If the game is not in the list or cannot be started, a small message says so. Nothing runs elevated at any point, so a shortcut can only start what the kid could already start.
+
+**What it does not do.** Updating a game still goes through its launcher and needs a parent. Time is counted as before: Windows counts the session, not the game. The Android parent app has no Games screen yet; the web app does (16.5).
+
 ## 13. Notifications
 
 Parent notifications go to the Android parent app by FCM. The web app shows the same items in its inbox and as banners while open (polling `/v1/events` every 30 s), and sends no browser push in v1.
@@ -993,7 +1037,7 @@ As planned (CARD-042): the parent app starts Firebase itself from four `BuildCon
 
 ### 16.5 Parent web app
 
-Kid detail has an **Apps** tab with the same content as 16.4. Same functions as the parent app except SOS alarms (the web shows a red banner at the top of every page while an SOS is active, with the map link) and parent code (also shown in Settings).
+Kid detail has an **Apps** tab with the same content as 16.4. On the Devices tab, a PC's **More** menu has **Games…** (section 12.6): a dialog with a switch per game the PC found ("Not on this PC any more" for one that is gone, with its switch disabled), the programs a parent added with a remove button, and **Add another program** (a name and the full path to an .exe; a bad path says what is wrong). The Android parent app does not have it yet. Same functions as the parent app except SOS alarms (the web shows a red banner at the top of every page while an SOS is active, with the map link) and parent code (also shown in Settings).
 
 Development (CARD-022): `pnpm dev:web` serves the app on http://localhost:5173 and passes `/v1/*` and `/health` to the API on :8080, so the browser sees one origin (in production the server serves the build, CARD-027). Routes are defined in code (TanStack Router, no generator); components are shadcn/ui-style files in `web/src/components/ui` with our tokens, not the shadcn defaults.
 

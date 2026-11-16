@@ -128,6 +128,14 @@ Android phones and tablets only. These come before cards 054 and 055, although t
 | 054 | Guides: Android provisioning (with the usage access step and the release path), Windows install, the releases folder in the deploy guide; the parent app's release signing, and an MSI build on request | 038, 052, 056, 059 | S | | 12 |
 | 055 | Household rollout and end-to-end acceptance checklist | all | S | All devices | all |
 
+## Phase 7: after rollout
+
+Features James asked for once the household was using it.
+
+| Card | Title | Depends on | Size | James | Spec |
+|---|---|---|---|---|---|
+| 060 | Games on a PC (front end by Claude, PR #180): the service finds known games, `device_games`, `PUT /v1/device/games`, the parent routes and the snapshot's `games`, desktop shortcuts from the tray, `--play` starting a game without asking for an administrator and fixing its `config.ini` | 059 | L | | 6, 8.2, 9.3, 12.6, 16.5 |
+
 ## Pending decisions that block cards
 
 See SPEC section 17. None of the remaining pending decisions block an early card.
