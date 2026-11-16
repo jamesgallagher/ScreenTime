@@ -79,12 +79,12 @@ if (-not $wsbId) { "NOT RUN: could not get the Sandbox id"; exit 1 }
 "Sandbox id: $wsbId"
 
 "--- 4. install A, enrol, and set the service flags"
-$installCmd = "cmd.exe /c powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\in\in-sandbox-update.ps1 > C:\out\results.txt 2>&1"
+$installCmd = "cmd.exe /c powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\in\in-sandbox-update.ps1"
 wsb exec --id $wsbId -c $installCmd -r ExistingLogin 2>&1 | Out-Null
 $waited = 0
 while (-not (Test-Path (Join-Path $out "results.txt")) -and $waited -lt 600) { Start-Sleep 5; $waited += 5 }
 if (-not (Test-Path (Join-Path $out "results.txt"))) { "NOT RUN: the Sandbox never wrote results.txt"; exit 1 }
-"--- what the Sandbox saw (step 1-4)"
+"--- what the Sandbox saw (step 1-11)"
 Get-Content (Join-Path $out "results.txt")
 
 "--- 5. find the Sandbox PC's device id and publish B for it"

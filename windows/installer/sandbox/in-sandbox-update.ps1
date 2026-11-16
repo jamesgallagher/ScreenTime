@@ -118,10 +118,14 @@ if (Test-Path $svcLog) {
 Say "=== 10. pending update in the store"
 $storeDb = "C:\ProgramData\ScreenTime\state.db"
 if (Test-Path $storeDb) {
-  $bytes = [IO.File]::ReadAllBytes($storeDb)
-  $text = [Text.Encoding]::UTF8.GetString($bytes)
-  $match = [regex]::Match($text, 'pending.*?(\{"versionCode":\d+,\s*"versionName":"[^"]+",\s*"startedAtMs":\d+,\s*"failures":\d+\})')
-  if ($match.Success) { Say "  pending update: $($match.Groups[1].Value)" } else { Say "  pending update: none (or not readable)" }
+  try {
+    $bytes = [IO.File]::ReadAllBytes($storeDb)
+    $text = [Text.Encoding]::UTF8.GetString($bytes)
+    $match = [regex]::Match($text, '\{"versionCode":\d+,\s*"versionName":"[^"]+",\s*"startedAtMs":\d+,\s*"failures":\d+\}')
+    if ($match.Success) { Say "  pending update: $($match.Value)" } else { Say "  pending update: none" }
+  } catch {
+    Say "  pending update: could not read state.db ($($_.Exception.Message))"
+  }
 } else {
   Say "  state.db not found"
 }
