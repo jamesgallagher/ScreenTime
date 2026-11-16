@@ -123,6 +123,42 @@ try {
   Pop-Location
 }
 
-"--- 8. stop the Sandbox"
+"--- 8. publish a fake newer version with a wrong sha256 (criterion 19)"
+Push-Location $root
+try {
+  # Write a windows.json with a versionCode above B's, pointing at A's file with a wrong sha256.
+  $fakeVersionCode = [int]$bNum + 1
+  $fakeVersionName = "0.1.$fakeVersionCode"
+  $msiFile = "ScreenTime-$fakeVersionName.msi"
+  # Copy A's MSI as the fake file.
+  Copy-Item (Join-Path $dirA "ScreenTime.msi") (Join-Path $root "deploy\releases\$msiFile") -Force
+  $sizeBytes = (Get-Item (Join-Path $root "deploy\releases\$msiFile")).Length
+  $wrongSha = "0000000000000000000000000000000000000000000000000000000000000000"
+  $windowsJson = @"
+{"versionName":"$fakeVersionName","versionCode":$fakeVersionCode,"sha256":"$wrongSha","sizeBytes":$sizeBytes,"file":"$msiFile","deviceIds":["$deviceId"]}
+"@
+  Set-Content (Join-Path $root "deploy\releases\windows.json") $windowsJson
+  "fake windows.json:"
+  Get-Content (Join-Path $root "deploy\releases\windows.json")
+  # Restart the service in the Sandbox to make it check now.
+  $restartCmd = "cmd.exe /c powershell.exe -NoProfile -ExecutionPolicy Bypass -Command Restart-Service ScreenTime"
+  wsb exec --id $wsbId -c $restartCmd -r ExistingLogin 2>&1 | Out-Null
+  # Wait for the mismatch log line.
+  $waited = 0
+  while ($waited -lt 120) {
+    Start-Sleep 10
+    $waited += 10
+    if (Test-Path (Join-Path $out "results.txt")) {
+      $content = Get-Content (Join-Path $out "results.txt") -Raw
+      if ($content -match 'does not match|mismatch') { break }
+    }
+  }
+  "--- what the Sandbox saw (step 11: mismatch)"
+  Get-Content (Join-Path $out "results.txt")
+} finally {
+  Pop-Location
+}
+
+"--- 9. stop the Sandbox"
 wsb stop --id $wsbId 2>&1
 "=== done"

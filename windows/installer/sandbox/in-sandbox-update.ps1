@@ -118,14 +118,10 @@ if (Test-Path $svcLog) {
 Say "=== 10. pending update in the store"
 $storeDb = "C:\ProgramData\ScreenTime\state.db"
 if (Test-Path $storeDb) {
-  $conn = New-Object Microsoft.Data.Sqlite.SqliteConnection("Data Source=$storeDb")
-  $conn.Open()
-  $cmd = $conn.CreateCommand()
-  $cmd.CommandText = "SELECT value FROM kv WHERE sid = 'update' AND key = 'pending'"
-  $reader = $cmd.ExecuteReader()
-  if ($reader.Read()) { Say "  pending update: $($reader.GetString(0))" } else { Say "  pending update: none" }
-  $reader.Close()
-  $conn.Close()
+  $bytes = [IO.File]::ReadAllBytes($storeDb)
+  $text = [Text.Encoding]::UTF8.GetString($bytes)
+  $match = [regex]::Match($text, 'pending.*?(\{"versionCode":\d+,\s*"versionName":"[^"]+",\s*"startedAtMs":\d+,\s*"failures":\d+\})')
+  if ($match.Success) { Say "  pending update: $($match.Groups[1].Value)" } else { Say "  pending update: none (or not readable)" }
 } else {
   Say "  state.db not found"
 }
@@ -147,4 +143,3 @@ if (Test-Path $svcLog) {
 }
 
 Say "done"
-Stop-Computer -Force
