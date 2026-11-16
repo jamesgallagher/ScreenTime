@@ -666,6 +666,65 @@ class ApiClient(
     }
 
     /**
+     * Send every known game the PC finds now.
+     *
+     * `PUT /v1/device/games`
+     */
+    suspend fun putDeviceGames(
+        body: DeviceGamesPut,
+    ) {
+        call(HttpMethod.Put, "/v1/device/games", auth = true, body = body, bodyType = typeInfo<DeviceGamesPut>())
+    }
+
+    /**
+     * A PC account's games.
+     *
+     * `GET /v1/devices/{deviceId}/games`
+     */
+    suspend fun getDevicesGames(
+        deviceId: String,
+    ): DeviceGames {
+        return call(HttpMethod.Get, "/v1/devices/${segment(deviceId)}/games", auth = true).body()
+    }
+
+    /**
+     * Add a program by its path, with its shortcut on.
+     *
+     * `POST /v1/devices/{deviceId}/games`
+     */
+    suspend fun postDevicesGames(
+        deviceId: String,
+        body: CustomGameIn,
+    ): DeviceGame {
+        return call(HttpMethod.Post, "/v1/devices/${segment(deviceId)}/games", auth = true, body = body, bodyType = typeInfo<CustomGameIn>()).body()
+    }
+
+    /**
+     * Put a game's shortcut on the kid's desktop, or take it away.
+     *
+     * `PUT /v1/devices/{deviceId}/games/{gameId}/shortcut`
+     */
+    suspend fun putDevicesGamesShortcut(
+        deviceId: String,
+        gameId: String,
+        body: GameShortcutPut,
+    ) {
+        call(HttpMethod.Put, "/v1/devices/${segment(deviceId)}/games/${segment(gameId)}/shortcut", auth = true, body = body, bodyType = typeInfo<GameShortcutPut>())
+    }
+
+    /**
+     * Remove a program a parent added.
+     *
+     * `DELETE /v1/devices/{deviceId}/games/{gameId}`
+     */
+    suspend fun deleteDevicesGamesById(
+        deviceId: String,
+        gameId: String,
+    ) {
+        call(HttpMethod.Delete, "/v1/devices/${segment(deviceId)}/games/${segment(gameId)}", auth = true)
+    }
+
+    /**
      * The latest kid app, parent app and PC installer.
      *
      * `GET /v1/downloads`

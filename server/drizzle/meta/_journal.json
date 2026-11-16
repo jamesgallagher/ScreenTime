@@ -64,6 +64,13 @@
       "when": 1794374996581,
       "tag": "0008_always_allowed",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1794795497883,
+      "tag": "0009_device_games",
+      "breakpoints": true
     }
   ]
 }

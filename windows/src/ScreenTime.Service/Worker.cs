@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Text;
 using System.Threading.Channels;
 using ScreenTime.Core.Api;
+using ScreenTime.Core.Games;
 using ScreenTime.Core.Service;
 using ScreenTime.Core.Store;
 using ScreenTime.Core.Sync;
@@ -15,10 +16,10 @@ namespace ScreenTime.Service;
 /// <summary>
 /// The service's options: the data folder, whether it is the secure default, the tray exe (null: no tray), dry-lock
 /// (log instead of locking or disconnecting) and whether it runs as a Windows service. <c>Session</c> and <c>TrayOpen</c>
-/// are for test runs (<c>--session</c>, <c>--tray-open</c>). <c>FakeClockFile</c> and <c>FakeTimezoneFile</c> are for test runs too.
+/// are for test runs (<c>--session</c>, <c>--tray-open</c>). <c>FakeClockFile</c>, <c>FakeTimezoneFile</c> and <c>GamesRoot</c> are for test runs too.
 /// </summary>
 public sealed record ServiceOptions(string DataFolder, bool SecureFolder, string? TrayExe, bool DryLock, bool AsService, uint? Session = null,
-    string? TrayOpen = null, string? FakeClockFile = null, string? FakeTimezoneFile = null);
+    string? TrayOpen = null, string? FakeClockFile = null, string? FakeTimezoneFile = null, string? GamesRoot = null);
 
 /// <summary>
 /// The service's worker: it opens the store, the clock and the config, starts the tracker, and runs four loops (session
@@ -53,6 +54,12 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
 
     /// <summary>The accounts whose app version the server has been told since the service started.</summary>
     private readonly HashSet<string> _versionSent = new();
+
+    /// <summary>The known games on this PC (docs/SPEC.md §12.6); null until the first look has finished.</summary>
+    private volatile IReadOnlyList<GameShortcut>? _foundGames;
+
+    /// <summary>What the server was last told this PC has, per account, so it is only told again when that changes.</summary>
+    private readonly Dictionary<string, string> _gamesSent = new();
 
     private sealed class KidSession(uint sessionId, string sid, TrayHost tray, CancellationTokenSource cts)
     {
@@ -219,7 +226,23 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
             catch (OperationCanceledException) { }
         });
 
-        await Task.WhenAll(eventsTask, timerTask, lockTask, syncTask);
+        // Looking over the disks takes seconds, so it runs beside the loops and never holds their lock.
+        var gamesTask = Task.Run(async () =>
+        {
+            try
+            {
+                while (!stoppingToken.IsCancellationRequested)
+                {
+                    var found = GameFinder.Find(options.GamesRoot is { } root ? [root] : Win.GameRoots(), Win.SubFolders, File.Exists);
+                    _foundGames = found;
+                    logger.LogInformation("games: found {Count} ({Games})", found.Count, string.Join(", ", found.Select(g => g.ExePath)));
+                    await Task.Delay(TimeSpan.FromHours(6), stoppingToken);
+                }
+            }
+            catch (OperationCanceledException) { }
+        });
+
+        await Task.WhenAll(eventsTask, timerTask, lockTask, syncTask, gamesTask);
 
         foreach (var s in _sessions.Values) s.Cts.Cancel();
         tracker.OnChange(SessionChange.Shutdown, null, false, clock.NowMs());
@@ -450,6 +473,7 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
                 case "hello":
                     logger.LogInformation("tray {Session}: hello pid {Pid}", sessionId, m.Pid);
                     if (View(s.Sid, _clock.NowMs()) is { } view) await SendView(s, view);
+                    await SendGames(s);
                     // A tray killed three times was dead when it was caught: it hears it now.
                     if (s.CaughtPending)
                     {
@@ -710,6 +734,7 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
         }
         await ReportParentMode(sid, api, ct);
         await ReportEvents(sid, api, ct);
+        await ReportGames(sid, api, ct);
         var synced = await syncer.SyncAsync(ct);
         if (synced && !_versionSent.Contains(sid)) await ReportVersion(sid, api, ct);
         if (!synced) _tracker.MarkOffline(sid);
@@ -733,8 +758,41 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
             {
                 await SendView(s, view);
                 foreach (var text in toasts) await SendToast(s, text);
+                await SendGames(s);
             }
         }
+    }
+
+    /// <summary>
+    /// Tells the server which known games this PC has (docs/SPEC.md §12.6), once per account, and again only when the
+    /// list changes. Nothing is sent before the first look has finished.
+    /// </summary>
+    private async Task ReportGames(string sid, ApiClient api, CancellationToken ct)
+    {
+        if (_foundGames is not { } found) return;
+        var key = string.Join("|", found.Select(g => g.Id + "=" + g.ExePath));
+        if (_gamesSent.GetValueOrDefault(sid) == key) return;
+        try
+        {
+            await api.PutDeviceGamesAsync(new DeviceGamesPut(found.Select(g => new FoundGameIn(g.Id, g.Label, g.ExePath)).ToList()), ct);
+            _gamesSent[sid] = key;
+            logger.LogInformation("{Kid}: told the server {Count} games", KidName(sid), found.Count);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception e)
+        {
+            logger.LogWarning("{Kid}: could not report the games ({Message})", KidName(sid), e.Message);
+        }
+    }
+
+    /// <summary>Sends the session's tray the games that get a desktop shortcut, from the saved snapshot; none before the first sync.</summary>
+    private async Task SendGames(KidSession s)
+    {
+        var games = _store.LoadState(s.Sid)?.State.Games ?? [];
+        await s.Tray.SendAsync(PipeMessage.GamesOf(games.Select(g => new GameShortcut(g.Id, g.Label, g.ExePath)).ToList()));
     }
 
     /// <summary>

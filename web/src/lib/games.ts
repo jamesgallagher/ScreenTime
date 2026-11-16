@@ -2,79 +2,34 @@
  * Games on a kid's PC (docs/SPEC.md §12.6): the PC reports the games it finds, and a parent chooses which get a
  * desktop shortcut that starts the game without asking for an administrator.
  *
- * This file is the seam between the dialog and the server. Until CARD-060 it answers from a list kept in memory, so
- * the dialog can be built and tried on its own.
+ * This file is the seam between the dialog and the server.
  */
+import type { DeviceGame, DeviceGames } from '@screentime/schemas';
+import { api } from '@/lib/auth';
 
-/** One game on one PC account. `found` games come from the PC; `custom` ones were typed in by a parent. */
-export type DeviceGame = {
-  id: string;
-  label: string;
-  exePath: string;
-  source: 'found' | 'custom';
-  /** A parent wants a shortcut for it on the kid's desktop. */
-  shortcut: boolean;
-  /** Set when the PC no longer finds it. Always null for a custom game. */
-  removedAt: string | null;
-};
-
-export type DeviceGames = { games: DeviceGame[] };
+export type { DeviceGame, DeviceGames };
 
 export const MAX_GAME_LABEL = 60;
 export const MAX_EXE_PATH = 260;
 
-const fake = new Map<string, DeviceGame[]>();
-
-function fakeGames(deviceId: string): DeviceGame[] {
-  let games = fake.get(deviceId);
-  if (!games) {
-    games = [
-      {
-        id: 'genshin',
-        label: 'Genshin Impact',
-        exePath: 'C:\\Program Files\\Epic Games\\GenshinImpact\\games\\Genshin Impact game\\GenshinImpact.exe',
-        source: 'found',
-        shortcut: true,
-        removedAt: null,
-      },
-      {
-        id: 'starrail',
-        label: 'Honkai: Star Rail',
-        exePath: 'C:\\Program Files\\Epic Games\\HonkaiStarRail\\games\\Star Rail Games\\StarRail.exe',
-        source: 'found',
-        shortcut: false,
-        removedAt: null,
-      },
-    ];
-    fake.set(deviceId, games);
-  }
-  return games;
-}
-
 /** GET /v1/devices/{deviceId}/games. */
-export async function fetchDeviceGames(deviceId: string): Promise<DeviceGames> {
-  return { games: fakeGames(deviceId).map((g) => ({ ...g })) };
+export function fetchDeviceGames(deviceId: string): Promise<DeviceGames> {
+  return api.get<DeviceGames>(`/v1/devices/${deviceId}/games`);
 }
 
 /** PUT /v1/devices/{deviceId}/games/{gameId}/shortcut. */
 export async function saveGameShortcut(deviceId: string, gameId: string, on: boolean): Promise<void> {
-  const game = fakeGames(deviceId).find((g) => g.id === gameId);
-  if (game) game.shortcut = on;
+  await api.put(`/v1/devices/${deviceId}/games/${encodeURIComponent(gameId)}/shortcut`, { shortcut: on });
 }
 
 /** POST /v1/devices/{deviceId}/games: a program the PC does not know, with its shortcut on. */
-export async function addCustomGame(deviceId: string, label: string, exePath: string): Promise<DeviceGame> {
-  const game: DeviceGame = { id: `custom-${crypto.randomUUID()}`, label, exePath, source: 'custom', shortcut: true, removedAt: null };
-  fakeGames(deviceId).push(game);
-  return { ...game };
+export function addCustomGame(deviceId: string, label: string, exePath: string): Promise<DeviceGame> {
+  return api.post<DeviceGame>(`/v1/devices/${deviceId}/games`, { label, exePath });
 }
 
 /** DELETE /v1/devices/{deviceId}/games/{gameId}: custom games only. */
 export async function removeCustomGame(deviceId: string, gameId: string): Promise<void> {
-  fake.set(
-    deviceId,
-    fakeGames(deviceId).filter((g) => g.id !== gameId),
-  );
+  await api.delete(`/v1/devices/${deviceId}/games/${encodeURIComponent(gameId)}`);
 }
 
 /**

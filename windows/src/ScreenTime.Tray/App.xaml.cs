@@ -10,6 +10,7 @@ namespace ScreenTime.Tray;
 /// starts it with <c>--pipe ScreenTime.&lt;sessionId&gt; [--dry-lock]</c>. <c>--demo [state]</c> shows fake statuses
 /// without the service; <c>--open [ask|message|parent]</c> also opens the flyout at once, on that panel, and keeps it open
 /// (for screenshots and test runs). <c>--setup [--demo]</c> shows the setup window instead (docs/SPEC.md §12.2).
+/// <c>--play &lt;id&gt;</c> starts a game from its desktop shortcut and ends (docs/SPEC.md §12.6).
 /// </summary>
 public partial class App : Application
 {
@@ -28,6 +29,14 @@ public partial class App : Application
     {
         var argv = Environment.GetCommandLineArgs();
         var demoAt = Array.IndexOf(argv, "--demo");
+        // --play <id>: a desktop shortcut starts a game without asking for an administrator (docs/SPEC.md §12.6), then this ends.
+        var playAt = Array.IndexOf(argv, "--play");
+        if (playAt >= 0)
+        {
+            if (playAt + 1 < argv.Length) GameDesk.Play(argv[playAt + 1], TrayLog.Write);
+            Exit();
+            return;
+        }
         // --setup: the setup window after the MSI (docs/SPEC.md §12.2), not the tray. With --demo, a fake backend.
         if (Array.IndexOf(argv, "--setup") >= 0)
         {

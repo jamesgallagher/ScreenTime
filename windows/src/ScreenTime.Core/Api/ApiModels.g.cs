@@ -121,7 +121,8 @@ public sealed record DeviceState(
     [property: JsonPropertyName("parentMode")] DeviceStateParentMode ParentMode,
     [property: JsonPropertyName("pendingRequest")] DeviceStatePendingRequest? PendingRequest,
     [property: JsonPropertyName("activeSos")] DeviceStateActiveSos? ActiveSos,
-    [property: JsonPropertyName("apps")] DeviceStateApps Apps);
+    [property: JsonPropertyName("apps")] DeviceStateApps Apps,
+    [property: JsonPropertyName("games"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<StateGame>? Games = null);
 
 public sealed record DeviceStateDevice(
     [property: JsonPropertyName("id")] string Id,
@@ -207,6 +208,11 @@ public enum AppRuleMode
     [JsonStringEnumMemberName("blocked")] Blocked,
     [JsonStringEnumMemberName("limit")] Limit,
 }
+
+public sealed record StateGame(
+    [property: JsonPropertyName("id")] string Id,
+    [property: JsonPropertyName("label")] string Label,
+    [property: JsonPropertyName("exePath")] string ExePath);
 
 public sealed record UsageReceipt(
     [property: JsonPropertyName("received")] int Received);
@@ -370,6 +376,14 @@ public sealed record AppUpdateCheck(
     [property: JsonPropertyName("versionCode")] int VersionCode,
     [property: JsonPropertyName("versionName")] string VersionName);
 
+public sealed record DeviceGamesPut(
+    [property: JsonPropertyName("games")] IReadOnlyList<FoundGameIn> Games);
+
+public sealed record FoundGameIn(
+    [property: JsonPropertyName("id")] string Id,
+    [property: JsonPropertyName("label")] string Label,
+    [property: JsonPropertyName("exePath")] string ExePath);
+
 public sealed record Sos(
     [property: JsonPropertyName("id")] string Id,
     [property: JsonPropertyName("kidId")] string KidId,
@@ -481,6 +495,7 @@ public sealed record PushTokenPut(
 [JsonSerializable(typeof(StateGrant))]
 [JsonSerializable(typeof(PoolSegment))]
 [JsonSerializable(typeof(AppRuleMode))]
+[JsonSerializable(typeof(StateGame))]
 [JsonSerializable(typeof(UsageReceipt))]
 [JsonSerializable(typeof(UsageUpload))]
 [JsonSerializable(typeof(UsageSegmentIn))]
@@ -506,6 +521,8 @@ public sealed record PushTokenPut(
 [JsonSerializable(typeof(AppUpdateAnswer))]
 [JsonSerializable(typeof(AppUpdateOffer))]
 [JsonSerializable(typeof(AppUpdateCheck))]
+[JsonSerializable(typeof(DeviceGamesPut))]
+[JsonSerializable(typeof(FoundGameIn))]
 [JsonSerializable(typeof(Sos))]
 [JsonSerializable(typeof(SosEndedBy))]
 [JsonSerializable(typeof(SosStatus))]

@@ -1223,6 +1223,12 @@
               "newAppApproval",
               "rules"
             ]
+          },
+          "games": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StateGame"
+            }
           }
         },
         "required": [
@@ -1305,6 +1311,29 @@
           "blocked",
           "limit"
         ]
+      },
+      "StateGame": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/GameId"
+          },
+          "label": {
+            "type": "string"
+          },
+          "exePath": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "exePath"
+        ]
+      },
+      "GameId": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
       },
       "UsageReceipt": {
         "type": "object",
@@ -2471,6 +2500,132 @@
         "required": [
           "versionCode",
           "versionName"
+        ]
+      },
+      "DeviceGamesPut": {
+        "type": "object",
+        "properties": {
+          "games": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FoundGameIn"
+            },
+            "maxItems": 50
+          }
+        },
+        "required": [
+          "games"
+        ]
+      },
+      "FoundGameIn": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/GameId"
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60
+          },
+          "exePath": {
+            "$ref": "#/components/schemas/ExePath"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "exePath"
+        ]
+      },
+      "ExePath": {
+        "type": "string",
+        "minLength": 8,
+        "maxLength": 260,
+        "pattern": "^[a-zA-Z]:\\\\[^<>:\"|?*]*\\.[eE][xX][eE]$"
+      },
+      "DeviceGames": {
+        "type": "object",
+        "properties": {
+          "games": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeviceGame"
+            }
+          }
+        },
+        "required": [
+          "games"
+        ]
+      },
+      "DeviceGame": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/GameId"
+          },
+          "label": {
+            "type": "string"
+          },
+          "exePath": {
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/GameSource"
+          },
+          "shortcut": {
+            "type": "boolean"
+          },
+          "removedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "exePath",
+          "source",
+          "shortcut",
+          "removedAt"
+        ]
+      },
+      "GameSource": {
+        "type": "string",
+        "enum": [
+          "found",
+          "custom"
+        ]
+      },
+      "GameShortcutPut": {
+        "type": "object",
+        "properties": {
+          "shortcut": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "shortcut"
+        ]
+      },
+      "CustomGameIn": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60
+          },
+          "exePath": {
+            "$ref": "#/components/schemas/ExePath"
+          }
+        },
+        "required": [
+          "label",
+          "exePath"
         ]
       },
       "Downloads": {
@@ -7098,6 +7253,432 @@
           },
           "401": {
             "description": "Not signed in, or the code or token is wrong or expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/device/games": {
+      "put": {
+        "tags": [
+          "device"
+        ],
+        "summary": "Send every known game the PC finds now",
+        "description": "A game left out is marked removed and loses its desktop shortcut until the PC finds it again. Programs a parent added by hand are not touched. Windows only.",
+        "security": [
+          {
+            "deviceAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceGamesPut"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Stored."
+          },
+          "401": {
+            "description": "Not signed in, or the code or token is wrong or expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicts with existing data.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/devices/{deviceId}/games": {
+      "get": {
+        "tags": [
+          "devices"
+        ],
+        "summary": "A PC account's games",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "deviceId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The games.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceGames"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the code or token is wrong or expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Signed in, but not allowed to do this.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicts with existing data.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "devices"
+        ],
+        "summary": "Add a program by its path, with its shortcut on",
+        "description": "For a game the PC does not know. At most 20 per PC account; the same path twice gets 409.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "deviceId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CustomGameIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The game.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceGame"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the code or token is wrong or expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Signed in, but not allowed to do this.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicts with existing data.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/devices/{deviceId}/games/{gameId}/shortcut": {
+      "put": {
+        "tags": [
+          "devices"
+        ],
+        "summary": "Put a game's shortcut on the kid's desktop, or take it away",
+        "description": "The shortcut starts the game without asking for an administrator. A game the PC no longer finds gets 409 when turned on.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "deviceId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "$ref": "#/components/schemas/GameId"
+            },
+            "required": true,
+            "name": "gameId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GameShortcutPut"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Saved."
+          },
+          "401": {
+            "description": "Not signed in, or the code or token is wrong or expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Signed in, but not allowed to do this.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicts with existing data.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/devices/{deviceId}/games/{gameId}": {
+      "delete": {
+        "tags": [
+          "devices"
+        ],
+        "summary": "Remove a program a parent added",
+        "description": "A game the PC found cannot be removed (409): turn its shortcut off instead.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "deviceId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "$ref": "#/components/schemas/GameId"
+            },
+            "required": true,
+            "name": "gameId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Removed."
+          },
+          "401": {
+            "description": "Not signed in, or the code or token is wrong or expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Signed in, but not allowed to do this.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicts with existing data.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is not valid.",
             "content": {
               "application/json": {
                 "schema": {

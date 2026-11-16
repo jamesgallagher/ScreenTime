@@ -111,4 +111,16 @@ export {
   KidAppSettings,
 } from './apps.js';
 export { AppUpdateAnswer, AppUpdateCheck, AppUpdateOffer } from './appupdate.js';
+export {
+  CustomGameIn,
+  DeviceGame,
+  DeviceGames,
+  DeviceGamesPut,
+  ExePath,
+  FoundGameIn,
+  GameId,
+  GameShortcutPut,
+  GameSource,
+  StateGame,
+} from './games.js';
 export { DownloadApp, DownloadFile, Downloads } from './downloads.js';

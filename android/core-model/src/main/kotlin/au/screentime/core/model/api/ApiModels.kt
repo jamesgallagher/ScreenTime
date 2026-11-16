@@ -363,6 +363,7 @@ data class DeviceState(
     val pendingRequest: DeviceStatePendingRequest?,
     val activeSos: DeviceStateActiveSos?,
     val apps: DeviceStateApps,
+    val games: List<StateGame>? = null,
 )
 
 @Serializable
@@ -478,6 +479,13 @@ enum class AppRuleMode(override val wire: String) : ApiEnum {
     @SerialName("blocked") BLOCKED("blocked"),
     @SerialName("limit") LIMIT("limit");
 }
+
+@Serializable
+data class StateGame(
+    val id: String,
+    val label: String,
+    val exePath: String,
+)
 
 @Serializable
 data class UsageReceipt(
@@ -830,6 +838,50 @@ data class AppUpdateOffer(
 data class AppUpdateCheck(
     val versionCode: Int,
     val versionName: String,
+)
+
+@Serializable
+data class DeviceGamesPut(
+    val games: List<FoundGameIn>,
+)
+
+@Serializable
+data class FoundGameIn(
+    val id: String,
+    val label: String,
+    val exePath: String,
+)
+
+@Serializable
+data class DeviceGames(
+    val games: List<DeviceGame>,
+)
+
+@Serializable
+data class DeviceGame(
+    val id: String,
+    val label: String,
+    val exePath: String,
+    val source: GameSource,
+    val shortcut: Boolean,
+    val removedAt: String?,
+)
+
+@Serializable
+enum class GameSource(override val wire: String) : ApiEnum {
+    @SerialName("found") FOUND("found"),
+    @SerialName("custom") CUSTOM("custom");
+}
+
+@Serializable
+data class GameShortcutPut(
+    val shortcut: Boolean,
+)
+
+@Serializable
+data class CustomGameIn(
+    val label: String,
+    val exePath: String,
 )
 
 @Serializable

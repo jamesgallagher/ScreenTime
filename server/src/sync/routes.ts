@@ -19,6 +19,7 @@ import {
   appRules,
   appUsageDaily,
   deviceApps,
+  deviceGames,
   devices,
   families,
   grants,
@@ -201,6 +202,16 @@ export function registerSyncRoutes(app: Router, deps: AppDeps) {
               .filter((p) => !stopped.has(p))
           : [];
 
+      // Games are Windows only (docs/SPEC.md §12.6): the ones a parent turned on and the PC still finds.
+      const games =
+        device.platform === 'windows'
+          ? await tx
+              .select({ id: deviceGames.game, label: deviceGames.label, exePath: deviceGames.exePath })
+              .from(deviceGames)
+              .where(and(eq(deviceGames.deviceId, deviceId), eq(deviceGames.shortcut, true), isNull(deviceGames.removedAt)))
+              .orderBy(asc(deviceGames.game))
+          : [];
+
       const limited = rules.filter((r) => r.mode === 'limit').map((r) => r.package);
       const appUsage =
         limited.length > 0
@@ -249,6 +260,7 @@ export function registerSyncRoutes(app: Router, deps: AppDeps) {
             rules: rules.map((r) => ({ package: r.package, mode: r.mode as AppRuleMode, dailyMinutes: r.dailyMinutes })),
             alwaysAllowed,
           },
+          games,
         },
       };
     });
