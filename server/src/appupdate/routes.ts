@@ -150,8 +150,10 @@ export function registerAppUpdateRoutes(app: Router, deps: AppDeps) {
 
   // Plain bytes, so it is not in the contract: the Windows service fetches it with its own HTTP call.
   app.get('/v1/device/app-update/msi', async (c) => {
-    const { deviceId } = await requireDevice(c, db);
-    const [device] = await db.select({ platform: devices.platform }).from(devices).where(eq(devices.id, deviceId));
+    const { deviceId, familyId } = await requireDevice(c, db);
+    const [device] = await withFamily(db, familyId, (tx) =>
+      tx.select({ platform: devices.platform }).from(devices).where(eq(devices.id, deviceId)),
+    );
     if (device?.platform !== 'windows') throw new ApiError('not_found', 'No update for this device.');
     const release = await readWindowsRelease(config.releasesDir);
     if (!release || (release.deviceIds && !release.deviceIds.includes(deviceId))) {

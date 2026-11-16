@@ -110,4 +110,77 @@ public class UpdateTests
         Assert.NotNull(back);
         Assert.Equal("quit", back!.Type);
     }
+
+    [Fact]
+    public void NoDownloadWhileAPendingUpdateIsStored()
+    {
+        var pending = new PendingUpdate(7, "0.1.7", T);
+        var offer = new Offer(8, "0.1.8", "sha", 200);
+        var state = new UpdateState(pending, lastCheckMs: null, lastVerifiedAtMs: null, failuresForVersion: 0, bestOffer: offer, anyoneUsing: false, anytime: false, runningVersionCode: 6, nowMs: T + 1_000);
+        Assert.Equal(UpdateAction.Nothing, UpdateDecision.Decide(state));
+    }
+
+    [Fact]
+    public void APendingUpdateStillGoingIsNothing()
+    {
+        var pending = new PendingUpdate(7, "0.1.7", T);
+        var state = new UpdateState(pending, lastCheckMs: null, lastVerifiedAtMs: null, failuresForVersion: 0, bestOffer: null, anyoneUsing: false, anytime: false, runningVersionCode: 6, nowMs: T + 5 * 60_000);
+        Assert.Equal(UpdateAction.Nothing, UpdateDecision.Decide(state));
+    }
+
+    [Fact]
+    public void APendingUpdateSucceededIsRecordSuccess()
+    {
+        var pending = new PendingUpdate(7, "0.1.7", T - 60_000);
+        var state = new UpdateState(pending, lastCheckMs: null, lastVerifiedAtMs: null, failuresForVersion: 0, bestOffer: null, anyoneUsing: false, anytime: false, runningVersionCode: 7, nowMs: T);
+        Assert.Equal(UpdateAction.RecordSuccess, UpdateDecision.Decide(state));
+    }
+
+    [Fact]
+    public void APendingUpdateFailedIsRecordFailure()
+    {
+        var pending = new PendingUpdate(7, "0.1.7", T - 11 * 60_000);
+        var state = new UpdateState(pending, lastCheckMs: null, lastVerifiedAtMs: null, failuresForVersion: 1, bestOffer: null, anyoneUsing: false, anytime: false, runningVersionCode: 6, nowMs: T);
+        Assert.Equal(UpdateAction.RecordFailure, UpdateDecision.Decide(state));
+    }
+
+    [Fact]
+    public void AnOfferWaitsForThePcToBeFreeThenTheTwentyFourHourFallback()
+    {
+        var offer = new Offer(7, "0.1.7", "sha", 200);
+        // Someone is using the PC, not 24h after verified: nothing.
+        var state1 = new UpdateState(null, lastCheckMs: T - 7 * 3_600_000, lastVerifiedAtMs: T - 1 * 3_600_000, failuresForVersion: 0, bestOffer: offer, anyoneUsing: true, anytime: false, runningVersionCode: 6, nowMs: T);
+        Assert.Equal(UpdateAction.Download, UpdateDecision.Decide(state1));
+        // AfterDownload: someone using, not 24h: nothing.
+        Assert.Equal(UpdateAction.Nothing, UpdateDecision.AfterDownload(anyoneUsing: true, verifiedAtMs: T - 1 * 3_600_000, nowMs: T, anytime: false));
+        // AfterDownload: someone using, 24h after verified: install.
+        Assert.Equal(UpdateAction.Install, UpdateDecision.AfterDownload(anyoneUsing: true, verifiedAtMs: T - 24 * 3_600_000, nowMs: T, anytime: false));
+        // AfterDownload: nobody using: install.
+        Assert.Equal(UpdateAction.Install, UpdateDecision.AfterDownload(anyoneUsing: false, verifiedAtMs: T - 1 * 3_600_000, nowMs: T, anytime: false));
+    }
+
+    [Fact]
+    public void ThreeFailuresAcrossServiceRestopsGiveUp()
+    {
+        var offer = new Offer(7, "0.1.7", "sha", 200);
+        // First failure: pending update failed, 1 failure stored.
+        var pending1 = new PendingUpdate(7, "0.1.7", T - 11 * 60_000, Failures: 0);
+        var state1 = new UpdateState(pending1, lastCheckMs: null, lastVerifiedAtMs: null, failuresForVersion: 0, bestOffer: offer, anyoneUsing: false, anytime: false, runningVersionCode: 6, nowMs: T);
+        Assert.Equal(UpdateAction.RecordFailure, UpdateDecision.Decide(state1));
+        // Second failure: pending update failed, 1 failure stored (the service restarts and re-reads the pending).
+        var pending2 = new PendingUpdate(7, "0.1.7", T - 11 * 60_000, Failures: 1);
+        var state2 = new UpdateState(pending2, lastCheckMs: null, lastVerifiedAtMs: null, failuresForVersion: 1, bestOffer: offer, anyoneUsing: false, anytime: false, runningVersionCode: 6, nowMs: T);
+        Assert.Equal(UpdateAction.RecordFailure, UpdateDecision.Decide(state2));
+        // Third failure: pending update failed, 2 failures stored.
+        var pending3 = new PendingUpdate(7, "0.1.7", T - 11 * 60_000, Failures: 2);
+        var state3 = new UpdateState(pending3, lastCheckMs: null, lastVerifiedAtMs: null, failuresForVersion: 2, bestOffer: offer, anyoneUsing: false, anytime: false, runningVersionCode: 6, nowMs: T);
+        Assert.Equal(UpdateAction.RecordFailure, UpdateDecision.Decide(state3));
+        // After 3 failures, the version is not tried again.
+        var state4 = new UpdateState(null, lastCheckMs: T - 7 * 3_600_000, lastVerifiedAtMs: null, failuresForVersion: 3, bestOffer: offer, anyoneUsing: false, anytime: false, runningVersionCode: 6, nowMs: T);
+        Assert.Equal(UpdateAction.Nothing, UpdateDecision.Decide(state4));
+        // A higher version is offered: tried again.
+        var higherOffer = new Offer(8, "0.1.8", "sha", 200);
+        var state5 = new UpdateState(null, lastCheckMs: T - 7 * 3_600_000, lastVerifiedAtMs: null, failuresForVersion: 0, bestOffer: higherOffer, anyoneUsing: false, anytime: false, runningVersionCode: 6, nowMs: T);
+        Assert.Equal(UpdateAction.Download, UpdateDecision.Decide(state5));
+    }
 }

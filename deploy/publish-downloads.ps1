@@ -70,10 +70,10 @@ if ($Parent) {
 if ($Windows) {
     # -RunId takes the MSI of one CI run (a successful run of windows.yml) instead of the newest on main.
     if ($RunId) {
-        $run = gh run view $RunId --repo $Repo --json databaseId,number,name,status --jq '.[] | select(.name -eq "windows") | "\(.databaseId) \(.number) \(.status)"'
-        if (-not $run) { throw "Run $RunId is not a windows.yml run." }
-        $id, $number, $status = $run -split ' '
-        if ($status -ne 'success') { throw "Run $number is not a successful windows.yml run." }
+        $run = gh run view $RunId --repo $Repo --json databaseId,number,name,status,conclusion --jq '[.[] | select(.name == "Windows") | "\(.databaseId) \(.number) \(.status) \(.conclusion)"] | .[0]'
+        if (-not $run) { throw "Run $RunId is not a Windows.yml run." }
+        $id, $number, $status, $conclusion = $run -split ' '
+        if ($status -ne 'completed' -or $conclusion -ne 'success') { throw "Run $number is not a successful Windows.yml run." }
     } else {
         $run = gh run list --repo $Repo --workflow windows.yml --branch main --status success --limit 1 --json databaseId,number --jq '.[0] | "\(.databaseId) \(.number)"'
         if (-not $run) { throw 'No successful Windows build on main. Start one: gh workflow run windows.yml --repo jamesgallagher/ScreenTime --ref main' }

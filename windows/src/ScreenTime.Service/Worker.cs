@@ -19,6 +19,7 @@ namespace ScreenTime.Service;
 /// The service's options: the data folder, whether it is the secure default, the tray exe (null: no tray), dry-lock
 /// (log instead of locking or disconnecting) and whether it runs as a Windows service. <c>Session</c> and <c>TrayOpen</c>
 /// are for test runs (<c>--session</c>, <c>--tray-open</c>). <c>FakeClockFile</c>, <c>FakeTimezoneFile</c> and <c>GamesRoot</c> are for test runs too.
+/// <c>UpdateAnytime</c> (<c>--update-anytime</c>) installs the update as soon as it is verified, without waiting for the PC to be free.
 /// </summary>
 public sealed record ServiceOptions(string DataFolder, bool SecureFolder, string? TrayExe, bool DryLock, bool AsService, uint? Session = null,
     string? TrayOpen = null, string? FakeClockFile = null, string? FakeTimezoneFile = null, string? GamesRoot = null, bool UpdateAnytime = false);
@@ -169,6 +170,7 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
                         tracker.Tick(clock.NowMs());
                         foreach (var device in store.Devices()) await SyncAccount(device.Sid, stoppingToken);
                         StartLiveChannels();
+                        await UpdateTick(stoppingToken);
                     }
                     finally
                     {
@@ -247,9 +249,7 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
             catch (OperationCanceledException) { }
         });
 
-        var updateTask = Task.Run(() => UpdateLoop(stoppingToken));
-
-        await Task.WhenAll(eventsTask, timerTask, lockTask, syncTask, gamesTask, updateTask);
+        await Task.WhenAll(eventsTask, timerTask, lockTask, syncTask, gamesTask);
 
         foreach (var s in _sessions.Values) s.Cts.Cancel();
         tracker.OnChange(SessionChange.Shutdown, null, false, clock.NowMs());
@@ -815,21 +815,11 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
             var (code, name) = Win.AppVersion();
             var answer = await api.PostDeviceAppUpdateCheckAsync(new AppUpdateCheck(code, name), ct);
             _versionSent.Add(sid);
+            _lastUpdateCheckMs = _clock.NowMs();
             logger.LogInformation("{Kid}: told the server version {Version}", KidName(sid), name);
             if (answer.Offer is { } offer)
             {
-                var o = new Offer(offer.VersionCode, offer.VersionName, offer.Sha256, offer.SizeBytes);
-                var sem = _sem;
-                await sem.WaitAsync();
-                try
-                {
-                    _offers[sid] = o;
-                    _updateRequests.Writer.TryWrite(null);
-                }
-                finally
-                {
-                    sem.Release();
-                }
+                _offers[sid] = new Offer(offer.VersionCode, offer.VersionName, offer.Sha256, offer.SizeBytes);
             }
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -845,112 +835,73 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
     // The Windows self-update (docs/SPEC.md §12.2): check, download, verify and install, all from the service.
 
     private readonly Dictionary<string, Offer> _offers = new();
-    private readonly Channel<string?> _updateRequests = Channel.CreateUnbounded<string?>();
     private long? _lastUpdateCheckMs;
     private VerifiedDownload? _verified;
     private PendingUpdate? _pending;
     private readonly Dictionary<int, int> _failuresByVersion = new();
-    private int _pendingFailures;
 
-    /// <summary>Runs the update loop: a check at the first successful sync, then every 6 hours.</summary>
-    private async Task UpdateLoop(CancellationToken ct)
-    {
-        var sem = _sem;
-        try
-        {
-            await foreach (var _ in _updateRequests.Reader.ReadAllAsync(ct))
-            {
-                await sem.WaitAsync();
-                try
-                {
-                    await TickUpdate(ct);
-                }
-                finally
-                {
-                    sem.Release();
-                }
-            }
-        }
-        catch (OperationCanceledException) { }
-    }
-
-    private async Task TickUpdate(CancellationToken ct)
+    /// <summary>
+    /// One tick of the update loop, called from the 60 s timer. Works through the stored state and the offers:
+    /// download, verify and install when due.
+    /// </summary>
+    private async Task UpdateTick(CancellationToken ct)
     {
         var now = _clock.NowMs();
-        var (runningCode, runningName) = Win.AppVersion();
-        // At start: work out what a stored pending update says (docs/SPEC.md §12.2).
+        var (runningCode, _) = Win.AppVersion();
+        // Load the stored pending update once at start (and after a service restart).
         if (_pending is null)
         {
-            var stored = PendingUpdateJson.Decode(_store.GetValue("update", "pending"));
-            if (stored is { } pending)
-            {
-                var (succeeded, failed) = UpdateAttempt.Result(pending, runningCode, now);
-                if (succeeded)
+            _pending = PendingUpdateJson.Decode(_store.GetValue("update", "pending"));
+        }
+        var state = new UpdateState(
+            pending: _pending,
+            lastCheckMs: _lastUpdateCheckMs,
+            lastVerifiedAtMs: _verified?.VerifiedAtMs,
+            failuresForVersion: _pending is { } p ? p.Failures : 0,
+            bestOffer: UpdateOffer.Best(_offers.Values.ToList(), runningCode),
+            anyoneUsing: AnySessionUsing(),
+            anytime: options.UpdateAnytime,
+            runningVersionCode: runningCode,
+            nowMs: now);
+        var action = UpdateDecision.Decide(state);
+        switch (action)
+        {
+            case UpdateAction.Nothing:
+                return;
+            case UpdateAction.Download:
+                if (state.bestOffer is not { } offer) return;
+                logger.LogInformation("update: offered {Version} ({Code})", offer.VersionName, offer.VersionCode);
+                var verified = await DownloadAndVerify(offer, ct);
+                if (verified is null) return;
+                _verified = verified;
+                // When to install: nobody using the PC, 24 h after the download, or --update-anytime.
+                if (UpdateDecision.AfterDownload(AnySessionUsing(), verified.VerifiedAtMs, _clock.NowMs(), options.UpdateAnytime) != UpdateAction.Install)
                 {
-                    logger.LogInformation("update: now {Version}", pending.VersionName);
-                    DeleteUpdateFile(pending.VersionName);
-                    DeleteUpdateTask();
-                    _store.SetValue("update", "pending", null);
+                    return;
                 }
-                else if (failed)
+                if (!options.AsService)
                 {
-                    logger.LogWarning("update: {Version} failed to install", pending.VersionName);
-                    _pendingFailures++;
-                    _failuresByVersion[pending.VersionCode] = _failuresByVersion.GetValueOrDefault(pending.VersionCode) + 1;
-                    _store.SetValue("update", "pending", null);
+                    logger.LogInformation("update: would install {Version} (not a service)", offer.VersionName);
+                    return;
                 }
-                else
-                {
-                    _pending = pending;
-                }
-            }
+                await Install(offer, verified, ct);
+                return;
+            case UpdateAction.RecordSuccess:
+                if (_pending is not { } ps) return;
+                logger.LogInformation("update: now {Version}", ps.VersionName);
+                DeleteUpdateFile(ps.VersionName);
+                DeleteUpdateTask();
+                _store.SetValue("update", "pending", null);
+                _pending = null;
+                return;
+            case UpdateAction.RecordFailure:
+                if (_pending is not { } pf) return;
+                logger.LogWarning("update: {Version} failed to install", pf.VersionName);
+                _failuresByVersion[pf.VersionCode] = _failuresByVersion.GetValueOrDefault(pf.VersionCode) + 1;
+                _store.SetValue("update", "pending", null);
+                _pending = null;
+                return;
         }
-        if (_pending is not null) return;
-        // A check is due: the first, or 6 hours after the last.
-        if (!UpdateCheck.IsDue(_lastUpdateCheckMs, now)) return;
-        _lastUpdateCheckMs = now;
-        // The highest offer across all accounts, ignoring ones not higher than the running version.
-        var best = UpdateOfferBest(runningCode);
-        if (best is null)
-        {
-            // Nothing newer: delete what was downloaded.
-            if (_verified is { } v)
-            {
-                DeleteUpdateFile(v.Path);
-                _verified = null;
-            }
-            return;
-        }
-        logger.LogInformation("update: offered {Version} ({Code})", best.VersionName, best.VersionCode);
-        // After 3 failed attempts for one versionCode, stop trying it until a higher one is offered.
-        if (UpdateAttempt.GiveUp(_failuresByVersion.GetValueOrDefault(best.VersionCode)))
-        {
-            logger.LogWarning("update: {Version} tried 3 times, not trying again", best.VersionName);
-            return;
-        }
-        // Download and verify.
-        var verified = await DownloadAndVerify(best, ct);
-        if (verified is null) return;
-        _verified = verified;
-        // When to install: nobody using the PC, 24 h after the download, or --update-anytime.
-        var anyoneUsing = AnySessionUsing();
-        if (!UpdateInstall.IsDue(anyoneUsing, verified.VerifiedAtMs, now, options.UpdateAnytime))
-        {
-            return;
-        }
-        if (!options.AsService)
-        {
-            logger.LogInformation("update: would install {Version} (not a service)", best.VersionName);
-            return;
-        }
-        await Install(best, verified, ct);
-    }
-
-    /// <summary>The highest offer across all accounts that is higher than the running version.</summary>
-    private Offer? UpdateOfferBest(int runningCode)
-    {
-        var offers = _offers.Values.ToList();
-        return UpdateOffer.Best(offers, runningCode);
     }
 
     /// <summary>True when any enrolled account's session is unlocked or in parent mode.</summary>
@@ -972,17 +923,19 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
         try
         {
             Directory.CreateDirectory(Path.Combine(dataFolder, "updates"));
-            // A file that is already verified and matches this offer is kept.
+            // A file that is already verified and matches this offer is kept, keeping the first VerifiedAtMs.
             if (File.Exists(finalPath))
             {
                 var fileInfo = new FileInfo(finalPath);
                 var fileSha = await Sha256HexAsync(finalPath);
                 if (UpdateVerify.Matches(fileInfo.Length, fileSha, offer.SizeBytes, offer.Sha256))
                 {
-                    return new VerifiedDownload(finalPath, _clock.NowMs());
+                    var existing = _verified;
+                    var verifiedAt = existing is { } e && e.Path == finalPath ? e.VerifiedAtMs : _clock.NowMs();
+                    return new VerifiedDownload(finalPath, verifiedAt);
                 }
             }
-            // Download to the .part file.
+            // Download to the .part file, using the token of the account whose offer is being installed.
             var config = ServiceFiles.LoadConfig(_configPath);
             if (config is null) return null;
             var device = _store.Devices().FirstOrDefault();
@@ -996,11 +949,9 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
                 logger.LogWarning("update: download said {Status}", (int)response.StatusCode);
                 return null;
             }
-            await using (var stream = response.Content.ReadAsStreamAsync(ct).Result)
-            await using (var part = File.Open(partPath, FileMode.Create))
-            {
-                await stream.CopyToAsync(part, ct);
-            }
+            await using var stream = await response.Content.ReadAsStreamAsync(ct);
+            await using var part = File.Open(partPath, FileMode.Create);
+            await stream.CopyToAsync(part, ct);
             var partInfo = new FileInfo(partPath);
             var partSha = await Sha256HexAsync(partPath);
             if (UpdateVerify.Matches(partInfo.Length, partSha, offer.SizeBytes, offer.Sha256))
@@ -1035,7 +986,7 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
             {
                 await s.Tray.SendAsync(PipeMessage.Quit());
             }
-            // Wait up to 10 s for the trays to exit; kill any that have not.
+            // Wait up to 10 s for the trays this service started to exit; kill any that have not.
             await WaitTraysExit(10_000);
             // Create and run the one-time SYSTEM task.
             var dataFolder = options.DataFolder;
@@ -1043,22 +994,18 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
             var taskCreate = Process.Start(new ProcessStartInfo("schtasks.exe",
                 $"/Create /TN ScreenTimeUpdate /TR \"msiexec.exe /i \\\"{verified.Path}\\\" /qn /norestart /l*v \\\"{logPath}\\\"\" /SC ONCE /ST 00:00 /RU SYSTEM /RL HIGHEST /F")
                 { UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true });
+            taskCreate?.WaitForExit();
             if (taskCreate is null || taskCreate.ExitCode != 0)
             {
                 logger.LogWarning("update: could not create the task");
-                _pendingFailures++;
-                _failuresByVersion[offer.VersionCode] = _failuresByVersion.GetValueOrDefault(offer.VersionCode) + 1;
-                _updateInProgress = false;
                 return;
             }
             var taskRun = Process.Start(new ProcessStartInfo("schtasks.exe", "/Run /TN ScreenTimeUpdate")
                 { UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true });
+            taskRun?.WaitForExit();
             if (taskRun is null || taskRun.ExitCode != 0)
             {
                 logger.LogWarning("update: could not run the task");
-                _pendingFailures++;
-                _failuresByVersion[offer.VersionCode] = _failuresByVersion.GetValueOrDefault(offer.VersionCode) + 1;
-                _updateInProgress = false;
                 return;
             }
             var pending = new PendingUpdate(offer.VersionCode, offer.VersionName, _clock.NowMs());
@@ -1066,7 +1013,6 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
             _store.SetValue("update", "pending", PendingUpdateJson.Encode(pending));
             logger.LogInformation("update: installing {Version}", offer.VersionName);
             // The MSI stops this service; the new one starts and works out the result.
-            Environment.Exit(0);
         }
         finally
         {
@@ -1074,19 +1020,30 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
         }
     }
 
-    /// <summary>Waits up to <paramref name="timeoutMs"/> for every tray process to exit, then kills any that remain.</summary>
+    /// <summary>Waits up to <paramref name="timeoutMs"/> for the trays this service started to exit, then kills any that remain.</summary>
     private async Task WaitTraysExit(int timeoutMs)
     {
+        var pids = _sessions.Values.Select(s => s.Tray.TrayPid).Where(p => p > 0).ToHashSet();
+        if (pids.Count == 0) return;
         var deadline = Environment.TickCount64 + timeoutMs;
         while (Environment.TickCount64 < deadline)
         {
-            var running = Process.GetProcessesByName("ScreenTime.Tray");
-            if (running.Length == 0) return;
+            var stillRunning = pids.Where(pid =>
+            {
+                try { return Process.GetProcessById(pid) is { Responding: true }; }
+                catch { return false; }
+            }).ToList();
+            if (stillRunning.Count == 0) return;
             await Task.Delay(500);
         }
-        foreach (var p in Process.GetProcessesByName("ScreenTime.Tray"))
+        foreach (var pid in pids)
         {
-            try { p.Kill(); logger.LogInformation("tray {Pid}: killed", p.Id); }
+            try
+            {
+                var p = Process.GetProcessById(pid);
+                p.Kill();
+                logger.LogInformation("tray {Pid}: killed", pid);
+            }
             catch { }
         }
     }

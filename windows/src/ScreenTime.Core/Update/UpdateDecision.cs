@@ -14,7 +14,7 @@ namespace ScreenTime.Core.Update;
 public sealed record Offer(int VersionCode, string VersionName, string Sha256, int SizeBytes);
 
 /// <summary>What this PC knows about an update it is working through, kept in the store's key-value table.</summary>
-public sealed record PendingUpdate(int VersionCode, string VersionName, long StartedAtMs);
+public sealed record PendingUpdate(int VersionCode, string VersionName, long StartedAtMs, int Failures = 0);
 
 /// <summary>The state of a verified download of <see cref="Offer"/>: where the file is and when it was verified.</summary>
 public sealed record VerifiedDownload(string Path, long VerifiedAtMs);
@@ -142,3 +142,76 @@ public static class PendingUpdateJson
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(PendingUpdate))]
 internal sealed partial class PendingUpdateJsonContext : JsonSerializerContext;
+
+/// <summary>The next action the update loop should take, given the stored state and the current facts.</summary>
+public enum UpdateAction
+{
+    /// <summary>Do nothing this tick.</summary>
+    Nothing,
+    /// <summary>Check the server for a newer version (the first, or 6 hours after the last).</summary>
+    Check,
+    /// <summary>Download and verify the MSI for the offer.</summary>
+    Download,
+    /// <summary>Install the verified MSI.</summary>
+    Install,
+    /// <summary>The pending update succeeded: delete the file and task, clear the store.</summary>
+    RecordSuccess,
+    /// <summary>The pending update failed: count the failure, clear the store.</summary>
+    RecordFailure,
+}
+
+/// <summary>The facts the update loop needs to decide the next action.</summary>
+public sealed record UpdateState(
+    PendingUpdate? pending,
+    long? lastCheckMs,
+    long? lastVerifiedAtMs,
+    int failuresForVersion,
+    Offer? bestOffer,
+    bool anyoneUsing,
+    bool anytime,
+    int runningVersionCode,
+    long nowMs);
+
+/// <summary>
+/// The update loop's decision (docs/SPEC.md §12.2): from the stored state and the current facts, what to do next.
+/// The service feeds it the facts and does what it says. No Windows calls here.
+/// </summary>
+public static class UpdateDecision
+{
+    public static UpdateAction Decide(UpdateState state)
+    {
+        var pending = state.pending;
+        var now = state.nowMs;
+
+        // A stored pending update: work out what it says now.
+        if (pending is { } p)
+        {
+            var (succeeded, failed) = UpdateAttempt.Result(p, state.runningVersionCode, now);
+            if (succeeded) return UpdateAction.RecordSuccess;
+            if (failed) return UpdateAction.RecordFailure;
+            // Still going: do nothing until the service restarts (the MSI stops it).
+            return UpdateAction.Nothing;
+        }
+
+        // A check is due: the first, or 6 hours after the last.
+        if (!UpdateCheck.IsDue(state.lastCheckMs, now)) return UpdateAction.Nothing;
+
+        // No offer: do nothing (the offer comes from the server answer, checked at the same tick).
+        if (state.bestOffer is null) return UpdateAction.Nothing;
+
+        // After 3 failed attempts for one versionCode, stop trying it until a higher one is offered.
+        if (UpdateAttempt.GiveUp(state.failuresForVersion)) return UpdateAction.Nothing;
+
+        // The offer is higher than the running version (checked by Best). Download and verify.
+        return UpdateAction.Download;
+    }
+
+    /// <summary>
+    /// After a download: whether the install is due now. The service calls this after a successful download.
+    /// </summary>
+    public static UpdateAction AfterDownload(bool anyoneUsing, long verifiedAtMs, long nowMs, bool anytime)
+    {
+        if (UpdateInstall.IsDue(anyoneUsing, verifiedAtMs, nowMs, anytime)) return UpdateAction.Install;
+        return UpdateAction.Nothing;
+    }
+}
