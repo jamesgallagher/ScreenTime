@@ -5,7 +5,7 @@
 | Card | CARD-062 |
 | Title | Extend bedtime tonight |
 | Size | L |
-| Depends on | CARD-061 and Claude's front-end PR "Extend bedtime tonight: the parent screens", both merged to `main` |
+| Depends on | CARD-061 and Claude's front-end PR #186 ("Extend bedtime tonight: the parent screens, spec and CARD-062"), both merged to `main` |
 | Spec sections | docs/SPEC.md §7.5 (read it first), §3 Q39, §6.1 `bedtime_extensions`, §8.2, §9.2, §13, §16.4 |
 | Repository | https://github.com/jamesgallagher/ScreenTime |
 | Local folder | `C:\Users\james\OpenCode\Testing\ScreenTime` |
@@ -25,7 +25,7 @@ Screen Time is a self-hosted parental screen-time limiter for one family. Kid de
 
 **The design in one paragraph (SPEC §7.5).** A new table holds one later bedtime per kid per day. Tonight's bedtime is the later of the schedule's and that row. The server uses tonight's bedtime everywhere it reads today's schedule to enforce or report, **including the device snapshot**: the `schedule.days` entry for today's weekday carries tonight's bedtime. The time engine is not changed, and **no kid device code changes**: the Android kid app and the Windows service already take today's bedtime from that entry (`android/app-kid/.../usage/TodayInput.kt`, `windows/src/ScreenTime.Core/Sync/TodayInput.cs`), and the Android block screen already offers the always-allowed apps exactly when the lock reason is `out_of_time` (`KidService.kt`, around "Always-allowed apps"). So every device already installed honours an extension as soon as it syncs.
 
-**What Claude built (front-end PR, merged before this card).** The parent screens, behind a seam that answers from memory:
+**What Claude built (PR #186, merged before this card).** The parent screens, behind a seam that answers from memory:
 
 | Where | Files (Claude's: do not change, except the seam lines named in 5.4) |
 |---|---|
