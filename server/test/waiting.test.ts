@@ -252,7 +252,7 @@ describe.skipIf(!url)('waiting', () => {
     const eventId = await holdApp(alexId, familyA, 'com.example.game', 'Example Game', 'play');
     const res = await api.get('/v1/waiting', mum);
     expect(res.status).toBe(200);
-    const items = res.body.items as Array<{ kind: string; id: string; package: string; label: string; source: string }>;
+    const items = res.body.items as Array<{ kind: string; id: string; package: string; label: string; source: string; deviceId: string; deviceName: string }>;
     expect(items).toHaveLength(1);
     expect(items[0].kind).toBe('app_approval');
     expect(items[0].id).toBe(`${alexId}:com.example.game`);
@@ -260,6 +260,11 @@ describe.skipIf(!url)('waiting', () => {
     expect(items[0].label).toBe('Example Game');
     expect(items[0].source).toBe('play');
     expect(items[0].eventId).toBe(eventId);
+    // The device is filled in from the newest app.approval event.
+    const [ev] = await db.select().from(events).where(eq(events.id, eventId));
+    expect(items[0].deviceId).toBe(ev?.deviceId ?? null);
+    const [evDevice] = await db.select().from(devices).where(eq(devices.id, ev?.deviceId));
+    expect(items[0].deviceName).toBe(evDevice?.name ?? null);
 
     // After a rule is set, it is gone.
     expect((await api.put(`/v1/kids/${alexId}/apps/com.example.game/rule`, mum, { mode: 'allowed', dailyMinutes: null })).status).toBe(200);

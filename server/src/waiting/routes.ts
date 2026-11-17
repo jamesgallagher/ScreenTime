@@ -1,5 +1,5 @@
 import { createRoute } from '@hono/zod-openapi';
-import { and, asc, desc, eq, gt, isNull, lt, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, isNull, lt, sql } from 'drizzle-orm';
 import {
   type TimeRequest,
   TimeRequestStatus,
@@ -63,10 +63,11 @@ async function pendingTimeRequests(tx: FamilyTx, familyId: string): Promise<Wait
     .where(and(eq(timeRequests.status, 'pending'), isNull(kids.archivedAt)))
     .orderBy(desc(timeRequests.createdAt), desc(timeRequests.id));
 
+  const requestIds = rows.map((r) => r.id);
   const eventIds = await tx
     .select({ requestId: sql`${events.payload}->>'requestId' as request_id`, eventId: events.id })
     .from(events)
-    .where(eq(events.kind, 'time_request'))
+    .where(and(eq(events.kind, 'time_request'), inArray(sql`${events.payload}->>'requestId'`, requestIds)))
     .orderBy(asc(events.at), asc(events.id));
   const eventIdByRequest = new Map(eventIds.map((e) => [e.requestId, e.eventId]));
 
@@ -131,10 +132,11 @@ async function pendingParentModeRequests(tx: FamilyTx): Promise<WaitingItem[]> {
     )
     .orderBy(desc(parentModeSessions.requestedAt), desc(parentModeSessions.id));
 
+  const requestIds = rows.map((r) => r.id);
   const eventIds = await tx
     .select({ requestId: sql`${events.payload}->>'requestId' as request_id`, eventId: events.id })
     .from(events)
-    .where(eq(events.kind, 'parent_mode.request'))
+    .where(and(eq(events.kind, 'parent_mode.request'), inArray(sql`${events.payload}->>'requestId'`, requestIds)))
     .orderBy(asc(events.at), asc(events.id));
   const eventIdByRequest = new Map(eventIds.map((e) => [e.requestId, e.eventId]));
 
@@ -172,42 +174,56 @@ async function heldApps(tx: FamilyTx): Promise<WaitingItem[]> {
     .where(and(eq(appRules.mode, 'held'), isNull(kids.archivedAt)))
     .orderBy(asc(appRules.kidId), asc(appRules.package));
 
-  const items: WaitingItem[] = [];
-  for (const row of rows) {
-    // Find the newest `app.approval` event for this kid and package.
-    const [event] = await tx
-      .select({ id: events.id, at: events.at, payload: events.payload })
-      .from(events)
-      .where(
-        and(
-          eq(events.kind, 'app.approval'),
-          eq(events.kidId, row.kidId),
-          sql`${events.payload}->>'package' = ${row.package}`,
-        ),
-      )
-      .orderBy(desc(events.at), desc(events.id))
-      .limit(1);
+  if (rows.length === 0) return [];
+
+  // One query for the newest `app.approval` event per kid:package.
+  const kidIds = [...new Set(rows.map((r) => r.kidId))];
+  const events_ = await tx
+    .select({
+      id: events.id,
+      at: events.at,
+      kidId: events.kidId,
+      deviceId: events.deviceId,
+      payload: events.payload,
+      package: sql`${events.payload}->>'package'`,
+    })
+    .from(events)
+    .where(and(eq(events.kind, 'app.approval'), inArray(events.kidId, kidIds)))
+    .orderBy(desc(events.at), desc(events.id));
+
+  // The newest event per kid:package.
+  const eventByKidPackage = new Map<string, typeof events_[number]>();
+  for (const e of events_) {
+    const pkg = typeof e.package === 'string' ? e.package : null;
+    if (!pkg) continue;
+    const key = `${e.kidId}:${pkg}`;
+    if (!eventByKidPackage.has(key)) eventByKidPackage.set(key, e);
+  }
+
+  return rows.map((row): WaitingItem => {
+    const event = eventByKidPackage.get(`${row.kidId}:${row.package}`);
     const payload = (event?.payload ?? {}) as Record<string, unknown>;
     const label = typeof payload.label === 'string' ? payload.label : null;
     const source = typeof payload.source === 'string' ? payload.source : null;
-    items.push({
+    const deviceName = typeof payload.deviceName === 'string' ? payload.deviceName : null;
+    const deviceId = event?.deviceId ?? null;
+    return {
       kind: 'app_approval',
       id: `${row.kidId}:${row.package}`,
       eventId: event?.id ?? null,
       at: event?.at.toISOString() ?? new Date().toISOString(),
       kidId: row.kidId,
       kidName: row.kidName,
-      deviceId: null,
-      deviceName: null,
+      deviceId,
+      deviceName,
       request: null,
       expiresAt: null,
       package: row.package,
       label,
       source,
       body: null,
-    });
-  }
-  return items;
+    };
+  });
 }
 
 /**
@@ -230,10 +246,11 @@ async function unseenMessages(tx: FamilyTx): Promise<WaitingItem[]> {
     .where(and(isNull(kidMessages.seenAt), isNull(kids.archivedAt)))
     .orderBy(desc(kidMessages.createdAt), desc(kidMessages.id));
 
+  const messageIds = rows.map((r) => r.id);
   const eventIds = await tx
     .select({ messageId: sql`${events.payload}->>'messageId' as message_id`, eventId: events.id })
     .from(events)
-    .where(eq(events.kind, 'kid_message'))
+    .where(and(eq(events.kind, 'kid_message'), inArray(sql`${events.payload}->>'messageId'`, messageIds)))
     .orderBy(asc(events.at), asc(events.id));
   const eventIdByMessage = new Map(eventIds.map((e) => [e.messageId, e.eventId]));
 
