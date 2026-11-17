@@ -264,7 +264,9 @@ public sealed record KidMessage(
     [property: JsonPropertyName("deviceName")] string DeviceName,
     [property: JsonPropertyName("body")] string Body,
     [property: JsonPropertyName("presetId")] string? PresetId,
-    [property: JsonPropertyName("createdAt")] string CreatedAt);
+    [property: JsonPropertyName("createdAt")] string CreatedAt,
+    [property: JsonPropertyName("seenAt")] string? SeenAt,
+    [property: JsonPropertyName("seenByName")] string? SeenByName);
 
 public sealed record KidMessageCreate(
     [property: JsonPropertyName("id")] string Id,
