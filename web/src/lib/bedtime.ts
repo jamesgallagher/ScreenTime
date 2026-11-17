@@ -2,7 +2,7 @@
  * Extend bedtime tonight (docs/SPEC.md §7.5): a parent moves one kid's bedtime later for today only. The kid keeps
  * any time that is left until the new bedtime; with none left, the always-allowed apps keep working until then.
  *
- * This file is the seam between the Today page and the server. Until CARD-062 wires it, it answers from memory:
+ * This file is the seam between the Today page and the server. Until CARD-063 wires it, it answers from memory:
  * every kid's bedtime is 8:30 pm and an extension lasts until the page reloads.
  */
 import type { TodayKid } from '@screentime/schemas';
@@ -35,7 +35,7 @@ function timeOf(minutes: number): string {
   return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
 }
 
-// ---- The seam: CARD-062 replaces these three with kid.bedtime and the two routes. ----
+// ---- The seam: CARD-063 replaces these three with kid.bedtime and the two routes. ----
 
 const fake = new Map<string, { tonight: string; by: string }>();
 const FAKE_SCHEDULED = '20:30';

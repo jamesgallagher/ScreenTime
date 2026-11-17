@@ -1,17 +1,17 @@
-# CARD-062: Extend bedtime tonight
+# CARD-063: Extend bedtime tonight
 
 | Field | Value |
 |---|---|
-| Card | CARD-062 |
+| Card | CARD-063 |
 | Title | Extend bedtime tonight |
 | Size | L |
-| Depends on | CARD-061 and Claude's front-end PR #186 ("Extend bedtime tonight: the parent screens, spec and CARD-062"), both merged to `main` |
+| Depends on | CARD-062 (Waiting for you) and Claude's front-end PR #186 ("Extend bedtime tonight: the parent screens, spec and CARD-063"), both merged to `main` |
 | Spec sections | docs/SPEC.md §7.5 (read it first), §3 Q39, §6.1 `bedtime_extensions`, §8.2, §9.2, §13, §16.4 |
 | Repository | https://github.com/jamesgallagher/ScreenTime |
 | Local folder | `C:\Users\james\OpenCode\Testing\ScreenTime` |
 | Base branch | `main` |
-| Work branch | `bob/card-062-bedtime-tonight` |
-| PR title | `CARD-062: Extend bedtime tonight` |
+| Work branch | `bob/card-063-bedtime-tonight` |
+| PR title | `CARD-063: Extend bedtime tonight` |
 
 ## 1. Project context
 
@@ -51,7 +51,8 @@ A parent can extend one kid's bedtime for tonight from the web app and the Andro
 
 The existing stack only: TypeScript (Hono, zod, Drizzle, Vitest), Kotlin (JUnit Jupiter), C# (xUnit), PowerShell 7.
 
-- **Migrations.** Add `server/drizzle/0010_bedtime_extensions.sql` the way `0009_device_games.sql` was added (Drizzle schema in `server/src/db/schema.ts`, the generated journal in `server/drizzle/meta/`), with the row-level security policy every family table has (SPEC §6) and grants for `screentime_app` like the other tables. Look at `0009` and copy its shape.
+- **Migrations.** CARD-062 adds `0010_…`, so yours is `server/drizzle/0011_bedtime_extensions.sql`. Change `server/src/db/schema.ts`, run `pnpm --filter @screentime/server db:generate` (drizzle-kit), rename the generated file to that name, and check `server/drizzle/meta/_journal.json` was updated. Add by hand, as `0009_device_games.sql` does, the row-level security policy every family table has (SPEC §6) and the grants for `screentime_app`. Look at `0009` and copy its shape.
+- **Two cards in the parent app.** CARD-062 (Waiting for you) also changes the parent app and the server's notify code. Start from a `main` that has CARD-062 merged; if it is not merged yet, stop and say so.
 - **Time in tests.** The tests depend on "now". Use the `middayZone()` pattern from `server/test/sync.test.ts` (a family time zone where it is around noon whatever the hour of the run), and write each kid's schedule so today's bedtime is a set number of minutes before or after the database's now (as `server/scripts/dev-bedtime.ts` does). Never hard-code a clock time that only works at some hours.
 - **Today's weekday.** The snapshot must change only the entry whose `weekday` is the family's local today (ISO weekday, 1 = Monday), and only when the row's `day` is that local date. `scheduleDay` in `server/src/sync/day.ts` already finds that entry.
 - **Generated clients.** After changing `packages/schemas`, `pnpm contract` regenerates `contract/openapi.json`, the Kotlin client (`android/core-model/.../api/ApiModels.kt`, `ApiClient.kt`) and the C# client (`windows/src/ScreenTime.Core/Api/ApiModels.g.cs`). Commit them. The Kotlin functions will be `putKidsBedtimeTonight` and `deleteKidsBedtimeTonight` (the generator names them from the method and path); use whatever it generates.
@@ -194,15 +195,15 @@ git diff --name-only main -- web/src android/app-parent/src/main android/app-kid
    ```powershell
    git checkout main
    git pull origin main
-   git checkout -b bob/card-062-bedtime-tonight
+   git checkout -b bob/card-063-bedtime-tonight
    ```
-2. Commit in small logical commits. Message format: `CARD-062: <what changed>`.
+2. Commit in small logical commits. Message format: `CARD-063: <what changed>`.
 3. Before pushing, run section 8 again and make sure it passes.
-4. Push: `git push -u origin bob/card-062-bedtime-tonight`
-5. Open a PR into `main` titled `CARD-062: Extend bedtime tonight`, with its body written to a file in `C:\Users\james\OpenCode\Testing\temp\`:
+4. Push: `git push -u origin bob/card-063-bedtime-tonight`
+5. Open a PR into `main` titled `CARD-063: Extend bedtime tonight`, with its body written to a file in `C:\Users\james\OpenCode\Testing\temp\`:
    ```markdown
    ## Card
-   docs/cards/CARD-062-bedtime-tonight.md
+   docs/cards/CARD-063-bedtime-tonight.md
 
    ## What I did
    - ...
@@ -236,11 +237,11 @@ Rules:
 - "Outside the repo" lists anything you changed on James's PC outside the repo folder. Write `None` if there was nothing.
 
 ````text
-Claude, here is Bob's handback for CARD-062. Please review and merge if it is good.
+Claude, here is Bob's handback for CARD-063. Please review and merge if it is good.
 
-CARD: CARD-062 Extend bedtime tonight
+CARD: CARD-063 Extend bedtime tonight
 PR: <full PR URL>
-Branch: bob/card-062-bedtime-tonight
+Branch: bob/card-063-bedtime-tonight
 Head commit: <output of `git rev-parse HEAD`>
 
 Files changed (`git diff --name-only main...HEAD`):

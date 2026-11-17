@@ -90,12 +90,12 @@ class TodayViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    // ---- Extend bedtime tonight (docs/SPEC.md §7.5). The seam: CARD-062 replaces these three. ----
+    // ---- Extend bedtime tonight (docs/SPEC.md §7.5). The seam: CARD-063 replaces these three. ----
 
-    /** The made-up extensions, by kid id, until CARD-062 reads `kid.bedtime` from Today instead. */
+    /** The made-up extensions, by kid id, until CARD-063 reads `kid.bedtime` from Today instead. */
     private val fakeBedtimes = mutableStateMapOf<String, Pair<String, String>>()
 
-    /** Tonight's bedtime for a kid on the Today screen. CARD-062: `kid.bedtime`. */
+    /** Tonight's bedtime for a kid on the Today screen. CARD-063: `kid.bedtime`. */
     fun bedtimeOf(kid: TodayKid): TonightBedtime {
         val ext = fakeBedtimes[kid.id]
         return TonightBedtime(FAKE_SCHEDULED, ext?.first ?: FAKE_SCHEDULED, ext?.second, fakeEarliest())
@@ -103,7 +103,7 @@ class TodayViewModel(app: Application) : AndroidViewModel(app) {
 
     /**
      * Move tonight's bedtime to [bedtime] ("HH:MM"). Returns null when it worked, else the words to show.
-     * CARD-062: `PUT /v1/kids/{kidId}/bedtime-tonight`, then [load].
+     * CARD-063: `PUT /v1/kids/{kidId}/bedtime-tonight`, then [load].
      */
     suspend fun extendBedtime(kidId: String, bedtime: String): String? {
         delay(400)
@@ -111,7 +111,7 @@ class TodayViewModel(app: Application) : AndroidViewModel(app) {
         return null
     }
 
-    /** Back to the scheduled bedtime. Returns null when it worked, else the words to show. CARD-062: `DELETE` the same path. */
+    /** Back to the scheduled bedtime. Returns null when it worked, else the words to show. CARD-063: `DELETE` the same path. */
     suspend fun endBedtimeExtension(kidId: String): String? {
         delay(400)
         fakeBedtimes.remove(kidId)
