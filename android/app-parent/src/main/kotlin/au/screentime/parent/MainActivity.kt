@@ -89,7 +89,9 @@ class MainActivity : ComponentActivity() {
                         locked -> LockScreen(onUnlock = ::askToUnlock)
                         s.me.family == null -> NoFamilyScreen(s.me, ::signOut)
                         ask != null -> ParentModeScreen(ask!!, parentMode) { ask = null }
-                        else -> HomeScreen(s.me, today, inbox, kids, session, secure = isSecure(), ::signOut)
+                        else -> HomeScreen(s.me, today, inbox, kids, session, secure = isSecure(), ::signOut) { w ->
+                            ask = ParentModeAsk(w.requestId, w.kidName, w.deviceName)
+                        }
                     }
                 }
             }

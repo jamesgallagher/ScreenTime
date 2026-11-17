@@ -63,8 +63,9 @@ import java.time.ZoneId
 import kotlinx.coroutines.launch
 
 /**
- * The Inbox screen (docs/SPEC.md §16.4): the kids' waiting time requests and the family history. The home
- * screen polls the Inbox every 30 seconds, so this screen has no loop of its own.
+ * The Inbox screen (docs/SPEC.md §16.4): the family history. What waits for a parent is in the "Waiting for you"
+ * strip at the top of every tab (WaitingStrip). The home screen polls the Inbox every 30 seconds, so this screen
+ * has no loop of its own.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -72,10 +73,6 @@ fun InboxScreen(vm: InboxViewModel, zone: ZoneId) {
     val state = vm.state
     val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) { vm.load() }
-    // The request the amount dialog is open for.
-    var otherId by remember { mutableStateOf<String?>(null) }
-    val other = otherId?.let { id -> state.requests?.find { it.id == id } }
-    if (otherId != null && other == null) otherId = null
     val now = Instant.now()
     Column(modifier = Modifier.fillMaxSize()) {
         ScreenHeader("Inbox")
@@ -104,30 +101,6 @@ fun InboxScreen(vm: InboxViewModel, zone: ZoneId) {
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = ScreenTimeTheme.colors.critical,
                             )
-                        }
-                    }
-                    if (state.notice != null) {
-                        item {
-                            Text(
-                                text = state.notice,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = ScreenTimeTheme.colors.critical,
-                            )
-                        }
-                    }
-                    val approvals = pendingAppApprovals(state.events)
-                    if (state.requests.isNotEmpty() || approvals.isNotEmpty()) {
-                        item {
-                            Text(
-                                text = "Waiting for you",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onBackground,
-                            )
-                        }
-                        items(approvals, key = { it.id }) { e -> AppApprovalCard(e, now, zone, vm) }
-                        items(state.requests, key = { it.id }) { r ->
-                            RequestCard(r, now, zone, vm) { otherId = r.id }
                         }
                     }
                     item {
@@ -182,183 +155,6 @@ fun InboxScreen(vm: InboxViewModel, zone: ZoneId) {
             }
         }
     }
-    if (other != null) {
-        AmountDialog(other, vm) { otherId = null }
-    }
-}
-
-/** A new app that stays blocked until a parent answers (docs/SPEC.md §12.4): Block and Allow. */
-@Composable
-private fun AppApprovalCard(e: EventItem, now: Instant, zone: ZoneId, vm: InboxViewModel) {
-    val scope = rememberCoroutineScope()
-    val view = eventView(e, zone)
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.medium,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, ScreenTimeTheme.colors.outline),
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = view.text,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Spacer(Modifier.height(2.dp))
-            Text(
-                text = "${view.detail}. It stays blocked until you answer.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Spacer(Modifier.height(2.dp))
-            Text(
-                text = whenText(e.at, now, zone),
-                style = MaterialTheme.typography.bodySmall,
-                color = ScreenTimeTheme.colors.muted,
-            )
-            Spacer(Modifier.height(12.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                OutlinedButton(onClick = { scope.launch { vm.answerApp(e, AppRule.BLOCKED) } }, enabled = !vm.state.busy) {
-                    Text("Block")
-                }
-                Button(onClick = { scope.launch { vm.answerApp(e, AppRule.ALLOWED) } }, enabled = !vm.state.busy) {
-                    Text("Allow")
-                }
-            }
-        }
-    }
-}
-
-/** A request card: the request's words and the Other amount, No and Yes buttons. */
-@Composable
-private fun RequestCard(r: TimeRequest, now: Instant, zone: ZoneId, vm: InboxViewModel, onOther: () -> Unit) {
-    val scope = rememberCoroutineScope()
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.medium,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, ScreenTimeTheme.colors.outline),
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = requestTitle(r),
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            requestDetail(r)?.let {
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    text = it,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-            }
-            Spacer(Modifier.height(2.dp))
-            Text(
-                text = "${r.deviceName} · ${whenText(r.createdAt, now, zone)}",
-                style = MaterialTheme.typography.bodySmall,
-                color = ScreenTimeTheme.colors.muted,
-            )
-            Spacer(Modifier.height(12.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                TextButton(onClick = onOther, enabled = !vm.state.busy) {
-                    Text("Other amount")
-                }
-                OutlinedButton(onClick = { scope.launch { vm.deny(r) } }, enabled = !vm.state.busy) {
-                    Text("No")
-                }
-                Button(onClick = { scope.launch { vm.approve(r) } }, enabled = !vm.state.busy) {
-                    Text("Yes, ${formatDuration(r.minutes * 60L)}")
-                }
-            }
-        }
-    }
-}
-
-/**
- * The amount dialog: give a kid a different amount of time than they asked for, counting for today only.
- */
-@Composable
-private fun AmountDialog(r: TimeRequest, vm: InboxViewModel, onDone: () -> Unit) {
-    var minutes by remember { mutableStateOf(r.minutes.coerceIn(15, 480)) }
-    val scope = rememberCoroutineScope()
-    AlertDialog(
-        title = { Text("Give ${r.kidName} more ${poolName(r.pool)}") },
-        text = {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = "${r.kidName} asked for ${formatDuration(r.minutes * 60L)}. It counts for today only.",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                Spacer(Modifier.height(16.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedIconButton(
-                        onClick = { minutes = (minutes - 15).coerceAtLeast(15) },
-                        enabled = minutes > 15 && !vm.state.busy,
-                        modifier = Modifier.size(48.dp),
-                    ) {
-                        Icon(
-                            painterResource(R.drawable.ic_remove),
-                            contentDescription = "15 minutes less",
-                        )
-                    }
-                    Text(
-                        text = formatDuration(minutes * 60L),
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.widthIn(min = 120.dp),
-                        textAlign = TextAlign.Center,
-                    )
-                    OutlinedIconButton(
-                        onClick = { minutes = (minutes + 15).coerceAtMost(480) },
-                        enabled = minutes < 480 && !vm.state.busy,
-                        modifier = Modifier.size(48.dp),
-                    ) {
-                        Icon(
-                            painterResource(R.drawable.ic_add),
-                            contentDescription = "15 minutes more",
-                        )
-                    }
-                }
-                Spacer(Modifier.height(12.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf(15, 30, 60, 120).forEach { q ->
-                        FilterChip(
-                            selected = minutes == q,
-                            onClick = { minutes = q },
-                            label = { Text(formatDuration(q * 60L)) },
-                        )
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    onDone()
-                    scope.launch { vm.approve(r, minutes) }
-                },
-            ) {
-                Text("Give ${formatDuration(minutes * 60L)}")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDone) {
-                Text("Cancel")
-            }
-        },
-        onDismissRequest = onDone,
-    )
 }
 
 /** One event row: the tone's badge, the line and its detail, and the time of day. */
