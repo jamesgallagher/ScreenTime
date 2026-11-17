@@ -26,6 +26,7 @@ import { registerAppUpdateRoutes } from './appupdate/routes.js';
 import { registerDownloadRoutes } from './downloads/routes.js';
 import { registerGameRoutes } from './games/routes.js';
 import { registerTamperRoutes } from './tamper/routes.js';
+import { registerWaitingRoutes } from './waiting/routes.js';
 import { registerWeb } from './web.js';
 
 /** What the routes need at request time. Tests pass their own. */
@@ -99,6 +100,7 @@ export function createApp(appDeps: AppDeps) {
   registerMessageRoutes(app, deps);
   registerParentModeRoutes(app, deps);
   registerTamperRoutes(app, deps);
+  registerWaitingRoutes(app, deps);
   registerAppRoutes(app, deps);
   registerAppUpdateRoutes(app, deps);
   registerGameRoutes(app, deps);
