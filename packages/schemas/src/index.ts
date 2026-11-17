@@ -74,7 +74,6 @@ export {
   TimeRequestCreate,
   TimeRequestStatus,
   WaitingItem,
-  WaitingKind,
   WaitingList,
 } from './requests.js';
 export {

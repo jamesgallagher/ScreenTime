@@ -2178,7 +2178,7 @@
         "type": "object",
         "properties": {
           "kind": {
-            "$ref": "#/components/schemas/WaitingKind"
+            "type": "string"
           },
           "id": {
             "type": "string"
@@ -2274,15 +2274,6 @@
           "label",
           "source",
           "body"
-        ]
-      },
-      "WaitingKind": {
-        "type": "string",
-        "enum": [
-          "time_request",
-          "parent_mode_request",
-          "app_approval",
-          "kid_message"
         ]
       },
       "DeviceAppsPut": {

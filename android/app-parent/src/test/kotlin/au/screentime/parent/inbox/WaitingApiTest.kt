@@ -4,7 +4,6 @@ import au.screentime.core.model.api.Pool
 import au.screentime.core.model.api.TimeRequest
 import au.screentime.core.model.api.TimeRequestStatus
 import au.screentime.core.model.api.WaitingItem
-import au.screentime.core.model.api.WaitingKind
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
@@ -31,7 +30,7 @@ class WaitingApiTest {
     @Test
     fun timeRequestMaps() {
         val item = WaitingItem(
-            kind = WaitingKind.TIME_REQUEST,
+            kind = "time_request",
             id = "r1",
             eventId = "e1",
             at = "2026-11-18T03:00:00Z",
@@ -54,7 +53,7 @@ class WaitingApiTest {
     @Test
     fun timeRequestWithNullRequestReturnsNull() {
         val item = WaitingItem(
-            kind = WaitingKind.TIME_REQUEST,
+            kind = "time_request",
             id = "r1",
             eventId = "e1",
             at = "2026-11-18T03:00:00Z",
@@ -75,7 +74,7 @@ class WaitingApiTest {
     @Test
     fun parentModeRequestMaps() {
         val item = WaitingItem(
-            kind = WaitingKind.PARENT_MODE_REQUEST,
+            kind = "parent_mode_request",
             id = "pm1",
             eventId = "e2",
             at = "2026-11-18T03:00:00Z",
@@ -99,7 +98,7 @@ class WaitingApiTest {
     @Test
     fun appApprovalMaps() {
         val item = WaitingItem(
-            kind = WaitingKind.APP_APPROVAL,
+            kind = "app_approval",
             id = "k1:com.example.game",
             eventId = "e3",
             at = "2026-11-18T03:00:00Z",
@@ -125,7 +124,7 @@ class WaitingApiTest {
     @Test
     fun kidMessageMaps() {
         val item = WaitingItem(
-            kind = WaitingKind.KID_MESSAGE,
+            kind = "kid_message",
             id = "m1",
             eventId = "e4",
             at = "2026-11-18T03:00:00Z",
@@ -170,5 +169,26 @@ class WaitingApiTest {
     fun staleTagsEmptyWhenNoWaiting() {
         val active = listOf("waiting:e1", "waiting:e2")
         assertEquals(listOf("waiting:e1", "waiting:e2"), staleTags(active, emptyList()))
+    }
+
+    @Test
+    fun unknownKindReturnsNull() {
+        val item = WaitingItem(
+            kind = "something_new",
+            id = "x1",
+            eventId = null,
+            at = "2026-11-18T03:00:00Z",
+            kidId = "k1",
+            kidName = "Alex",
+            deviceId = null,
+            deviceName = null,
+            request = null,
+            expiresAt = null,
+            `package` = null,
+            label = null,
+            source = null,
+            body = null,
+        )
+        assertNull(waitingFrom(item))
     }
 }

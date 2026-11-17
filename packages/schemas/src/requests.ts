@@ -104,21 +104,15 @@ export const KidMessage = z
 
 export type KidMessage = z.infer<typeof KidMessage>;
 
-/** What kind of thing is waiting for a parent. */
-export const WaitingKind = z
-  .enum(['time_request', 'parent_mode_request', 'app_approval', 'kid_message'])
-  .meta({ id: 'WaitingKind' });
-
-export type WaitingKind = z.infer<typeof WaitingKind>;
-
 /**
  * One thing that waits for a parent (docs/SPEC.md §16.4). The schema is flat: every kind-specific
  * field is present on every item and null when it does not apply, because the Kotlin client generator
- * does not handle `oneOf`.
+ * does not handle `oneOf`. `kind` is one of `'time_request'`, `'parent_mode_request'`, `'app_approval'`,
+ * `'kid_message'`; a kind the app does not know is skipped, never a crash.
  */
 export const WaitingItem = z
   .object({
-    kind: WaitingKind,
+    kind: z.string(),
     /** The request id, the parent-mode session id, `<kidId>:<package>` for an app, or the message id. */
     id: z.string(),
     /** The event whose push made the notification, so the notification can be cleared; null when unknown. */

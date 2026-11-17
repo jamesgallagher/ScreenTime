@@ -2,18 +2,17 @@ package au.screentime.parent.inbox
 
 import au.screentime.core.model.api.TimeRequest
 import au.screentime.core.model.api.WaitingItem
-import au.screentime.core.model.api.WaitingKind
 
 /**
  * Maps a server [WaitingItem] to a [Waiting] for the strip. Returns null for an unknown kind, or when a
  * kind-specific field is missing (for example a `time_request` with `request` null).
  */
 fun waitingFrom(item: WaitingItem): Waiting? = when (item.kind) {
-    WaitingKind.TIME_REQUEST -> {
+    "time_request" -> {
         val request = item.request ?: return null
         Waiting.Time(request, eventId = item.eventId)
     }
-    WaitingKind.PARENT_MODE_REQUEST -> {
+    "parent_mode_request" -> {
         val expiresAt = item.expiresAt ?: return null
         Waiting.ParentMode(
             requestId = item.id,
@@ -24,7 +23,7 @@ fun waitingFrom(item: WaitingItem): Waiting? = when (item.kind) {
             eventId = item.eventId,
         )
     }
-    WaitingKind.APP_APPROVAL -> {
+    "app_approval" -> {
         val packageName = item.`package` ?: return null
         Waiting.NewApp(
             kidId = item.kidId,
@@ -37,7 +36,7 @@ fun waitingFrom(item: WaitingItem): Waiting? = when (item.kind) {
             eventId = item.eventId,
         )
     }
-    WaitingKind.KID_MESSAGE -> {
+    "kid_message" -> {
         val body = item.body ?: return null
         Waiting.Message(
             messageId = item.id,
@@ -48,6 +47,7 @@ fun waitingFrom(item: WaitingItem): Waiting? = when (item.kind) {
             eventId = item.eventId,
         )
     }
+    else -> null
 }
 
 /**
