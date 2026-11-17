@@ -129,7 +129,7 @@ Write-Output "  $screen"
 Check 'Message from Alex is gone' (-not $screen.Contains('Message from Alex'))
 $seen = (docker exec screentime-db-1 psql -U screentime -d screentime -Atc "select id, seen_at, seen_by from kid_messages") -join ' '
 Write-Output "  kid_messages: $seen"
-Check 'seen_at is set' ($seen -match '\S+\|\S+\|\S+')
+Check 'seen_at is set' ($seen -match '\S+\|\S+ \S+\|\S+')
 $events = (docker exec screentime-db-1 psql -U screentime -d screentime -Atc "select kind, payload from events where kind = 'kid_message.seen'") -join ' '
 Write-Output "  events: $events"
 Check 'one kid_message.seen event' ($events -match 'kid_message.seen')
