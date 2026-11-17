@@ -162,9 +162,11 @@ private fun WaitingRow(
 ) {
     val scope = rememberCoroutineScope()
     val busy = vm.state.busy
+    // A message or a parent-mode request has one button: it sits beside the words, to keep the strip short.
+    val single = w is Waiting.Message || w is Waiting.ParentMode
     val colors = ScreenTimeTheme.colors
     Column(modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 8.dp)) {
-        Row(verticalAlignment = Alignment.Top) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
                 modifier = Modifier
                     .size(36.dp)
@@ -196,38 +198,43 @@ private fun WaitingRow(
                     color = colors.muted,
                 )
             }
+            if (single) {
+                Spacer(Modifier.width(8.dp))
+                when (w) {
+                    is Waiting.ParentMode -> Button(onClick = { onParentMode(w) }, enabled = !busy) { Text("Answer") }
+                    is Waiting.Message -> Button(onClick = { scope.launch { vm.seen(w) } }, enabled = !busy) { Text("Got it") }
+                    else -> Unit
+                }
+            }
         }
-        Spacer(Modifier.height(4.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            when (w) {
-                is Waiting.Time -> {
-                    TextButton(onClick = { onOther(w.request.id) }, enabled = !busy) {
-                        Text("Other amount")
+        if (!single) {
+            Spacer(Modifier.height(4.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                when (w) {
+                    is Waiting.Time -> {
+                        TextButton(onClick = { onOther(w.request.id) }, enabled = !busy) {
+                            Text("Other amount")
+                        }
+                        OutlinedButton(onClick = { scope.launch { vm.deny(w.request) } }, enabled = !busy) {
+                            Text("No")
+                        }
+                        Button(onClick = { scope.launch { vm.approve(w.request) } }, enabled = !busy) {
+                            Text("Yes, ${formatDuration(w.request.minutes * 60L)}")
+                        }
                     }
-                    OutlinedButton(onClick = { scope.launch { vm.deny(w.request) } }, enabled = !busy) {
-                        Text("No")
+                    is Waiting.NewApp -> {
+                        OutlinedButton(onClick = { scope.launch { vm.answerApp(w, AppRule.BLOCKED) } }, enabled = !busy) {
+                            Text("Block")
+                        }
+                        Button(onClick = { scope.launch { vm.answerApp(w, AppRule.ALLOWED) } }, enabled = !busy) {
+                            Text("Allow")
+                        }
                     }
-                    Button(onClick = { scope.launch { vm.approve(w.request) } }, enabled = !busy) {
-                        Text("Yes, ${formatDuration(w.request.minutes * 60L)}")
-                    }
-                }
-                is Waiting.ParentMode -> Button(onClick = { onParentMode(w) }, enabled = !busy) {
-                    Text("Answer")
-                }
-                is Waiting.NewApp -> {
-                    OutlinedButton(onClick = { scope.launch { vm.answerApp(w, AppRule.BLOCKED) } }, enabled = !busy) {
-                        Text("Block")
-                    }
-                    Button(onClick = { scope.launch { vm.answerApp(w, AppRule.ALLOWED) } }, enabled = !busy) {
-                        Text("Allow")
-                    }
-                }
-                is Waiting.Message -> Button(onClick = { scope.launch { vm.seen(w) } }, enabled = !busy) {
-                    Text("Got it")
+                    else -> Unit
                 }
             }
         }

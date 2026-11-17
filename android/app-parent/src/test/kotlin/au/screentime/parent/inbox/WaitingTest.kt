@@ -31,6 +31,7 @@ class WaitingTest {
         assertEquals("Alex wants 30m more Phone", waitingTitle(time))
         assertEquals("“finishing homework video”", waitingDetail(time))
         assertEquals("Sam wants parent mode", waitingTitle(parentMode))
+        assertNull(waitingDetail(parentMode))
         assertEquals("Alex installed Roblox", waitingTitle(app))
         assertEquals("From Play Store. It stays blocked until you answer.", waitingDetail(app))
         assertEquals("Message from Alex", waitingTitle(message))

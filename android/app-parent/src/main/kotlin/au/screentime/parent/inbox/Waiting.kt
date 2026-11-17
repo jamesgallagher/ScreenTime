@@ -80,7 +80,7 @@ fun waitingTitle(w: Waiting): String = when (w) {
 /** The strip's second line, or null for none. */
 fun waitingDetail(w: Waiting): String? = when (w) {
     is Waiting.Time -> requestDetail(w.request)
-    is Waiting.ParentMode -> "The device stays unlocked while it is on."
+    is Waiting.ParentMode -> null
     is Waiting.NewApp -> "${appSource(w.source)}. It stays blocked until you answer."
     is Waiting.Message -> "“${w.body}”"
 }
