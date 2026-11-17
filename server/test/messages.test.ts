@@ -46,6 +46,7 @@ describe.skipIf(!url)('kid messages', () => {
   const sentTo = (token: string) => sent.filter((m) => m.token === token);
 
   let familyA = '';
+  let familyB = '';
   let dadId = '';
   let mum = '';
   let dad = '';
@@ -108,6 +109,7 @@ describe.skipIf(!url)('kid messages', () => {
       ])
       .returning();
     familyA = a?.id ?? '';
+    familyB = b?.id ?? '';
     const [p1, p2, p3] = await db
       .insert(parents)
       .values([
@@ -134,6 +136,7 @@ describe.skipIf(!url)('kid messages', () => {
   beforeEach(async () => {
     sent.length = 0;
     await db.delete(kidMessages);
+    await db.delete(events);
   });
 
   afterAll(async () => {
@@ -256,10 +259,47 @@ describe.skipIf(!url)('kid messages', () => {
 
     it('returns 404 for another family and a non-uuid, 422 for a bad id, 401 without a token', async () => {
       const id = await send(alexPhone, 'Hi');
-      // Another family's message (Bea's family has no messages, so use a non-existent id).
+      // Create a message in family B (Bea's family) and check that family A's parent gets 404 for it.
+      const beaKidId = randomUUID();
+      await db.insert(kids).values({ familyId: familyB, name: 'Bea Kid', avatarColor: '#0F766E' });
+      const beaKid = (await db.select().from(kids).where(eq(kids.name, 'Bea Kid')))[0];
+      const beaDeviceId = randomUUID();
+      const beaToken = newDeviceToken();
+      await db.insert(devices).values({
+        familyId: familyB,
+        kidId: beaKid.id,
+        platform: 'android',
+        form: 'phone',
+        pool: 'phone',
+        name: 'Bea Phone',
+        tokenHash: hashDeviceToken(beaToken),
+      });
+      const beaMsgId = randomUUID();
+      const beaRes = await api.post('/v1/device/messages', beaToken, { id: beaMsgId, body: 'Bea message' });
+      expect(beaRes.status).toBe(201);
+      expect((await api.post(`/v1/messages/${beaMsgId}/seen`, mum)).status).toBe(404);
       expect((await api.post(`/v1/messages/${randomUUID()}/seen`, mum)).status).toBe(404);
       expect((await api.post('/v1/messages/not-a-uuid/seen', mum)).status).toBe(422);
       expect((await api.post(`/v1/messages/${id}/seen`, null)).status).toBe(401);
+    });
+
+    it('two parents tapping seen at the same moment write exactly one event', async () => {
+      const id = await send(alexPhone, 'Pick me up');
+      sent.length = 0;
+      const [res1, res2] = await Promise.all([
+        api.post(`/v1/messages/${id}/seen`, mum),
+        api.post(`/v1/messages/${id}/seen`, dad),
+      ]);
+      expect(res1.status).toBe(200);
+      expect(res2.status).toBe(200);
+      // Both return the same seenAt and seenByName.
+      expect(res1.body.seenAt).toBe(res2.body.seenAt);
+      expect(res1.body.seenByName).toBe(res2.body.seenByName);
+      // Exactly one kid_message.seen event.
+      const seenEvents = await db.select().from(events).where(eq(events.kind, 'kid_message.seen'));
+      expect(seenEvents).toHaveLength(1);
+      // No push is sent.
+      expect(sent).toHaveLength(0);
     });
 
     it('GET /v1/messages returns seenAt and seenByName', async () => {

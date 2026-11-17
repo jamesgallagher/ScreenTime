@@ -1,5 +1,5 @@
 import { createRoute, z } from '@hono/zod-openapi';
-import { and, eq, type SQL, sql } from 'drizzle-orm';
+import { and, eq, isNull, type SQL, sql } from 'drizzle-orm';
 import { KidMessage, KidMessageCreate, MessagePage } from '@screentime/schemas';
 import type { AppDeps } from '../app.js';
 import { requireFamilyParent } from '../auth/guards.js';
@@ -172,10 +172,18 @@ export function registerMessageRoutes(app: Router, deps: AppDeps) {
       }
       const [parent] = await tx.select({ name: parents.displayName }).from(parents).where(eq(parents.id, parentId));
       const byName = parent?.name ?? null;
-      await tx
+      // Only update if still unseen, so two parents tapping at the same moment do not both write.
+      const [updated] = await tx
         .update(kidMessages)
         .set({ seenAt: sql`now()`, seenBy: parentId })
-        .where(eq(kidMessages.id, id));
+        .where(and(eq(kidMessages.id, id), isNull(kidMessages.seenAt)))
+        .returning({ id: kidMessages.id });
+      if (!updated) {
+        // Another parent got here first: return the stored message, no second event.
+        const [message] = await selectMessages(tx, eq(kidMessages.id, id));
+        if (!message) throw new Error('message vanished after update');
+        return { message, alreadySeen: true };
+      }
       await tx.insert(events).values({
         familyId,
         kidId: before.kidId,
