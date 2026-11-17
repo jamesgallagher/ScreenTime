@@ -4,6 +4,7 @@ import au.screentime.core.model.api.ApiException
 import au.screentime.core.model.api.EventItem
 import au.screentime.core.model.api.TimeRequest
 import au.screentime.core.time.formatDuration
+import au.screentime.parent.kids.formatClock
 import au.screentime.parent.today.poolName
 import java.time.Instant
 import java.time.ZoneId
@@ -85,6 +86,19 @@ fun eventView(e: EventItem, zone: ZoneId): EventView {
                 boolean(p, "lockNow") == true -> EventView("$byOrParent locked $kid's $pool", null, EventTone.TIME)
                 minutes >= 0 -> EventView("$byOrParent added ${mins(minutes)} of $pool for $kid", null, EventTone.TIME)
                 else -> EventView("$byOrParent took away ${mins(minutes)} of $pool from $kid", null, EventTone.TIME)
+            }
+        }
+        "bedtime.extended" -> {
+            val bedtime = text(p, "bedtime")
+            val scheduled = text(p, "scheduled")
+            if (bedtime == null) {
+                EventView("$byOrParent put $kid's bedtime back to ${scheduled?.let(::formatClock) ?: "usual"}", null, EventTone.TIME)
+            } else {
+                EventView(
+                    "$byOrParent moved $kid's bedtime to ${formatClock(bedtime)} tonight",
+                    scheduled?.let { "Usually ${formatClock(it)}" },
+                    EventTone.TIME,
+                )
             }
         }
         "kid_message" -> EventView("Message from $kid", "“${text(p, "body") ?: ""}”", EventTone.MESSAGE)

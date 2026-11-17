@@ -1,5 +1,6 @@
 import type { EventItem, Pool, SosLocation } from '@screentime/schemas';
 import { formatDuration, formatTimeOfDay } from '@/lib/format';
+import { formatClock } from '@/lib/schedule';
 import { POOL_NAMES } from '@/lib/today';
 
 /** How an event reads in the history: the icon group and colour come from `tone`. */
@@ -73,6 +74,18 @@ export function eventView(event: EventItem, timeZone: string): EventView {
       return minutes >= 0
         ? { text: `${who} added ${minutesText(minutes)} of ${poolName(p)} for ${kid}`, detail: null, tone: 'time' }
         : { text: `${who} took away ${minutesText(minutes)} of ${poolName(p)} from ${kid}`, detail: null, tone: 'time' };
+    }
+    case 'bedtime.extended': {
+      const who = by ?? 'A parent';
+      const bedtime = str(p, 'bedtime');
+      const scheduled = str(p, 'scheduled');
+      return bedtime === null
+        ? { text: `${who} put ${kid}'s bedtime back to ${scheduled ? formatClock(scheduled) : 'usual'}`, detail: null, tone: 'time' }
+        : {
+            text: `${who} moved ${kid}'s bedtime to ${formatClock(bedtime)} tonight`,
+            detail: scheduled ? `Usually ${formatClock(scheduled)}` : null,
+            tone: 'time',
+          };
     }
     case 'kid_message':
       return { text: `Message from ${kid}`, detail: quoted(str(p, 'body') ?? ''), tone: 'message' };
