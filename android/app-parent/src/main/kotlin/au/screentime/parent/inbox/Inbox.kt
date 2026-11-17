@@ -88,6 +88,7 @@ fun eventView(e: EventItem, zone: ZoneId): EventView {
             }
         }
         "kid_message" -> EventView("Message from $kid", "“${text(p, "body") ?: ""}”", EventTone.MESSAGE)
+        "kid_message.seen" -> EventView("$byOrParent saw $kid's message", null, EventTone.INFO)
         "parent_mode.request" -> EventView("$kid asked for parent mode on $device", null, EventTone.REQUEST)
         "parent_mode.used" -> {
             val duration = number(p, "durationMin")

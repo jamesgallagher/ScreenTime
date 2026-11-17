@@ -76,6 +76,8 @@ export function eventView(event: EventItem, timeZone: string): EventView {
     }
     case 'kid_message':
       return { text: `Message from ${kid}`, detail: quoted(str(p, 'body') ?? ''), tone: 'message' };
+    case 'kid_message.seen':
+      return { text: `${by ?? 'A parent'} saw ${kid}'s message`, detail: null, tone: 'info' };
     case 'parent_mode.request':
       return { text: `${kid} asked for parent mode on ${device}`, detail: null, tone: 'request' };
     case 'parent_mode.used': {

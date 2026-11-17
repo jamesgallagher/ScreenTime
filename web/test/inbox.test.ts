@@ -41,6 +41,7 @@ describe('eventView', () => {
       detail: '“Can I stay at Sam’s?”',
       tone: 'message',
     });
+    expect(eventView(event('kid_message.seen', { messageId: 'm1', byName: 'Mum' }), TZ).text).toBe("Mum saw Alex's message");
   });
 
   it('reads grants, lock now and overspend', () => {

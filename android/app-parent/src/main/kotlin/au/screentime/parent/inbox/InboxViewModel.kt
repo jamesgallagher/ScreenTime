@@ -22,6 +22,8 @@ import kotlinx.coroutines.launch
 data class InboxState(
     val requests: List<TimeRequest>? = null,
     val events: List<EventItem> = emptyList(),
+    /** Everything that waits for a parent, for the strip at the top of every tab; null until the first answer. */
+    val waiting: List<Waiting>? = null,
     val refreshing: Boolean = false,
     val error: String? = null,
     val notice: String? = null,
@@ -35,17 +37,14 @@ class InboxViewModel(app: Application) : AndroidViewModel(app) {
     var state by mutableStateOf(InboxState())
         private set
 
-    /** The number of waiting time requests and new apps: the badge on the Inbox tab. */
-    val pending: Int
-        get() = (state.requests?.size ?: 0) + pendingAppApprovals(state.events.orEmpty()).size
-
     /** Load the waiting requests and the history, or refresh them when [pulled]. */
     suspend fun load(pulled: Boolean = false) {
         if (pulled) state = state.copy(refreshing = true)
         try {
             val requests = session.call { getRequests(status = TimeRequestStatus.PENDING) }
             val events = session.call { getEvents(limit = 50) }.events
-            state = state.copy(requests = requests, events = events, refreshing = false, error = null)
+            val waiting = WaitingSeam.build(requests, events)
+            state = state.copy(requests = requests, events = events, waiting = waiting, refreshing = false, error = null)
         } catch (e: CancellationException) {
             state = state.copy(refreshing = false)
             throw e
@@ -68,11 +67,14 @@ class InboxViewModel(app: Application) : AndroidViewModel(app) {
         answer { session.call { postRequestsDeny(request.id) } }
     }
 
-    /** Answer a new app that waits for a parent. */
-    suspend fun answerApp(e: EventItem, rule: AppRule) {
-        val packageName = approvalPackage(e) ?: return
-        val kidId = e.kidId ?: return
-        answer { session.call { putKidsAppsRule(kidId, packageName, rulePut(rule)) } }
+    /** "Got it" on a kid's message: it leaves the strip for every parent. The seam: CARD-062 calls the server. */
+    suspend fun seen(message: Waiting.Message) {
+        answer { WaitingSeam.seen(message) }
+    }
+
+    /** Answer a new app from the strip. */
+    suspend fun answerApp(app: Waiting.NewApp, rule: AppRule) {
+        answer { session.call { putKidsAppsRule(app.kidId, app.packageName, rulePut(rule)) } }
     }
 
     /**
