@@ -15,7 +15,7 @@ Markers used below:
 
 1. Product summary
 2. Household and devices (v1)
-3. Requirements decisions (interview log Q1 to Q38)
+3. Requirements decisions (interview log Q1 to Q39)
 4. System architecture
 5. Repository layout
 6. Data model
@@ -101,6 +101,7 @@ These are James's answers from the requirements interview (22 Oct 2026). Section
 | Q36 | (5 Nov 2026) A parent can give an app a daily limit, for example 30 minutes of YouTube. The limit is per kid and shared across the kid's Android devices. App time still counts towards the pool. | 12.4 |
 | Q37 | (5 Nov 2026) Per kid switch: new apps stay blocked until a parent approves them. Off by default. Waiting for an answer makes this notification essential, as Q17's rule says. | 12.4, 13 |
 | Q38 | (5 Nov 2026) A kid cannot ask for more time on one app yet. A parent can change the limit at any time. | 12.4, 18 |
+| Q39 | (18 Nov 2026) A parent can **extend bedtime** for one kid, tonight only, without giving time. Until the new bedtime the kid keeps any time that is left; with none left, the device stays locked as out of time, so the always-allowed apps keep working (homework, for example). Adding time after bedtime still unlocks everything, as before. | 7.5 |
 | Future | School-hours blocks, a cooldown between time requests, app allowlists. | 18 |
 
 Also decided in research (22 Oct 2026): the tech stack in section 4, the sync design in section 8, Device Owner with Lock Task for Android, and a LocalSystem service plus tray helper for Windows.
@@ -256,6 +257,8 @@ A Windows device row is one PC **plus** one Windows user account (Q10). Pools an
 
 **Games on a PC (Windows only, section 12.6).**
 
+**bedtime_extensions** (Q39, one row per kid and local day): `family_id`, `kid_id`, `day` (local date), `bedtime` (`HH:MM`, a quarter hour, at most `24:00`), `created_by` (parent id), `updated_at`. Primary key `(kid_id, day)`. Setting it again replaces the time; going back to the usual bedtime deletes the row. Section 7.5.
+
 **device_games** (one row per Windows device and game): `family_id`, `kid_id`, `device_id`, `game` (`genshin`, `starrail`, or `custom-<uuid>` for a program a parent added), `label` (max 60), `exe_path`, `source` (`found` | `custom`), `shortcut` (bool, default false: a parent wants it on the kid's desktop), `first_seen_at`, `removed_at` (nullable; set when the PC no longer finds it, cleared if it comes back).
 
 ### 6.2 Super admin
@@ -354,6 +357,17 @@ One JSON file per case in `test-vectors/engine/`, named `NNN-short-name.json`:
 
 The cases must cover at least: plain allowance, zero allowance, grants plus and minus, negative grant that locks, two overlapping devices, back-to-back devices, segment crossing wake, crossing bedtime, crossing midnight, bedtime grant, morning grant, open segment, overspend, `wake = 00:00`, `bedtime = 24:00`, and both daylight-saving change days in `Australia/Sydney`.
 
+### 7.5 Extend bedtime tonight (Q39, James 18 Nov 2026)
+
+A parent moves one kid's bedtime later for **today only**. It is per kid, so it covers both pools and every device of the kid. It gives no time.
+
+- **Tonight's bedtime** is the later of today's schedule bedtime and the kid's `bedtime_extensions` row for today (6.1). Everything that reads today's schedule for enforcing or reporting uses tonight's bedtime instead: the engine's `day.bedtime` on the server, the device snapshot (8.2), `GET /v1/today`, lock now, the overspend check and the offline sweep (8.5). The schedule itself is not changed: `schedule_versions`, `GET /v1/kids/{kidId}/schedule` and the schedule editor still show the usual bedtime.
+- **The engine is unchanged.** The allowed period simply runs to the new bedtime. A kid with time left keeps using it; at zero the pool is locked with `out_of_time`, which on Android is when the always-allowed apps run (12.4); at the new bedtime it locks with `bedtime` as usual. Example: Alex ran out at 7 pm and the phone locked for bedtime at 8:30 pm. At 8:40 Dad extends bedtime to 9:30 pm: the phone goes back to "Out of Phone time", the always-allowed apps (for example Google Classroom) work until 9:30, then it is bedtime.
+- A grant made between the usual and the new bedtime now falls in the allowed period, so it counts as an allowance grant, and use in that window counts against the allowance. The two balance: 15 minutes granted at 8:35 and used until 8:50 still leave the allowance where it was.
+- **No device code.** The snapshot's `schedule.days` entry for today's weekday carries tonight's bedtime (only on the extension's day), so kid apps and PCs already installed honour it on their next sync, and show it ("Bedtime 9:30 pm"). Known limit, accepted: a device that gets no snapshot for a whole week would reuse that weekday's extended bedtime from its cache a week later.
+- **What a parent can pick:** a quarter hour (`HH:00`, `:15`, `:30`, `:45`, or `24:00` = midnight) that is later than today's schedule bedtime and later than now (the earliest is the first quarter hour after both), at most midnight. A kid whose bedtime today is already `24:00` cannot be extended. Setting it again replaces the time, earlier or later, while it is still a valid pick. **Back to usual** deletes it at any time, and the device locks for bedtime at once if the usual bedtime has passed.
+- It writes a `bedtime.extended` event (13); the other parents hear about it as `grant.by_other_parent`; the kid's devices get `state_changed` at high priority.
+
 ## 8. Sync model
 
 ### 8.1 Principle
@@ -373,6 +387,7 @@ Details:
 - An open segment (no `endedAt`) of a device that has not been heard from for 10 minutes is shown as ending at that device's `last_seen_at`, so a phone that died while in use does not keep using up the pool. Devices upload at least every 5 minutes while in use (8.3), so a working device never looks stale. The stored segment is not changed.
 - `parents` lists every enabled parent, oldest first, with `phoneE164` null when the parent has no phone. `pendingRequest` is the newest pending time request for this kid and pool made today, as `{ id, minutes, createdAt }`. `activeSos` is the kid's newest SOS that has not ended or auto-stopped, as `{ id, startedAt }`.
 - `apps` (section 12.4) holds the kid's `newAppApproval` switch and every rule, `allowed` ones too, so a second device does not hold an app a parent has already approved. `today.appUsage` holds today's seconds per package from the kid's **other** Android devices, only for packages with a `limit` rule, so an upload only changes another device's snapshot when it matters. On a Windows device both are empty.
+- `schedule` is the kid's current schedule, except that the entry for today's weekday has **tonight's** bedtime when a parent extended it (section 7.5). The `version` is unchanged.
 - `games` (section 12.6) holds the games this PC account gets a desktop shortcut for, as `{ id, label, exePath }` by id: the ones a parent turned on that the PC still finds. On an Android device it is empty.
 
 ### 8.3 When devices sync
@@ -493,6 +508,15 @@ App control routes (Android only, section 12.4):
 | GET | `/v1/kids/{kidId}/apps` | `{ newAppApproval, apps: [{ package, label, source, blockable, todaySeconds, rule: { mode, dailyMinutes } \| null, devices: [{ deviceId, deviceName, installedAt, firstUsedAt, removedAt }] }] }`, across the kid's Android devices. An app gone from every device is still listed, with `removedAt` set |
 | PUT | `/v1/kids/{kidId}/apps/{package}/rule` | `{ mode, dailyMinutes }` → the app's rule (`dailyMinutes` null unless `limit`). `mode` is `allowed`, `blocked` or `limit`; `held` is only written by the server (422). `dailyMinutes` 5 to 480 in steps of 5 for `limit`, and anything but null otherwise is refused (422). A package not on any of the kid's devices → 404; one that any of them says is not `blockable` → 409. Answering a `held` app also writes `app.answered` |
 | PUT | `/v1/kids/{kidId}/app-settings` | `{ newAppApproval }` → 204 |
+
+Extend bedtime tonight (section 7.5):
+
+| Method | Path | Purpose |
+|---|---|---|
+| PUT | `/v1/kids/{kidId}/bedtime-tonight` | `{ bedtime }` (`HH:MM`) → 200 `TodayBedtime`. Not a quarter hour, not later than today's schedule bedtime, not later than now, or after `24:00` → 422. The same time again → 200, nothing written or sent |
+| DELETE | `/v1/kids/{kidId}/bedtime-tonight` | back to the usual bedtime → 200 `TodayBedtime`. None set → 200, nothing written or sent |
+
+`TodayBedtime` is `{ scheduled, tonight, extendedBy, earliest }`: today's schedule bedtime, tonight's bedtime, the display name of the parent who extended it (null when `tonight` is the schedule's), and the earliest time a parent can pick now (null when none). `GET /v1/today` has it on every kid as `bedtime`.
 
 ### 9.3 Device
 
@@ -843,7 +867,7 @@ Parent notifications go to the Android parent app by FCM. The web app shows the 
 | `device.offline` | Not seen for 6 h during allowed hours | No |
 | `device.enrolled` | New device added | No |
 | `device.removed` | Screen Time removed on the device, with the parent code (payload `{ deviceName }`) | No |
-| `grant.by_other_parent` | The other parent changed time (from the `grant.added` event every grant writes, payload `{ grantId, pool, minutes, byName, lockNow }`) | No |
+| `grant.by_other_parent` | The other parent changed time (from the `grant.added` event every grant writes, payload `{ grantId, pool, minutes, byName, lockNow }`), or moved bedtime tonight (from `bedtime.extended`, payload `{ day, scheduled, bedtime, byName, parentId }`, `bedtime` null when put back to usual; section 7.5) | No |
 
 Rule (James, 22 Oct 2026, confirmed 25 Oct for "ask for more time"): SOS and every request that waits for a parent's answer (`parent_mode.request`, `time_request`, `app.approval`) are essential; every informational kind can be switched off per parent. Sign-in code emails are always sent. Tamper and parent-mode-used are informational (confirmed). Muting only stops the push: **every** kind is always written to `events` and always shown in the event history (Inbox) in the parent app and web app.
 
@@ -1014,6 +1038,8 @@ Phone     ██░░░░░░░░  Locked · bedtime            [ ± ]
 
 Status chips under each kid: "Using PC now", "Parent mode on Pixel 7 · 10 min", "Tablet offline 7h". An overspend shows an amber chip "12m over (tablet was offline)".
 
+**Bedtime row (Q39, section 7.5):** under the pools, a moon in a 36 dp circle, "Bedtime 8:30 pm" and an **Extend** button; once extended, "Bedtime 9:30 pm tonight", "Extended by Dad · usually 8:30 pm", a primary-tinted moon and **Change**; "No bedtime today" and no button for a `24:00` bedtime, and no button when it is too late to pick a time. **Extend bedtime sheet:** "Extend bedtime for Alex" ("Change Alex's bedtime tonight" once extended), a line saying it is tonight only and what happens to time left and the always-allowed apps, the time in display size with − and + in 15-minute steps from the earliest pick to midnight, "1h later than usual" under it, chips +30m, +1h and +2h (disabled when they cannot be picked), **Extend to 9:30 pm**, and once extended a small danger-coloured **Back to 8:30 pm**. It opens an hour later than usual, or on the current extension. The inbox reads `bedtime.extended` as "Dad moved Alex's bedtime to 9:30 pm tonight · Usually 8:30 pm" or "Mum put Alex's bedtime back to 8:30 pm".
+
 **Adjust sheet (Q8):** pool segmented control (Screens | Phone), a vertical wheel picker in 15-minute steps from −4h to +8h, default +15m, with live preview "Now 45m left → 1h 00m left". Buttons **Apply** and a small **Lock now** text button (danger colour, confirm dialog).
 
 **Inbox:** pending time requests at top as cards ("Alex wants 30 min of Phone · 'finishing homework video'") with **Yes** (opens the roller preset to the requested amount) and **No**; then messages and events in time order.
@@ -1044,7 +1070,7 @@ As planned (CARD-042): the parent app starts Firebase itself from four `BuildCon
 
 ### 16.5 Parent web app
 
-Kid detail has an **Apps** tab with the same content as 16.4. On the Devices tab, a PC's **More** menu has **Games…** (section 12.6): a dialog with a switch per game the PC found ("Not on this PC any more" for one that is gone, with its switch disabled), the programs a parent added with a remove button, and **Add another program** (a name and the full path to an .exe; a bad path says what is wrong). The Android parent app does not have it yet. Same functions as the parent app except SOS alarms (the web shows a red banner at the top of every page while an SOS is active, with the map link) and parent code (also shown in Settings).
+Kid detail has an **Apps** tab with the same content as 16.4. The bedtime row and the extend bedtime sheet of 16.4 are on Today's kid cards and the kid's Today tab; the sheet is a dialog. On the Devices tab, a PC's **More** menu has **Games…** (section 12.6): a dialog with a switch per game the PC found ("Not on this PC any more" for one that is gone, with its switch disabled), the programs a parent added with a remove button, and **Add another program** (a name and the full path to an .exe; a bad path says what is wrong). The Android parent app does not have it yet. Same functions as the parent app except SOS alarms (the web shows a red banner at the top of every page while an SOS is active, with the map link) and parent code (also shown in Settings).
 
 Development (CARD-022): `pnpm dev:web` serves the app on http://localhost:5173 and passes `/v1/*` and `/health` to the API on :8080, so the browser sees one origin (in production the server serves the build, CARD-027). Routes are defined in code (TanStack Router, no generator); components are shadcn/ui-style files in `web/src/components/ui` with our tokens, not the shadcn defaults.
 

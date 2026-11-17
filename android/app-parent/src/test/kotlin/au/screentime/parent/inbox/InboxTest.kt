@@ -90,6 +90,22 @@ class InboxTest {
     }
 
     @Test
+    fun bedtimeMovedAndPutBack() {
+        assertEquals(
+            EventView("Dad moved Alex's bedtime to 9:30 pm tonight", "Usually 8:30 pm", EventTone.TIME),
+            view("bedtime.extended", "day" to "2026-11-18", "scheduled" to "20:30", "bedtime" to "21:30", "byName" to "Dad"),
+        )
+        assertEquals(
+            "Mum moved Alex's bedtime to midnight tonight",
+            view("bedtime.extended", "scheduled" to "20:30", "bedtime" to "24:00", "byName" to "Mum").text,
+        )
+        assertEquals(
+            EventView("Mum put Alex's bedtime back to 8:30 pm", null, EventTone.TIME),
+            view("bedtime.extended", "scheduled" to "20:30", "bedtime" to null, "byName" to "Mum"),
+        )
+    }
+
+    @Test
     fun parentModeSosAndDeviceEvents() {
         assertEquals(
             EventView("Alex asked for parent mode on Pixel 7", null, EventTone.REQUEST),
