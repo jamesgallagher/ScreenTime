@@ -1,15 +1,17 @@
 import type { Pool, Today, TodayKid, TodayPool } from '@screentime/schemas';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { RefreshCw, SlidersHorizontal, Users } from 'lucide-react';
+import { Moon, RefreshCw, SlidersHorizontal, Users } from 'lucide-react';
 import { useState } from 'react';
 import { AdjustDialog } from '@/components/adjust-dialog';
+import { BedtimeDialog } from '@/components/bedtime-dialog';
 import { KidAvatar } from '@/components/kid-avatar';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { ApiError } from '@/lib/api';
 import { api } from '@/lib/auth';
+import { bedtimeAction, bedtimeLine, bedtimeOf } from '@/lib/bedtime';
 import { type Chip, kidChips, POOL_NAMES, poolView, type Tone } from '@/lib/today';
 import { cn } from '@/lib/utils';
 
@@ -67,6 +69,35 @@ export function PoolRow({ kid, pool, onAdjust }: { kid: TodayKid; pool: TodayPoo
   );
 }
 
+/** The kid's bedtime tonight, under the pools, with Extend or Change (docs/SPEC.md §16.4). */
+export function BedtimeRow({ kid, onExtend }: { kid: TodayKid; onExtend: () => void }) {
+  const bedtime = bedtimeOf(kid);
+  const line = bedtimeLine(bedtime);
+  const action = bedtimeAction(bedtime);
+  const extended = bedtime.extendedBy !== null;
+  return (
+    <div className="flex items-center gap-3">
+      <span
+        className={cn(
+          'flex size-10 shrink-0 items-center justify-center rounded-full',
+          extended ? 'bg-primary/10 text-primary' : 'bg-surface-variant text-muted',
+        )}
+      >
+        <Moon className="size-5" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium">{line.text}</p>
+        {line.detail && <p className="mt-0.5 text-xs text-muted">{line.detail}</p>}
+      </div>
+      {action && (
+        <Button variant="outline" size="sm" aria-label={`${action} bedtime for ${kid.name}`} onClick={onExtend}>
+          {action}
+        </Button>
+      )}
+    </div>
+  );
+}
+
 /** The status chips under a kid (docs/SPEC.md §16.4); nothing when there are none. */
 export function ChipList({ chips }: { chips: Chip[] }) {
   if (chips.length === 0) return null;
@@ -81,7 +112,17 @@ export function ChipList({ chips }: { chips: Chip[] }) {
   );
 }
 
-function KidCard({ kid, now, onAdjust }: { kid: TodayKid; now: Date; onAdjust: (pool: Pool) => void }) {
+function KidCard({
+  kid,
+  now,
+  onAdjust,
+  onBedtime,
+}: {
+  kid: TodayKid;
+  now: Date;
+  onAdjust: (pool: Pool) => void;
+  onBedtime: () => void;
+}) {
   const chips = kidChips(kid, now);
   return (
     <Card>
@@ -97,6 +138,7 @@ function KidCard({ kid, now, onAdjust }: { kid: TodayKid; now: Date; onAdjust: (
         {kid.pools.map((pool) => (
           <PoolRow key={pool.pool} kid={kid} pool={pool} onAdjust={() => onAdjust(pool.pool)} />
         ))}
+        <BedtimeRow kid={kid} onExtend={onBedtime} />
         <ChipList chips={chips} />
       </CardContent>
     </Card>
@@ -120,6 +162,8 @@ export function TodayPage() {
   const data = today.data;
   const now = data ? new Date(data.serverTime) : new Date();
   const adjustKid = data?.kids.find((k) => k.id === adjusting?.kidId) ?? null;
+  const [bedtimeKidId, setBedtimeKidId] = useState<string | null>(null);
+  const bedtimeKid = data?.kids.find((k) => k.id === bedtimeKidId) ?? null;
 
   return (
     <>
@@ -154,11 +198,18 @@ export function TodayPage() {
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
           {data.kids.map((kid) => (
-            <KidCard key={kid.id} kid={kid} now={now} onAdjust={(pool) => setAdjusting({ kidId: kid.id, pool })} />
+            <KidCard
+              key={kid.id}
+              kid={kid}
+              now={now}
+              onAdjust={(pool) => setAdjusting({ kidId: kid.id, pool })}
+              onBedtime={() => setBedtimeKidId(kid.id)}
+            />
           ))}
         </div>
       )}
       <AdjustDialog kid={adjustKid} pool={adjusting?.pool ?? 'screens'} onClose={() => setAdjusting(null)} />
+      <BedtimeDialog kid={bedtimeKid} onClose={() => setBedtimeKidId(null)} />
     </>
   );
 }

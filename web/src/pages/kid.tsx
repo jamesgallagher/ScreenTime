@@ -4,6 +4,7 @@ import { ChevronLeft, Pencil, RefreshCw, UserX } from 'lucide-react';
 import { useState } from 'react';
 import { AdjustDialog } from '@/components/adjust-dialog';
 import { AppsPanel } from '@/components/apps-panel';
+import { BedtimeDialog } from '@/components/bedtime-dialog';
 import { ContactsEditor } from '@/components/contacts-editor';
 import { DevicesPanel } from '@/components/devices-panel';
 import { KidAvatar } from '@/components/kid-avatar';
@@ -15,11 +16,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ApiError } from '@/lib/api';
 import { kidChips } from '@/lib/today';
 import { useDevices, useKids } from '@/pages/kids';
-import { ChipList, PoolRow, useToday } from '@/pages/today';
+import { BedtimeRow, ChipList, PoolRow, useToday } from '@/pages/today';
 
 function TodayPanel({ kid }: { kid: Kid }) {
   const today = useToday();
   const [adjusting, setAdjusting] = useState<Pool | null>(null);
+  const [bedtimeOpen, setBedtimeOpen] = useState(false);
   const todayKid = today.data?.kids.find((k) => k.id === kid.id) ?? null;
   if (!todayKid || !today.data) return <Card className="h-48 animate-pulse bg-surface-variant/50" aria-label="Loading" />;
   return (
@@ -28,9 +30,11 @@ function TodayPanel({ kid }: { kid: Kid }) {
         {todayKid.pools.map((pool) => (
           <PoolRow key={pool.pool} kid={todayKid} pool={pool} onAdjust={() => setAdjusting(pool.pool)} />
         ))}
+        <BedtimeRow kid={todayKid} onExtend={() => setBedtimeOpen(true)} />
         <ChipList chips={kidChips(todayKid, new Date(today.data.serverTime))} />
       </CardContent>
       <AdjustDialog kid={adjusting ? todayKid : null} pool={adjusting ?? 'screens'} onClose={() => setAdjusting(null)} />
+      <BedtimeDialog kid={bedtimeOpen ? todayKid : null} onClose={() => setBedtimeOpen(false)} />
     </Card>
   );
 }

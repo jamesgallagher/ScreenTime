@@ -60,6 +60,17 @@ describe('eventView', () => {
     expect(over.tone).toBe('alert');
   });
 
+  it('reads bedtime moved and put back', () => {
+    const later = eventView(event('bedtime.extended', { day: '2026-11-18', scheduled: '20:30', bedtime: '21:30', byName: 'Dad' }), TZ);
+    expect(later).toEqual({ text: "Dad moved Alex's bedtime to 9:30 pm tonight", detail: 'Usually 8:30 pm', tone: 'time' });
+    expect(eventView(event('bedtime.extended', { day: '2026-11-18', scheduled: '20:30', bedtime: '24:00', byName: 'Mum' }), TZ).text).toBe(
+      "Mum moved Alex's bedtime to midnight tonight",
+    );
+    expect(eventView(event('bedtime.extended', { day: '2026-11-18', scheduled: '20:30', bedtime: null, byName: 'Mum' }), TZ).text).toBe(
+      "Mum put Alex's bedtime back to 8:30 pm",
+    );
+  });
+
   it('reads parent mode', () => {
     expect(eventView(event('parent_mode.request', { requestId: 'r' }), TZ).text).toBe('Alex asked for parent mode on Pixel 7');
     expect(eventView(event('parent_mode.used', { sessionId: 's', durationMin: 15, byName: 'Dad' }), TZ)).toEqual({

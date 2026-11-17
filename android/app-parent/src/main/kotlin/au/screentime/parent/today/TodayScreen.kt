@@ -26,7 +26,9 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
@@ -41,6 +43,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -52,6 +55,7 @@ import au.screentime.core.model.api.TodayKid
 import au.screentime.core.model.api.TodayPool
 import au.screentime.core.ui.AvatarColors
 import au.screentime.core.ui.ScreenTimeTheme
+import au.screentime.parent.R
 import au.screentime.parent.home.ScreenHeader
 import java.time.Instant
 import kotlinx.coroutines.delay
@@ -78,6 +82,10 @@ fun TodayScreen(vm: TodayViewModel) {
         state.today?.kids?.find { it.id == kidId }?.let { it to pool }
     }
     if (adjusting != null && adjustingKid == null) adjusting = null
+    // The kid the extend bedtime sheet is open for.
+    var bedtimeKidId by remember { mutableStateOf<String?>(null) }
+    val bedtimeKid = bedtimeKidId?.let { id -> state.today?.kids?.find { it.id == id } }
+    if (bedtimeKidId != null && bedtimeKid == null) bedtimeKidId = null
     val now = Instant.now()
     Column(modifier = Modifier.fillMaxSize()) {
         ScreenHeader("Today", state.today?.let { dayTitle(it.date) })
@@ -118,7 +126,13 @@ fun TodayScreen(vm: TodayViewModel) {
                         }
                     }
                     items(today.kids, key = { it.id }) { kid ->
-                        KidCard(kid, now) { adjusting = kid.id to it.pool }
+                        KidCard(
+                            kid = kid,
+                            now = now,
+                            bedtime = vm.bedtimeOf(kid),
+                            onAdjust = { adjusting = kid.id to it.pool },
+                            onBedtime = { bedtimeKidId = kid.id },
+                        )
                     }
                 }
             }
@@ -127,11 +141,20 @@ fun TodayScreen(vm: TodayViewModel) {
     if (adjustingKid != null) {
         AdjustSheet(adjustingKid.first, adjustingKid.second, vm) { adjusting = null }
     }
+    if (bedtimeKid != null) {
+        BedtimeSheet(bedtimeKid, vm) { bedtimeKidId = null }
+    }
 }
 
-/** A kid card: the avatar and name, each pool's row, and the chips. */
+/** A kid card: the avatar and name, each pool's row, tonight's bedtime, and the chips. */
 @Composable
-private fun KidCard(kid: TodayKid, now: Instant, onAdjust: (TodayPool) -> Unit) {
+private fun KidCard(
+    kid: TodayKid,
+    now: Instant,
+    bedtime: TonightBedtime,
+    onAdjust: (TodayPool) -> Unit,
+    onBedtime: () -> Unit,
+) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -154,6 +177,8 @@ private fun KidCard(kid: TodayKid, now: Instant, onAdjust: (TodayPool) -> Unit) 
                 Spacer(Modifier.height(16.dp))
                 PoolRow(kid, pool) { onAdjust(pool) }
             }
+            Spacer(Modifier.height(16.dp))
+            BedtimeRow(kid, bedtime, onBedtime)
             val chips = kidChips(kid, now)
             if (chips.isNotEmpty()) {
                 Spacer(Modifier.height(16.dp))
@@ -241,6 +266,54 @@ private fun PoolRow(kid: TodayKid, pool: TodayPool, onAdjust: () -> Unit) {
             style = MaterialTheme.typography.bodyMedium,
             color = ScreenTimeTheme.colors.muted,
         )
+    }
+}
+
+/** Tonight's bedtime under the pools: a moon, "Bedtime 8:30 pm" (or the extension and who made it), and Extend or Change. */
+@Composable
+private fun BedtimeRow(kid: TodayKid, bedtime: TonightBedtime, onBedtime: () -> Unit) {
+    val (text, detail) = bedtimeLine(bedtime)
+    val action = bedtimeAction(bedtime)
+    val extended = bedtime.extendedBy != null
+    val scheme = MaterialTheme.colorScheme
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .background(if (extended) scheme.primary.copy(alpha = 0.12f) else scheme.surfaceVariant, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                painterResource(R.drawable.ic_bedtime),
+                contentDescription = null,
+                tint = if (extended) scheme.primary else ScreenTimeTheme.colors.muted,
+                modifier = Modifier.size(20.dp),
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = text,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
+                color = scheme.onSurface,
+            )
+            if (detail != null) {
+                Text(text = detail, style = MaterialTheme.typography.bodyMedium, color = ScreenTimeTheme.colors.muted)
+            }
+        }
+        if (action != null) {
+            Spacer(Modifier.width(8.dp))
+            OutlinedButton(
+                onClick = onBedtime,
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
+                modifier = Modifier
+                    .height(34.dp)
+                    .semantics { contentDescription = "$action ${kid.name}'s bedtime" },
+            ) {
+                Text(text = action, style = MaterialTheme.typography.labelMedium)
+            }
+        }
     }
 }
 
