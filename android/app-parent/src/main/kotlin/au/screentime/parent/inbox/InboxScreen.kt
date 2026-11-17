@@ -82,13 +82,13 @@ fun InboxScreen(vm: InboxViewModel, zone: ZoneId) {
             modifier = Modifier.fillMaxSize(),
         ) {
             when {
-                state.requests == null && state.error == null -> Box(
+                state.waiting == null && state.error == null -> Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center,
                 ) {
                     CircularProgressIndicator()
                 }
-                state.requests == null -> Problem(state.error!!) { scope.launch { vm.load(pulled = true) } }
+                state.waiting == null -> Problem(state.error!!) { scope.launch { vm.load(pulled = true) } }
                 else -> LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),

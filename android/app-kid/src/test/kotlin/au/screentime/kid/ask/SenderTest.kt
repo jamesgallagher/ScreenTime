@@ -41,7 +41,8 @@ class SenderTest {
         """"resolvedAt":null,"resolvedByName":null,"grantId":null,"grantedMinutes":null}"""
 
     private val message = """{"id":"m1","kidId":"k1","kidName":"Alex","deviceId":"d1","deviceName":"Pixel 7",""" +
-        """"body":"Can you call me?","presetId":"p1","createdAt":"2026-10-27T09:00:00Z"}"""
+        """"body":"Can you call me?","presetId":"p1","createdAt":"2026-10-27T09:00:00Z",""" +
+        """"seenAt":null,"seenByName":null}"""
 
     @Test
     fun anAskSendsTheMinutesAndATrimmedReason() = runBlocking {

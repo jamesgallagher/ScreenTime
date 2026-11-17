@@ -487,6 +487,17 @@ class ApiClient(
     }
 
     /**
+     * Mark a kid message as seen.
+     *
+     * `POST /v1/messages/{id}/seen`
+     */
+    suspend fun postMessagesSeen(
+        id: String,
+    ): KidMessage {
+        return call(HttpMethod.Post, "/v1/messages/${segment(id)}/seen", auth = true).body()
+    }
+
+    /**
      * "I'm the parent": ask the parents to approve parent mode.
      *
      * `POST /v1/device/parent-mode-requests`
@@ -572,6 +583,15 @@ class ApiClient(
         body: DeviceEventUpload,
     ) {
         call(HttpMethod.Post, "/v1/device/events", auth = true, body = body, bodyType = typeInfo<DeviceEventUpload>())
+    }
+
+    /**
+     * Everything that is waiting for a parent.
+     *
+     * `GET /v1/waiting`
+     */
+    suspend fun getWaiting(): WaitingList {
+        return call(HttpMethod.Get, "/v1/waiting", auth = true).body()
     }
 
     /**

@@ -75,4 +75,23 @@ class PushTest {
         assertEquals(1, secondsLeft(59_999L))
         assertEquals(29, secondsLeft(1_234_567_891_000L))
     }
+
+    @Test
+    fun waitingTag() {
+        val e1 = parseEnvelope(request)!!
+        assertEquals("waiting:e1", waitingTag(e1))
+        val time = parseEnvelope(request.replace("\"kind\":\"parent_mode.request\"", "\"kind\":\"time_request\""))!!
+        assertEquals("waiting:e1", waitingTag(time))
+        val msg = parseEnvelope(request.replace("\"kind\":\"parent_mode.request\"", "\"kind\":\"kid_message\""))!!
+        assertEquals("waiting:e1", waitingTag(msg))
+        val app = parseEnvelope(request.replace("\"kind\":\"parent_mode.request\"", "\"kind\":\"app.approval\""))!!
+        assertEquals("waiting:e1", waitingTag(app))
+        // Other kinds: null.
+        val sos = parseEnvelope(request.replace("\"kind\":\"parent_mode.request\"", "\"kind\":\"sos.started\""))!!
+        assertNull(waitingTag(sos))
+        val grant = parseEnvelope(request.replace("\"kind\":\"parent_mode.request\"", "\"kind\":\"grant.added\""))!!
+        assertNull(waitingTag(grant))
+        val seen = parseEnvelope(request.replace("\"kind\":\"parent_mode.request\"", "\"kind\":\"kid_message.seen\""))!!
+        assertNull(waitingTag(seen))
+    }
 }

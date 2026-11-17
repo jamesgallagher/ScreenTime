@@ -31,8 +31,10 @@ import au.screentime.parent.inbox.InboxViewModel
 import au.screentime.parent.kids.KidsViewModel
 import au.screentime.parent.lock.AppLock
 import au.screentime.parent.lock.LockScreen
+import au.screentime.parent.inbox.WaitingNews
 import au.screentime.parent.push.EXTRA_DEVICE_NAME
 import au.screentime.parent.push.EXTRA_KID_NAME
+import au.screentime.parent.push.EXTRA_OPEN_WAITING
 import au.screentime.parent.push.EXTRA_REQUEST_ID
 import au.screentime.parent.push.ParentModeAsk
 import au.screentime.parent.push.ParentModeScreen
@@ -114,8 +116,12 @@ class MainActivity : ComponentActivity() {
         super.onStop()
     }
 
-    /** Read a parent-mode request from the intent's extras, and take the extras off the intent. */
+    /** Read extras from the intent: a parent-mode request, or the "open the strip" flag. */
     private fun askFrom(intent: Intent) {
+        if (intent.getBooleanExtra(EXTRA_OPEN_WAITING, false)) {
+            WaitingNews.open()
+            intent.removeExtra(EXTRA_OPEN_WAITING)
+        }
         if (intent.getStringExtra(EXTRA_REQUEST_ID) != null) {
             ask = ParentModeAsk(
                 requestId = intent.getStringExtra(EXTRA_REQUEST_ID)!!,

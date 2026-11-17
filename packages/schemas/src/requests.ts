@@ -95,10 +95,60 @@ export const KidMessage = z
     body: z.string(),
     presetId: z.uuid().nullable(),
     createdAt: z.iso.datetime(),
+    /** When a parent said "Got it". null when nobody has seen it yet, or when the row predates the column. */
+    seenAt: z.iso.datetime().nullable(),
+    /** The parent who saw it; null when nobody has seen it yet, or when the row predates the column. */
+    seenByName: z.string().nullable(),
   })
   .meta({ id: 'KidMessage' });
 
 export type KidMessage = z.infer<typeof KidMessage>;
+
+/**
+ * One thing that waits for a parent (docs/SPEC.md §16.4). The schema is flat: every kind-specific
+ * field is present on every item and null when it does not apply, because the Kotlin client generator
+ * does not handle `oneOf`. `kind` is one of `'time_request'`, `'parent_mode_request'`, `'app_approval'`,
+ * `'kid_message'`; a kind the app does not know is skipped, never a crash.
+ */
+export const WaitingItem = z
+  .object({
+    kind: z.string(),
+    /** The request id, the parent-mode session id, `<kidId>:<package>` for an app, or the message id. */
+    id: z.string(),
+    /** The event whose push made the notification, so the notification can be cleared; null when unknown. */
+    eventId: z.uuid().nullable(),
+    /** When it came in. */
+    at: z.iso.datetime(),
+    kidId: z.uuid(),
+    kidName: z.string(),
+    deviceId: z.uuid().nullable(),
+    deviceName: z.string().nullable(),
+    /** The time request (the same object `GET /v1/requests` returns); `time_request` kind only. */
+    request: TimeRequest.nullable(),
+    /** Requested at + 10 minutes; `parent_mode_request` kind only. */
+    expiresAt: z.iso.datetime().nullable(),
+    /** The app's package; `app_approval` kind only. */
+    package: z.string().nullable(),
+    /** The app's label; `app_approval` kind only. */
+    label: z.string().nullable(),
+    /** The app's source; `app_approval` kind only. */
+    source: z.string().nullable(),
+    /** The message body; `kid_message` kind only. */
+    body: z.string().nullable(),
+  })
+  .meta({ id: 'WaitingItem' });
+
+export type WaitingItem = z.infer<typeof WaitingItem>;
+
+/** GET /v1/waiting. */
+export const WaitingList = z
+  .object({
+    /** Newest first, at most 100. */
+    items: z.array(WaitingItem),
+  })
+  .meta({ id: 'WaitingList' });
+
+export type WaitingList = z.infer<typeof WaitingList>;
 
 /** GET /v1/messages. */
 export const MessagePage = z

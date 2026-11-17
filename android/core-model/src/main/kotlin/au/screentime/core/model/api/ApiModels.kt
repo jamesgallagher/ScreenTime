@@ -631,6 +631,8 @@ data class KidMessage(
     val body: String,
     val presetId: String?,
     val createdAt: String,
+    val seenAt: String?,
+    val seenByName: String?,
 )
 
 @Serializable
@@ -718,6 +720,29 @@ enum class DeviceEventKind(override val wire: String) : ApiEnum {
     @SerialName("tamper.policy") TAMPER_POLICY("tamper.policy"),
     @SerialName("tamper.call_blocked") TAMPER_CALL_BLOCKED("tamper.call_blocked");
 }
+
+@Serializable
+data class WaitingList(
+    val items: List<WaitingItem>,
+)
+
+@Serializable
+data class WaitingItem(
+    val kind: String,
+    val id: String,
+    val eventId: String?,
+    val at: String,
+    val kidId: String,
+    val kidName: String,
+    val deviceId: String?,
+    val deviceName: String?,
+    val request: TimeRequest?,
+    val expiresAt: String?,
+    val `package`: String?,
+    val label: String?,
+    val source: String?,
+    val body: String?,
+)
 
 @Serializable
 data class DeviceAppsPut(

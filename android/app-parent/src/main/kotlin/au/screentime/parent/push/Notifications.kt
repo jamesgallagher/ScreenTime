@@ -21,6 +21,9 @@ const val EXTRA_REQUEST_ID = "au.screentime.parent.REQUEST_ID"
 const val EXTRA_KID_NAME = "au.screentime.parent.KID_NAME"
 const val EXTRA_DEVICE_NAME = "au.screentime.parent.DEVICE_NAME"
 
+/** The extra a tapped notification for a waiting item carries to the app, so it opens the strip. */
+const val EXTRA_OPEN_WAITING = "au.screentime.parent.OPEN_WAITING"
+
 /** The four notification channels (docs/SPEC.md §13). */
 fun createChannels(context: Context) {
     val manager = context.getSystemService(NotificationManager::class.java)
@@ -41,6 +44,15 @@ private fun channel(id: String, name: String, description: String, importance: I
     return c
 }
 
+/**
+ * The notification tag for a waiting event, or null for other kinds. The tag is `waiting:<event id>`
+ * so the app can cancel stale notifications after a load.
+ */
+fun waitingTag(e: EventItem): String? = when (e.kind) {
+    "time_request", "parent_mode.request", "app.approval", "kid_message" -> "waiting:${e.id}"
+    else -> null
+}
+
 /** Show one push as a notification with the same words as the Inbox (docs/SPEC.md §13). */
 fun show(context: Context, e: EventItem) {
     val v = eventView(e, ZoneId.systemDefault())
@@ -57,6 +69,10 @@ fun show(context: Context, e: EventItem) {
                 putExtra(EXTRA_KID_NAME, e.kidName ?: "your kid")
                 putExtra(EXTRA_DEVICE_NAME, e.deviceName)
             }
+            // A tapped notification for a waiting item opens the strip.
+            if (waitingTag(e) != null && e.kind != "parent_mode.request") {
+                putExtra(EXTRA_OPEN_WAITING, true)
+            }
         }
     }
     val pending = PendingIntent.getActivity(
@@ -65,6 +81,7 @@ fun show(context: Context, e: EventItem) {
         intent,
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )
+    val tag = waitingTag(e)
     val builder = Notification.Builder(context, channelFor(e.kind))
         .setSmallIcon(R.drawable.ic_inbox)
         .setContentTitle(v.text)
@@ -73,5 +90,11 @@ fun show(context: Context, e: EventItem) {
         .setShowWhen(true)
         .setAutoCancel(true)
         .setContentIntent(pending)
-    context.getSystemService(NotificationManager::class.java).notify(e.id.hashCode(), builder.build())
+    val notification = builder.build()
+    val manager = context.getSystemService(NotificationManager::class.java)
+    if (tag != null) {
+        manager.notify(tag, e.id.hashCode(), notification)
+    } else {
+        manager.notify(e.id.hashCode(), notification)
+    }
 }

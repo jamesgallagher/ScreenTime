@@ -1,6 +1,7 @@
 package au.screentime.parent.inbox
 
 import android.app.Application
+import android.app.NotificationManager
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -10,7 +11,6 @@ import au.screentime.core.model.api.ApiException
 import au.screentime.core.model.api.EventItem
 import au.screentime.core.model.api.TimeRequest
 import au.screentime.core.model.api.TimeRequestApprove
-import au.screentime.core.model.api.TimeRequestStatus
 import au.screentime.parent.kids.AppRule
 import au.screentime.parent.kids.rulePut
 import au.screentime.parent.ParentApp
@@ -18,9 +18,8 @@ import au.screentime.parent.auth.SignedOutException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
-/** The Inbox's state. `requests` is null until the first answer. */
+/** The Inbox's state. `waiting` is null until the first answer. */
 data class InboxState(
-    val requests: List<TimeRequest>? = null,
     val events: List<EventItem> = emptyList(),
     /** Everything that waits for a parent, for the strip at the top of every tab; null until the first answer. */
     val waiting: List<Waiting>? = null,
@@ -30,21 +29,23 @@ data class InboxState(
     val busy: Boolean = false,
 )
 
-/** The Inbox screen (docs/SPEC.md §16.4): the kids' waiting time requests and the family history. */
+/** The Inbox screen (docs/SPEC.md §16.4): the family history. What waits for a parent is in the "Waiting for you" strip at the top of every tab. */
 class InboxViewModel(app: Application) : AndroidViewModel(app) {
     private val session = getApplication<ParentApp>().session
+    private val notificationManager = app.getSystemService(NotificationManager::class.java)
 
     var state by mutableStateOf(InboxState())
         private set
 
-    /** Load the waiting requests and the history, or refresh them when [pulled]. */
+    /** Load the waiting list and the history, or refresh them when [pulled]. */
     suspend fun load(pulled: Boolean = false) {
         if (pulled) state = state.copy(refreshing = true)
         try {
-            val requests = session.call { getRequests(status = TimeRequestStatus.PENDING) }
+            val waitingList = session.call { getWaiting() }
+            val waiting = waitingList.items.mapNotNull { waitingFrom(it) }
             val events = session.call { getEvents(limit = 50) }.events
-            val waiting = WaitingSeam.build(requests, events)
-            state = state.copy(requests = requests, events = events, waiting = waiting, refreshing = false, error = null)
+            state = state.copy(events = events, waiting = waiting, refreshing = false, error = null)
+            clearStaleNotifications(waiting)
         } catch (e: CancellationException) {
             state = state.copy(refreshing = false)
             throw e
@@ -67,14 +68,30 @@ class InboxViewModel(app: Application) : AndroidViewModel(app) {
         answer { session.call { postRequestsDeny(request.id) } }
     }
 
-    /** "Got it" on a kid's message: it leaves the strip for every parent. The seam: CARD-062 calls the server. */
+    /** "Got it" on a kid's message: it leaves the strip for every parent. */
     suspend fun seen(message: Waiting.Message) {
-        answer { WaitingSeam.seen(message) }
+        answer { session.call { postMessagesSeen(message.messageId) } }
     }
 
     /** Answer a new app from the strip. */
     suspend fun answerApp(app: Waiting.NewApp, rule: AppRule) {
         answer { session.call { putKidsAppsRule(app.kidId, app.packageName, rulePut(rule)) } }
+    }
+
+    /**
+     * Cancel every notification whose tag starts with `waiting:` and whose event id is no longer in
+     * the loaded list.
+     */
+    private fun clearStaleNotifications(waiting: List<Waiting>) {
+        try {
+            val active = notificationManager.activeNotifications.map { it.tag }
+            for (tag in staleTags(active, waiting)) {
+                val id = tag.removePrefix("waiting:").hashCode()
+                notificationManager.cancel(tag, id)
+            }
+        } catch (e: Exception) {
+            // A notification that cannot be cancelled is not worth a crash.
+        }
     }
 
     /**

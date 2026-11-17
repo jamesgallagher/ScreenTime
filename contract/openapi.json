@@ -1843,6 +1843,19 @@
           "createdAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "seenAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "seenByName": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -1853,7 +1866,9 @@
           "deviceName",
           "body",
           "presetId",
-          "createdAt"
+          "createdAt",
+          "seenAt",
+          "seenByName"
         ]
       },
       "KidMessageCreate": {
@@ -2143,6 +2158,122 @@
           "tamper.tray_killed",
           "tamper.policy",
           "tamper.call_blocked"
+        ]
+      },
+      "WaitingList": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WaitingItem"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
+      "WaitingItem": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "eventId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "kidId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kidName": {
+            "type": "string"
+          },
+          "deviceId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "deviceName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "request": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TimeRequest"
+              },
+              {
+                "type": [
+                  "object",
+                  "null"
+                ]
+              }
+            ]
+          },
+          "expiresAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "package": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "body": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "eventId",
+          "at",
+          "kidId",
+          "kidName",
+          "deviceId",
+          "deviceName",
+          "request",
+          "expiresAt",
+          "package",
+          "label",
+          "source",
+          "body"
         ]
       },
       "DeviceAppsPut": {
@@ -6129,6 +6260,83 @@
         }
       }
     },
+    "/v1/messages/{id}/seen": {
+      "post": {
+        "tags": [
+          "messages"
+        ],
+        "summary": "Mark a kid message as seen",
+        "description": "The first time, sets `seen_at` and `seen_by` and writes one `kid_message.seen` event. A second call returns the stored message with 200 and no second event. No push is sent.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The message.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KidMessage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the code or token is wrong or expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Signed in, but not allowed to do this.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/device/parent-mode-requests": {
       "post": {
         "tags": [
@@ -6687,6 +6895,52 @@
           },
           "422": {
             "description": "The request is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/waiting": {
+      "get": {
+        "tags": [
+          "waiting"
+        ],
+        "summary": "Everything that is waiting for a parent",
+        "description": "Pending time requests, pending parent-mode requests, held apps and unseen kid messages, newest first. Archived kids are left out. At most 100 items.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The waiting list.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WaitingList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the code or token is wrong or expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Signed in, but not allowed to do this.",
             "content": {
               "application/json": {
                 "schema": {
