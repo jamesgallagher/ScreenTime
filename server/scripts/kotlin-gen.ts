@@ -10,6 +10,7 @@ export type Schema = {
   format?: string;
   enum?: unknown[];
   anyOf?: Schema[];
+  allOf?: Schema[];
   properties?: Record<string, Schema>;
   required?: string[];
   items?: Schema;
@@ -98,6 +99,9 @@ export function generateKotlin(doc: OpenApiDoc): { models: string; client: strin
     if (schema.anyOf) {
       return schema.anyOf.some((s) => s.type === 'null');
     }
+    if (schema.allOf) {
+      return schema.allOf.some((s) => s.type === 'null' || (Array.isArray(s.type) && s.type.includes('null')));
+    }
     return types(schema).includes('null') || !!schema.enum?.includes(null);
   }
 
@@ -112,7 +116,30 @@ export function generateKotlin(doc: OpenApiDoc): { models: string; client: strin
       return target;
     }
     if (isNumberEnum(schema)) return 'Int';
-    if (schema.anyOf) throw new Error(`${owner}: anyOf is only supported for number choices`);
+    if (schema.anyOf) {
+      // `anyOf` with a `$ref` and `{type: 'null'}`: a nullable reference.
+      const ref = schema.anyOf.find((s) => s.$ref);
+      if (ref?.$ref) {
+        const target = refName(ref.$ref);
+        const s = schemas[target]!;
+        if (!s.enum && !s.anyOf && !s.properties && types(s).includes('string')) return 'String';
+        if (isNumberEnum(s)) return 'Int';
+        return target;
+      }
+      throw new Error(`${owner}: anyOf is only supported for number choices and nullable references`);
+    }
+    if (schema.allOf) {
+      // `allOf` with a `$ref` and `{type: ['object', 'null']}`: a nullable reference (zod v4 nullable).
+      const ref = schema.allOf.find((s) => s.$ref);
+      if (ref?.$ref) {
+        const target = refName(ref.$ref);
+        const s = schemas[target]!;
+        if (!s.enum && !s.anyOf && !s.properties && types(s).includes('string')) return 'String';
+        if (isNumberEnum(s)) return 'Int';
+        return target;
+      }
+      throw new Error(`${owner}: allOf is only supported for nullable references`);
+    }
     const t = types(schema).filter((x) => x !== 'null');
     if (t.length !== 1) throw new Error(`${owner}: unsupported type ${JSON.stringify(schema.type)}`);
     switch (t[0]) {
