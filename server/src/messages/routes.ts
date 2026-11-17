@@ -4,7 +4,7 @@ import { KidMessage, KidMessageCreate, MessagePage } from '@screentime/schemas';
 import type { AppDeps } from '../app.js';
 import { requireFamilyParent } from '../auth/guards.js';
 import { type FamilyTx, withFamily } from '../db/family.js';
-import { devices, events, kidMessages, kids, messagePresets } from '../db/schema.js';
+import { devices, events, kidMessages, kids, messagePresets, parents } from '../db/schema.js';
 import { requireDevice } from '../devices/auth.js';
 import { ApiError } from '../errors.js';
 import { notifyParents } from '../notify/dispatch.js';
@@ -47,18 +47,36 @@ const listMessagesRoute = createRoute({
   responses: { 200: jsonResponse('One page of messages.', MessagePage), ...errorResponses(401, 403, 422) },
 });
 
+const seenMessageRoute = createRoute({
+  method: 'post',
+  path: '/v1/messages/{id}/seen',
+  tags: ['messages'],
+  summary: 'Mark a kid message as seen',
+  description:
+    'The first time, sets `seen_at` and `seen_by` and writes one `kid_message.seen` event. A second call returns the stored message with 200 and no second event. No push is sent.',
+  security: bearer,
+  request: { params: z.object({ id: z.uuid() }) },
+  responses: { 200: jsonResponse('The message.', KidMessage), ...errorResponses(401, 403, 404, 422) },
+});
+
 /** Messages with kid and device names, newest first. */
 async function selectMessages(tx: FamilyTx, where: SQL | undefined, limit?: number) {
   const query = tx
-    .select({ message: kidMessages, kidName: kids.name, deviceName: devices.name })
+    .select({
+      message: kidMessages,
+      kidName: kids.name,
+      deviceName: devices.name,
+      seenByName: parents.displayName,
+    })
     .from(kidMessages)
     .innerJoin(kids, eq(kids.id, kidMessages.kidId))
     .innerJoin(devices, eq(devices.id, kidMessages.deviceId))
+    .leftJoin(parents, eq(parents.id, kidMessages.seenBy))
     .where(where)
     .orderBy(sql`${kidMessages.createdAt} desc`, sql`${kidMessages.id} desc`);
   const rows = await (limit === undefined ? query : query.limit(limit));
   return rows.map(
-    ({ message: m, kidName, deviceName }): KidMessage => ({
+    ({ message: m, kidName, deviceName, seenByName }): KidMessage => ({
       id: m.id,
       kidId: m.kidId,
       kidName,
@@ -67,6 +85,8 @@ async function selectMessages(tx: FamilyTx, where: SQL | undefined, limit?: numb
       body: m.body,
       presetId: m.presetId,
       createdAt: m.createdAt.toISOString(),
+      seenAt: m.seenAt?.toISOString() ?? null,
+      seenByName,
     }),
   );
 }
@@ -138,5 +158,36 @@ export function registerMessageRoutes(app: Router, deps: AppDeps) {
     const page = rows.slice(0, limit);
     const last = page.at(-1);
     return c.json({ messages: page, nextBefore: rows.length > limit && last ? last.id : null }, 200);
+  });
+
+  app.openapi(seenMessageRoute, async (c) => {
+    const { familyId, parentId } = await requireFamilyParent(c, db, config.jwtSecret);
+    const { id } = c.req.valid('param');
+    const result = await withFamily(db, familyId, async (tx) => {
+      const [before] = await selectMessages(tx, eq(kidMessages.id, id));
+      if (!before) throw new ApiError('not_found', 'No such message in your family.');
+      if (before.seenAt) {
+        // Already seen: return the stored message, no second event.
+        return { message: before, alreadySeen: true };
+      }
+      const [parent] = await tx.select({ name: parents.displayName }).from(parents).where(eq(parents.id, parentId));
+      const byName = parent?.name ?? null;
+      await tx
+        .update(kidMessages)
+        .set({ seenAt: sql`now()`, seenBy: parentId })
+        .where(eq(kidMessages.id, id));
+      await tx.insert(events).values({
+        familyId,
+        kidId: before.kidId,
+        deviceId: before.deviceId,
+        kind: 'kid_message.seen',
+        at: sql`now()`,
+        payload: { messageId: id, byName },
+      });
+      const [message] = await selectMessages(tx, eq(kidMessages.id, id));
+      if (!message) throw new Error('message vanished after update');
+      return { message, alreadySeen: false };
+    });
+    return c.json(result.message, 200);
   });
 }
