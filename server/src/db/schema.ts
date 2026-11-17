@@ -323,6 +323,10 @@ export const kidMessages = pgTable(
     // Parents replace the preset list whenever they like; old messages keep their text and lose the link.
     presetId: uuid('preset_id').references(() => messagePresets.id, { onDelete: 'set null' }),
     createdAt: createdAt(),
+    /** When a parent said "Got it"; null when nobody has seen it yet. */
+    seenAt: ts('seen_at'),
+    /** The parent who saw it; null when nobody has seen it yet. */
+    seenBy: uuid('seen_by').references(() => parents.id),
   },
   (t) => [check('kid_messages_body_length', sql`char_length(${t.body}) between 1 and 160`)],
 );
