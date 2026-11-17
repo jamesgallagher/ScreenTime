@@ -143,7 +143,7 @@ $requests = (docker exec screentime-db-1 psql -U screentime -d screentime -Atc "
 Write-Output "  time_requests: $requests"
 Check 'request is approved with a grant' ($requests -match 'approved\|\S+')
 
-Write-Output '--- 9. Answer opens parent mode; Say no'
+Write-Output '--- 9. Answer opens parent mode; Say no; Close'
 Tap-Text 'Answer' 3
 $screen = Screen-Text
 Write-Output "  $screen"
@@ -151,7 +151,11 @@ Check 'Parent mode for Alex?' ($screen.Contains('Parent mode for Alex?'))
 Tap-Text 'Say no' 3
 $screen = Screen-Text
 Write-Output "  $screen"
-Check 'Waiting for you is gone' (-not $screen.Contains('Waiting for you'))
+Check 'done page shows you said no' ($screen.Contains('You said no'))
+Tap-Text 'Close' 3
+$screen = Screen-Text
+Write-Output "  $screen"
+Check 'on Today with no Waiting for you' ($screen.Contains('Today') -and -not $screen.Contains('Waiting for you'))
 Shot 'card062-empty'
 
 # The emulator holds this window's output open, so a pipe into Tee-Object would never end while it runs.
