@@ -852,11 +852,12 @@ Each of them, and a PC's list that changes a game whose shortcut is on, sends `s
 
 ### 12.7 Parent app updates (James, 18 Nov 2026; CARD-064)
 
-The parent app finds and downloads its own updates and installs one when a parent taps **Update**. It cannot install silently like the kid app, which is Device Owner. An emulator spike on 18 Nov 2026 (API 37, Play Store image) showed what Android allows an ordinary app:
+The parent app finds and downloads its own updates and installs one when a parent taps **Update**. It cannot install silently like the kid app, which is Device Owner. What Android does, from the spike and the CARD-064 emulator run (18 and 19 Nov 2026, API 37 Play Store image):
 
-- **The first update always asks.** The app was installed by the browser, so Android shows "Update this app?" (and, until "Install unknown apps" is allowed for ST Parent, its screen to allow that). After one confirmed update the app is its own installer of record.
-- **Later updates ask nothing from Android**, even from the background, when the app declares `REQUEST_INSTALL_PACKAGES` and `UPDATE_PACKAGES_WITHOUT_USER_ACTION` and asks with `setRequireUserAction(USER_ACTION_NOT_REQUIRED)`. Without that permission every update asks.
-- **Play Protect asks for every version it has not seen** ("App scan recommended": **Scan app** sends the APK to Google, **Install without scanning** is under **More details**), also over the home screen. Whether a real parent phone does the same is not proven.
+- **The first time, Android asks to allow "Install unknown apps" for ST Parent** ("For your security, your phone currently isn't allowed to install unknown apps from this source", **Settings**). Once that is on, it stays on.
+- **After that, Android itself asks nothing**, not even "Update this app?" on the first update of an app the browser installed, because the app declares `REQUEST_INSTALL_PACKAGES` and `UPDATE_PACKAGES_WITHOUT_USER_ACTION` and asks with `setRequireUserAction(USER_ACTION_NOT_REQUIRED)`. Without the second permission every update asks "Update this app?". After the first update the app is its own installer of record.
+- **Play Protect asked for every version it had not seen** ("App scan recommended": **Scan app** sends the APK to Google, **Install without scanning** is under **More details**). The install waits on that dialog. Whether a real parent phone does the same is not proven.
+- After the install, Android opened the app again by itself on the new version.
 
 So installing waits for a tap: whatever question comes, it comes right after the parent asked for it.
 
