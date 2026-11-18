@@ -555,48 +555,60 @@ describe.skipIf(!url)('extend bedtime tonight', () => {
     const first = Math.max(schedMin, min) + 15;
     if (first > 1440) return;
     const bedtime = `${String(Math.floor(first / 60)).padStart(2, '0')}:${String(first % 60).padStart(2, '0')}`;
-    const schedTime = `${String(Math.floor(schedMin / 60)).padStart(2, '0')}:${String(schedMin % 60).padStart(2, '0')}`;
 
-    // Use up the phone pool: one segment covering the whole allowance (60 min).
+    // Use up the phone pool: one segment of the whole allowance (60 min), ending now (inside the local day).
     const now = new Date();
-    const dayStart = new Date(now);
-    dayStart.setUTCHours(0, 0, 0, 0);
     await db.insert(usageSegments).values({
       id: randomUUID(),
       familyId: family,
       kidId: kid,
       deviceId: phone.id,
       pool: 'phone',
-      startedAt: dayStart,
-      endedAt: new Date(dayStart.getTime() + 60 * 60 * 1000),
+      startedAt: new Date(now.getTime() - 60 * 60 * 1000),
+      endedAt: now,
     });
 
-    // PUT the extension.
+    type Pools = { kids: { pools: { pool: string; locked: boolean; lockReason: string | null }[] }[] };
+    const phonePool = async () => {
+      const res = await api.get('/v1/today', token);
+      expect(res.status).toBe(200);
+      const p = (res.body as Pools).kids[0].pools.find((x) => x.pool === 'phone');
+      if (!p) throw new Error('no phone pool');
+      return p;
+    };
+
+    // With no time left after the usual bedtime, the extension makes it out of time, not bedtime.
     await api.put(`/v1/kids/${kid}/bedtime-tonight`, token, { bedtime });
+    expect(await phonePool()).toMatchObject({ locked: true, lockReason: 'out_of_time' });
 
-    // With no time left, the pool is locked out_of_time (not bedtime).
-    let res = await api.get('/v1/today', token);
-    expect(res.status).toBe(200);
-    let today = res.body as { kids: { pools: { locked: boolean; lockReason: string | null }[] }[] };
-    const phonePool = today.kids[0].pools.find((p) => p.lockReason !== null || true);
-    for (const pool of today.kids[0].pools) {
-      if (pool.locked) {
-        expect(pool.lockReason).toBe('out_of_time');
-      }
-    }
-
-    // DELETE the extension.
+    // After DELETE the usual bedtime (already past) applies again.
     await api.del(`/v1/kids/${kid}/bedtime-tonight`, token);
+    expect(await phonePool()).toMatchObject({ locked: true, lockReason: 'bedtime' });
+  });
 
-    // After DELETE, the pool is locked for bedtime (the usual bedtime is in the past).
-    res = await api.get('/v1/today', token);
+  it('DELETE records the parent who did it and does not push to them', async () => {
+    await db.insert(parentSessions).values([
+      { familyId: family, parentId: mumId, refreshTokenHash: randomUUID(), client: 'android', clientLabel: 'Pixel', fcmToken: 'fcm-mum' },
+      { familyId: family, parentId: dadId, refreshTokenHash: randomUUID(), client: 'android', clientLabel: 'Phone', fcmToken: 'fcm-dad' },
+    ]);
+    const { min } = quarterHourNow(zone);
+    const first = Math.max(min - 30, min) + 15;
+    if (first > 1440) return;
+    const bedtime = `${String(Math.floor(first / 60)).padStart(2, '0')}:${String(first % 60).padStart(2, '0')}`;
+    const mum = await signIn(mumId);
+    await api.put(`/v1/kids/${kid}/bedtime-tonight`, mum, { bedtime });
+
+    sent.length = 0;
+    const res = await api.del(`/v1/kids/${kid}/bedtime-tonight`, mum);
     expect(res.status).toBe(200);
-    today = res.body as { kids: { pools: { locked: boolean; lockReason: string | null }[] }[] };
-    for (const pool of today.kids[0].pools) {
-      if (pool.locked) {
-        expect(pool.lockReason).toBe('bedtime');
-      }
-    }
+
+    const rows = await db.select().from(events).where(eq(events.kind, 'bedtime.extended')).orderBy(events.at);
+    expect(rows).toHaveLength(2);
+    expect(rows[1]?.payload).toMatchObject({ bedtime: null, byName: 'Mum', parentId: mumId });
+
+    const kinds = (token: string) => sent.filter((m) => m.token === token).map((m) => m.msg.type);
+    expect(kinds('fcm-dad')).toContain('grant.by_other_parent');
+    expect(kinds('fcm-mum')).not.toContain('grant.by_other_parent');
   });
 
   it('schedule.version is unchanged and stateVersion changes after DELETE', async () => {
@@ -672,11 +684,13 @@ describe('earliestQuarterHour', () => {
     expect(earliestQuarterHour('20:30', 'UTC', '2026-10-26T19:00:00Z')).toBe('20:45');
   });
 
-  it('returns null when it would be at or after 24:00', () => {
-    // At 23:50, scheduled 20:30 → first would be 24:00 → null.
-    expect(earliestQuarterHour('20:30', 'UTC', '2026-10-26T23:50:00Z')).toBeNull();
-    // At 23:45, scheduled 20:30 → first would be 24:00 → null.
-    expect(earliestQuarterHour('20:30', 'UTC', '2026-10-26T23:45:00Z')).toBeNull();
+  it('midnight is the earliest pick late in the evening, never null', () => {
+    // At 23:45:00, scheduled 20:30 → earliest is 24:00 (midnight is a valid pick).
+    expect(earliestQuarterHour('20:30', 'UTC', '2026-10-26T23:45:00Z')).toBe('24:00');
+    // At 23:50, scheduled 20:30 → earliest is still 24:00.
+    expect(earliestQuarterHour('20:30', 'UTC', '2026-10-26T23:50:00Z')).toBe('24:00');
+    // A usual bedtime of 23:45 can still be extended to midnight.
+    expect(earliestQuarterHour('23:45', 'UTC', '2026-10-26T12:00:00Z')).toBe('24:00');
   });
 
   it('returns null for a 24:00 scheduled bedtime', () => {

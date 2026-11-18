@@ -195,7 +195,7 @@ export function earliestQuarterHour(scheduled: string, timezone: string, nowIso:
   const schedMin = hms(scheduled);
   const nowMin = localMinutes(timezone, nowIso);
   const first = Math.max(schedMin, nowMin - (nowMin % 15)) + 15;
-  if (first >= 1440) return null;
+  if (first > 1440) return null;
   return `${String(Math.floor(first / 60)).padStart(2, '0')}:${String(first % 60).padStart(2, '0')}`;
 }
 
