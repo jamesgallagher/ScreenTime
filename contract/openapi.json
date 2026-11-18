@@ -7715,6 +7715,62 @@
         }
       }
     },
+    "/v1/me/app-update/check": {
+      "post": {
+        "tags": [
+          "parent"
+        ],
+        "summary": "Report the parent app version and ask for a newer one",
+        "description": "Stores the version for the server to keep. `offer` is null when there is nothing newer for this phone.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppUpdateCheck"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A newer version for this phone, or none.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppUpdateAnswer"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the code or token is wrong or expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/device/games": {
       "put": {
         "tags": [

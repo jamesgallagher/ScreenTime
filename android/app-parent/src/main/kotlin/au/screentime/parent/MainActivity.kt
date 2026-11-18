@@ -26,6 +26,8 @@ import au.screentime.parent.auth.SessionState
 import au.screentime.parent.auth.SignInScreen
 import au.screentime.parent.auth.SignInViewModel
 import au.screentime.parent.home.HomeScreen
+import au.screentime.parent.update.ParentUpdates
+import au.screentime.parent.update.checkDue
 import au.screentime.parent.home.NoFamilyScreen
 import au.screentime.parent.inbox.InboxViewModel
 import au.screentime.parent.kids.KidsViewModel
@@ -109,6 +111,28 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         AppLock.opened(SystemClock.elapsedRealtime(), isSecure())
+        maybeCheck()
+    }
+
+    /**
+     * Check for the app's own update when it comes to the front (docs/SPEC.md §12.7): the first time since the app
+     * started, then at most every 6 hours (every minute in a debug build), while a parent is signed in.
+     */
+    private fun maybeCheck() {
+        val now = SystemClock.elapsedRealtime()
+        if (checkDue(lastCheck, now, CHECK_EVERY_MS) && session.state.value is SessionState.SignedIn) {
+            lastCheck = now
+            ParentUpdates.source.checkNow()
+        }
+    }
+
+    private var lastCheck: Long? = null
+
+    companion object {
+        private const val TAG = "MainActivity"
+        /** Debug builds check every minute, so a run does not wait (docs/SPEC.md §12.7). */
+        private val CHECK_EVERY_MS = if (BuildConfig.DEBUG) 60_000L else 6 * 60 * 60_000L
+        private val AUTHENTICATORS = Authenticators.BIOMETRIC_STRONG or Authenticators.DEVICE_CREDENTIAL
     }
 
     override fun onStop() {
@@ -175,10 +199,5 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             session.signOut()
         }
-    }
-
-    companion object {
-        private const val TAG = "MainActivity"
-        private val AUTHENTICATORS = Authenticators.BIOMETRIC_STRONG or Authenticators.DEVICE_CREDENTIAL
     }
 }

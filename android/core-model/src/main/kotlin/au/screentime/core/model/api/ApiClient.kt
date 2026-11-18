@@ -709,6 +709,17 @@ class ApiClient(
     }
 
     /**
+     * Report the parent app version and ask for a newer one.
+     *
+     * `POST /v1/me/app-update/check`
+     */
+    suspend fun postMeAppUpdateCheck(
+        body: AppUpdateCheck,
+    ): AppUpdateAnswer {
+        return call(HttpMethod.Post, "/v1/me/app-update/check", auth = true, body = body, bodyType = typeInfo<AppUpdateCheck>()).body()
+    }
+
+    /**
      * Send every known game the PC finds now.
      *
      * `PUT /v1/device/games`

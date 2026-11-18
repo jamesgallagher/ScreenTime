@@ -84,6 +84,8 @@ export const parentSessions = pgTable(
     client: text('client').notNull(),
     clientLabel: text('client_label').notNull(),
     fcmToken: text('fcm_token'),
+    /** The parent app version of this session, set by the check route (docs/SPEC.md §12.7). */
+    appVersion: text('app_version'),
     createdAt: createdAt(),
     lastUsedAt: ts('last_used_at').notNull().defaultNow(),
     revokedAt: ts('revoked_at'),

@@ -6,7 +6,7 @@ import au.screentime.parent.auth.PrefsTokenStore
 import au.screentime.parent.auth.Session
 import au.screentime.parent.push.Push
 import au.screentime.parent.push.createChannels
-import au.screentime.parent.update.FakeUpdateSource
+import au.screentime.parent.update.ParentUpdater
 import au.screentime.parent.update.ParentUpdates
 import io.ktor.client.engine.okhttp.OkHttp
 
@@ -22,7 +22,7 @@ class ParentApp : Application() {
         session = Session(BuildConfig.SERVER, OkHttp.create(), PrefsTokenStore(this), SystemClock::elapsedRealtime)
         Push.start(this)
         createChannels(this)
-        // The app's own updates (docs/SPEC.md §12.3). FAKE until CARD-064 puts the real updater here.
-        ParentUpdates.source = FakeUpdateSource()
+        // The app's own updates (docs/SPEC.md §12.7): it checks and downloads by itself, and installs on a tap.
+        ParentUpdates.source = ParentUpdater(this, session)
     }
 }

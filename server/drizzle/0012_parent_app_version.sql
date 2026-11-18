@@ -1,0 +1,1 @@
+ALTER TABLE "parent_sessions" ADD COLUMN "app_version" text;

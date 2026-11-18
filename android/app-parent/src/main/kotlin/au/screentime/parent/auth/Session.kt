@@ -72,6 +72,19 @@ class Session(
         keep(response, checkNotNull(response.refreshToken))
     }
 
+    /**
+     * A valid access token, refreshing it when it is stale (the way [call] does). The app's own update download
+     * needs it for its own HTTP call, which does not go through [call] (docs/SPEC.md §12.7).
+     */
+    suspend fun accessToken(): String {
+        var used = accessToken
+        if (used == null || clock() >= accessValidUntil) {
+            swap(used)
+            used = accessToken
+        }
+        return checkNotNull(used)
+    }
+
     /** Every call to the server that needs a token goes through this. */
     suspend fun <T> call(block: suspend ApiClient.() -> T): T {
         var used = accessToken
