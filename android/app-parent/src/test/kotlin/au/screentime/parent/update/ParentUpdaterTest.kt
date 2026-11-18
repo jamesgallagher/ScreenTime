@@ -50,13 +50,49 @@ class ParentUpdaterTest {
     }
 
     @Test
-    fun theNextActionFromEachState() {
-        assertEquals(UpdateAction.DOWNLOAD, nextAction(UpdateState.Available("1.4.0", 5)))
-        assertEquals(UpdateAction.INSTALL, nextAction(UpdateState.Ready("1.4.0")))
-        assertEquals(UpdateAction.INSTALL, nextAction(UpdateState.Failed("1.4.0")))
-        assertEquals(UpdateAction.NONE, nextAction(UpdateState.UpToDate))
-        assertEquals(UpdateAction.NONE, nextAction(UpdateState.Unknown))
-        assertEquals(UpdateAction.NONE, nextAction(UpdateState.Checking))
+    fun updateDownloadsFirstWhenTheCheckedFileIsNotHere() {
+        assertEquals(UpdateAction.DOWNLOAD, nextAction(UpdateState.Available("1.4.0", 5), downloaded = false))
+        // A download that did not match left Failed with no file: Update tries the download again.
+        assertEquals(UpdateAction.DOWNLOAD, nextAction(UpdateState.Failed("1.4.0"), downloaded = false))
+        assertEquals(UpdateAction.DOWNLOAD, nextAction(UpdateState.Ready("1.4.0"), downloaded = false))
+    }
+
+    @Test
+    fun updateInstallsWhenTheCheckedFileIsHere() {
+        assertEquals(UpdateAction.INSTALL, nextAction(UpdateState.Ready("1.4.0"), downloaded = true))
+        assertEquals(UpdateAction.INSTALL, nextAction(UpdateState.Failed("1.4.0"), downloaded = true))
+        assertEquals(UpdateAction.INSTALL, nextAction(UpdateState.Available("1.4.0", 5), downloaded = true))
+    }
+
+    @Test
+    fun updateDoesNothingWhileSomethingIsHappeningOrNothingIsNewer() {
+        for (s in listOf(UpdateState.Unknown, UpdateState.Checking, UpdateState.UpToDate, UpdateState.Downloading("1.4.0"), UpdateState.Installing("1.4.0"))) {
+            assertEquals(UpdateAction.NONE, nextAction(s, downloaded = true), "$s")
+        }
+    }
+
+    @Test
+    fun aFailedCheckKeepsWhatWasShown() {
+        assertEquals(UpdateState.Ready("1.4.0"), stateAfterFailedCheck(UpdateState.Ready("1.4.0")))
+        assertEquals(UpdateState.UpToDate, stateAfterFailedCheck(UpdateState.UpToDate))
+        assertEquals(UpdateState.Unknown, stateAfterFailedCheck(UpdateState.Unknown))
+        // Only the Checking that the parent's tap showed goes away; it never turns into "Up to date".
+        assertEquals(UpdateState.Unknown, stateAfterFailedCheck(UpdateState.Checking))
+    }
+
+    @Test
+    fun aDeclinedQuestionIsFailed() {
+        // Cancel on "Update this app?", or Don't install in Play Protect.
+        assertEquals(UpdateState.Failed("1.4.0"), stateAfterInstall(android.content.pm.PackageInstaller.STATUS_FAILURE_ABORTED, "1.4.0"))
+        assertEquals(UpdateState.Failed("1.4.0"), stateAfterInstall(android.content.pm.PackageInstaller.STATUS_FAILURE_INVALID, "1.4.0"))
+        assertEquals(UpdateState.Failed("1.4.0"), stateAfterInstall(android.content.pm.PackageInstaller.STATUS_FAILURE_INCOMPATIBLE, "1.4.0"))
+    }
+
+    @Test
+    fun filesOfVersionsNotNewerThanTheRunningOneAreDeleted() {
+        val names = listOf("parent-900.apk", "parent-901.apk", "parent-902.apk", "part")
+        assertEquals(listOf("parent-900.apk", "parent-901.apk", "part"), staleUpdateFiles(names, 901))
+        assertEquals(emptyList<String>(), staleUpdateFiles(listOf("parent-902.apk"), 901))
     }
 
     @Test

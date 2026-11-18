@@ -129,4 +129,12 @@ describe.skipIf(!url)('parent app updates', () => {
     rmSync(join(releases, 'parent-5.apk'));
     expect((await apk(mum.token)).status).toBe(404);
   });
+
+  it('the download page still lists the parent app when parent.json names parents', async () => {
+    publish({ parentIds: [mum.id] });
+    const res = await app.request('/v1/downloads');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { parent: { versionName: string; sizeBytes: number; fileName: string } | null };
+    expect(body.parent).toMatchObject({ versionName: '1.4.0', sizeBytes: 5, fileName: 'ScreenTime-Parent-1.4.0.apk' });
+  });
 });

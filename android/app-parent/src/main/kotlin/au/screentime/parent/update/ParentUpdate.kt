@@ -41,7 +41,13 @@ sealed interface UpdateState {
 interface UpdateSource {
     val state: StateFlow<UpdateState>
 
-    /** **Check for updates** in Settings. */
+    /**
+     * The app came to the front with a parent signed in: check when one is due (the first time since the app
+     * started, then at most every 6 hours). Leaves what is shown alone until the answer comes.
+     */
+    fun onForeground()
+
+    /** **Check for updates** in Settings: checks at once and shows `Checking` meanwhile. */
     fun checkNow()
 
     /** **Update**: downloads first when needed, then installs. */
