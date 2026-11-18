@@ -10,7 +10,7 @@ import { findKid } from '../kids/routes.js';
 import { notifyParents, sendToDevices } from '../notify/dispatch.js';
 import { bearer, errorResponses, jsonBody, jsonResponse } from '../openapi.js';
 import type { createRouter } from '../router.js';
-import { type FamilyDay, familyDay, tonightBedtime } from '../sync/day.js';
+import { type FamilyDay, familyDay, earliestQuarterHour, tonightBedtime } from '../sync/day.js';
 import { secondsToMidnight } from '../grants/routes.js';
 
 type Router = ReturnType<typeof createRouter>;
@@ -89,14 +89,9 @@ async function upsertBedtime(
   }
 
   // Earliest: first quarter hour later than both `scheduled` and now.
-  const schedMin = hms(scheduled);
-  const nowMin = localMinutes(day.timezone, day.now);
-  const first = Math.max(schedMin, nowMin - (nowMin % 15)) + 15;
-  if (first <= 1440) {
-    const earliest = `${String(Math.floor(first / 60)).padStart(2, '0')}:${String(first % 60).padStart(2, '0')}`;
-    if (bedtime < earliest) {
-      throw new ApiError('validation_failed', 'That time has already passed. Pick a later one.');
-    }
+  const earliest = earliestQuarterHour(scheduled, day.timezone, day.now.toISOString());
+  if (earliest === null || bedtime < earliest) {
+    throw new ApiError('validation_failed', 'That time has already passed. Pick a later one.');
   }
 
   // Check if the stored time was already `bedtime`.
@@ -144,6 +139,7 @@ async function upsertBedtime(
 async function deleteBedtime(
   tx: FamilyTx,
   familyId: string,
+  parentId: string,
   kidId: string,
   day: FamilyDay,
 ): Promise<BedtimeChange> {
@@ -174,6 +170,9 @@ async function deleteBedtime(
   const entry = days.find((d) => d.weekday === weekday);
   if (!entry) throw new Error(`schedule has no weekday ${weekday}`);
 
+  const [parent] = await tx.select({ displayName: parents.displayName }).from(parents).where(eq(parents.id, parentId));
+  if (!parent) throw new Error('parent vanished after requireFamilyParent');
+
   const [event] = await tx
     .insert(events)
     .values({
@@ -181,7 +180,7 @@ async function deleteBedtime(
       kidId,
       kind: 'bedtime.extended',
       at: new Date(),
-      payload: { day: day.date, scheduled: entry.bedtime, bedtime: null, byName: null, parentId: null },
+      payload: { day: day.date, scheduled: entry.bedtime, bedtime: null, byName: parent.displayName, parentId },
     })
     .returning({ id: events.id });
   if (!event) throw new Error('event insert returned nothing');
@@ -226,12 +225,12 @@ export function registerBedtimeRoutes(app: Router, deps: AppDeps) {
   });
 
   app.openapi(deleteRoute, async (c) => {
-    const { familyId } = await caller(c);
+    const { familyId, parentId } = await caller(c);
     const { kidId } = c.req.valid('param');
     const change = await withFamily(db, familyId, async (tx) => {
       await findKid(tx, kidId);
       const day = await familyDay(tx, (await familyTimezone(tx, familyId)));
-      return deleteBedtime(tx, familyId, kidId, day);
+      return deleteBedtime(tx, familyId, parentId, kidId, day);
     });
     await sendPushes(familyId, kidId, change);
     return c.json(change.bedtime, 200);
@@ -244,16 +243,3 @@ async function familyTimezone(tx: FamilyTx, familyId: string): Promise<string> {
   return family.timezone;
 }
 
-/** Minutes of an "HH:MM" time. */
-function hms(t: string): number {
-  const [h = 0, m = 0] = t.split(':').map(Number);
-  return h * 60 + m;
-}
-
-/** Local minutes of `now` in the family time zone. */
-function localMinutes(timezone: string, now: Date): number {
-  const parts = new Intl.DateTimeFormat('en-GB', { timeZone: timezone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(now);
-  const hour = Number(parts.find((p) => p.type === 'hour')?.value ?? 0);
-  const minute = Number(parts.find((p) => p.type === 'minute')?.value ?? 0);
-  return hour * 60 + minute;
-}

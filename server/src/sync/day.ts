@@ -187,6 +187,19 @@ export async function scheduleWithTonightBedtime(
 }
 
 /**
+ * The first quarter hour that is later than both `scheduled` and the local time now (strictly: at 20:45:00
+ * the earliest is 21:00). Null when that would be after 24:00 (also when `scheduled` is `24:00`).
+ */
+export function earliestQuarterHour(scheduled: string, timezone: string, nowIso: string): string | null {
+  if (scheduled === '24:00') return null;
+  const schedMin = hms(scheduled);
+  const nowMin = localMinutes(timezone, nowIso);
+  const first = Math.max(schedMin, nowMin - (nowMin % 15)) + 15;
+  if (first >= 1440) return null;
+  return `${String(Math.floor(first / 60)).padStart(2, '0')}:${String(first % 60).padStart(2, '0')}`;
+}
+
+/**
  * Tonight's bedtime for a kid (docs/SPEC.md §7.5): the later of the schedule's and the extension row's.
  * `extendedBy` is the parent's display name only when the extension row is later than the schedule.
  */
@@ -215,15 +228,7 @@ export async function tonightBedtime(
   const tonight = ext && ext.bedtime > scheduled ? ext.bedtime : scheduled;
   const extendedBy = ext && ext.bedtime > scheduled ? ext.byName : null;
 
-  // Earliest: the first quarter hour later than both `scheduled` and now.
-  let earliest: string | null = null;
-  if (scheduled !== '24:00') {
-    const schedMin = hms(scheduled);
-    const nowIso = day.now.toISOString();
-    const nowMin = localMinutes(day.timezone, day.date, nowIso);
-    const first = Math.max(schedMin, nowMin - (nowMin % 15)) + 15;
-    if (first <= 1440) earliest = `${String(Math.floor(first / 60)).padStart(2, '0')}:${String(first % 60).padStart(2, '0')}`;
-  }
+  const earliest = earliestQuarterHour(scheduled, day.timezone, day.now.toISOString());
 
   return { scheduled, tonight, extendedBy, earliest };
 }
@@ -234,8 +239,8 @@ function hms(t: string): number {
   return h * 60 + m;
 }
 
-/** Local minutes of `nowIso` in the family time zone, for the local date `date`. */
-function localMinutes(timezone: string, date: string, nowIso: string): number {
+/** Local minutes of `nowIso` in the family time zone. */
+function localMinutes(timezone: string, nowIso: string): number {
   const parts = new Intl.DateTimeFormat('en-GB', { timeZone: timezone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(nowIso));
   const hour = Number(parts.find((p) => p.type === 'hour')?.value ?? 0);
   const minute = Number(parts.find((p) => p.type === 'minute')?.value ?? 0);

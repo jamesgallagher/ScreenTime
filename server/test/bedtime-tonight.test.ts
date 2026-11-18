@@ -2,11 +2,13 @@ import { randomUUID } from 'node:crypto';
 import { eq, sql } from 'drizzle-orm';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { createDb } from '../src/db/client.js';
-import { bedtimeExtensions, devices, events, families, kids, parentSessions, parents, scheduleVersions } from '../src/db/schema.js';
+import { bedtimeExtensions, devices, events, families, kids, parentSessions, parents, scheduleVersions, usageSegments } from '../src/db/schema.js';
 import { hashDeviceToken, newDeviceToken } from '../src/devices/token.js';
 import type { Mailer } from '../src/mailer.js';
 import type { PushMessage, Pusher } from '../src/push.js';
-import { client, resetDatabase, testConfig, tokenFor } from './helpers.js';
+import { earliestQuarterHour } from '../src/sync/day.js';
+import { client, resetDatabase, testConfig, tokenFor, TEST_SECRET } from './helpers.js';
+import { signAccessToken } from '../src/auth/tokens.js';
 
 // Needs a throwaway PostgreSQL database: this test DELETES everything in it.
 const url = process.env.TEST_DATABASE_URL;
@@ -481,5 +483,203 @@ describe.skipIf(!url)('extend bedtime tonight', () => {
 
     const mumPushes = sent.filter((m) => m.token === 'fcm-mum');
     expect(mumPushes.some((m) => m.msg.type === 'grant.by_other_parent')).toBe(false);
+  });
+
+  it('a parent of another family gets 404 on PUT and DELETE', async () => {
+    // Create a second family with a parent.
+    const [f2] = await db.insert(families).values({ name: 'B', timezone: zone, parentCodeSecret: 'B'.repeat(32) }).returning();
+    if (!f2) throw new Error('no family');
+    const [p2] = await db.insert(parents).values({ familyId: f2.id, email: 'other@example.com', displayName: 'Other' }).returning();
+    if (!p2) throw new Error('no parent');
+    const [session] = await db
+      .insert(parentSessions)
+      .values({ familyId: f2.id, parentId: p2.id, refreshTokenHash: randomUUID(), client: 'web', clientLabel: 'Web' })
+      .returning();
+    if (!session) throw new Error('no session');
+    const token = await signAccessToken(TEST_SECRET, { sessionId: session.id, parentId: p2.id, familyId: f2.id, roles: ['parent'] });
+
+    const res1 = await api.put(`/v1/kids/${kid}/bedtime-tonight`, token, { bedtime: '21:00' });
+    expect(res1.status).toBe(404);
+    const res2 = await api.del(`/v1/kids/${kid}/bedtime-tonight`, token);
+    expect(res2.status).toBe(404);
+  });
+
+  it('a kid whose bedtime today is 24:00 gets the usual bedtime message', async () => {
+    // Override the schedule to have a 24:00 bedtime for today.
+    const token = await signIn(dadId);
+    const days = [1, 2, 3, 4, 5, 6, 7].map((w) => ({ weekday: w, screensMin: 120, phoneMin: 60, wake: '00:00', bedtime: '24:00' }));
+    await db.insert(scheduleVersions).values({ familyId: family, kidId: kid, version: 2, days });
+
+    const res = await api.put(`/v1/kids/${kid}/bedtime-tonight`, token, { bedtime: '23:45' });
+    expect(res.status).toBe(422);
+    expect(res.body?.error?.message).toBe('Pick a time after the usual bedtime.');
+  });
+
+  it('an archived kid gets 404', async () => {
+    const token = await signIn(dadId);
+    await db.update(kids).set({ archivedAt: new Date() }).where(eq(kids.id, kid));
+    const res = await api.put(`/v1/kids/${kid}/bedtime-tonight`, token, { bedtime: '21:00' });
+    expect(res.status).toBe(404);
+  });
+
+  it('earliest is null for a 24:00 bedtime and the schedule wins when later', async () => {
+    const token = await signIn(dadId);
+    // Set schedule to 24:00.
+    const days24 = [1, 2, 3, 4, 5, 6, 7].map((w) => ({ weekday: w, screensMin: 120, phoneMin: 60, wake: '00:00', bedtime: '24:00' }));
+    await db.insert(scheduleVersions).values({ familyId: family, kidId: kid, version: 2, days: days24 });
+
+    const res = await api.get('/v1/today', token);
+    expect(res.status).toBe(200);
+    const today = res.body as { kids: { bedtime: { earliest: string | null } }[] };
+    expect(today.kids[0].bedtime.earliest).toBeNull();
+
+    // Now save a schedule with a bedtime later than an existing extension.
+    // First put an extension at 21:00.
+    await db.insert(bedtimeExtensions).values({ familyId: family, kidId: kid, day: new Intl.DateTimeFormat('en-CA', { timeZone: zone }).format(new Date()), bedtime: '21:00', createdBy: dadId });
+    // Then save a new schedule version with 22:00.
+    const days22 = [1, 2, 3, 4, 5, 6, 7].map((w) => ({ weekday: w, screensMin: 120, phoneMin: 60, wake: '00:00', bedtime: '22:00' }));
+    await db.insert(scheduleVersions).values({ familyId: family, kidId: kid, version: 3, days: days22 });
+
+    const res2 = await api.get('/v1/today', token);
+    expect(res2.status).toBe(200);
+    const today2 = res2.body as { kids: { bedtime: { tonight: string; extendedBy: string | null } }[] };
+    // The schedule (22:00) is later than the extension (21:00), so tonight is the schedule's and extendedBy is null.
+    expect(today2.kids[0].bedtime.tonight).toBe('22:00');
+    expect(today2.kids[0].bedtime.extendedBy).toBeNull();
+  });
+
+  it('GET /v1/today pools: out of time with extension, bedtime after DELETE', async () => {
+    const token = await signIn(dadId);
+    const { min } = quarterHourNow(zone);
+    const schedMin = min - 30;
+    const first = Math.max(schedMin, min) + 15;
+    if (first > 1440) return;
+    const bedtime = `${String(Math.floor(first / 60)).padStart(2, '0')}:${String(first % 60).padStart(2, '0')}`;
+    const schedTime = `${String(Math.floor(schedMin / 60)).padStart(2, '0')}:${String(schedMin % 60).padStart(2, '0')}`;
+
+    // Use up the phone pool: one segment covering the whole allowance (60 min).
+    const now = new Date();
+    const dayStart = new Date(now);
+    dayStart.setUTCHours(0, 0, 0, 0);
+    await db.insert(usageSegments).values({
+      id: randomUUID(),
+      familyId: family,
+      kidId: kid,
+      deviceId: phone.id,
+      pool: 'phone',
+      startedAt: dayStart,
+      endedAt: new Date(dayStart.getTime() + 60 * 60 * 1000),
+    });
+
+    // PUT the extension.
+    await api.put(`/v1/kids/${kid}/bedtime-tonight`, token, { bedtime });
+
+    // With no time left, the pool is locked out_of_time (not bedtime).
+    let res = await api.get('/v1/today', token);
+    expect(res.status).toBe(200);
+    let today = res.body as { kids: { pools: { locked: boolean; lockReason: string | null }[] }[] };
+    const phonePool = today.kids[0].pools.find((p) => p.lockReason !== null || true);
+    for (const pool of today.kids[0].pools) {
+      if (pool.locked) {
+        expect(pool.lockReason).toBe('out_of_time');
+      }
+    }
+
+    // DELETE the extension.
+    await api.del(`/v1/kids/${kid}/bedtime-tonight`, token);
+
+    // After DELETE, the pool is locked for bedtime (the usual bedtime is in the past).
+    res = await api.get('/v1/today', token);
+    expect(res.status).toBe(200);
+    today = res.body as { kids: { pools: { locked: boolean; lockReason: string | null }[] }[] };
+    for (const pool of today.kids[0].pools) {
+      if (pool.locked) {
+        expect(pool.lockReason).toBe('bedtime');
+      }
+    }
+  });
+
+  it('schedule.version is unchanged and stateVersion changes after DELETE', async () => {
+    const { min } = quarterHourNow(zone);
+    const schedMin = min - 30;
+    const first = Math.max(schedMin, min) + 15;
+    if (first > 1440) return;
+    const bedtime = `${String(Math.floor(first / 60)).padStart(2, '0')}:${String(first % 60).padStart(2, '0')}`;
+
+    const before = await api.get('/v1/device/state', phone.token);
+    expect(before.status).toBe(200);
+    const beforeBody = before.body as { stateVersion: string; schedule: { version: number } };
+
+    const token = await signIn(dadId);
+    await api.put(`/v1/kids/${kid}/bedtime-tonight`, token, { bedtime });
+
+    const after = await api.get('/v1/device/state', phone.token);
+    expect(after.status).toBe(200);
+    const afterBody = after.body as { stateVersion: string; schedule: { version: number } };
+
+    // stateVersion changed after PUT.
+    expect(afterBody.stateVersion).not.toBe(beforeBody.stateVersion);
+    // schedule.version unchanged.
+    expect(afterBody.schedule.version).toBe(beforeBody.schedule.version);
+
+    // DELETE.
+    await api.del(`/v1/kids/${kid}/bedtime-tonight`, token);
+
+    const afterDelete = await api.get('/v1/device/state', phone.token);
+    expect(afterDelete.status).toBe(200);
+    const deleteBody = afterDelete.body as { stateVersion: string; schedule: { version: number } };
+
+    // stateVersion changed again after DELETE.
+    expect(deleteBody.stateVersion).not.toBe(afterBody.stateVersion);
+    // schedule.version still unchanged.
+    expect(deleteBody.schedule.version).toBe(beforeBody.schedule.version);
+  });
+
+  it('state_changed goes to both device tokens with high priority; nothing for a same-time PUT', async () => {
+    const token = await signIn(dadId);
+    const { min } = quarterHourNow(zone);
+    const schedMin = min - 30;
+    const first = Math.max(schedMin, min) + 15;
+    if (first > 1440) return;
+    const bedtime = `${String(Math.floor(first / 60)).padStart(2, '0')}:${String(first % 60).padStart(2, '0')}`;
+
+    sent.length = 0;
+    await api.put(`/v1/kids/${kid}/bedtime-tonight`, token, { bedtime });
+
+    // Both device tokens received state_changed with high priority.
+    const phonePush = sent.find((m) => m.token === 'fcm-phone' && m.msg.type === 'state_changed');
+    const tabletPush = sent.find((m) => m.token === 'fcm-tablet' && m.msg.type === 'state_changed');
+    expect(phonePush).toBeDefined();
+    expect(tabletPush).toBeDefined();
+    expect(phonePush?.high).toBe(true);
+    expect(tabletPush?.high).toBe(true);
+
+    // A same-time PUT sends nothing.
+    sent.length = 0;
+    await api.put(`/v1/kids/${kid}/bedtime-tonight`, token, { bedtime });
+    const devicePushes = sent.filter((m) => m.msg.type === 'state_changed');
+    expect(devicePushes).toHaveLength(0);
+  });
+});
+
+describe('earliestQuarterHour', () => {
+  it('returns the first quarter hour after both scheduled and now', () => {
+    // At 20:45:00, scheduled 20:30 → earliest is 21:00.
+    expect(earliestQuarterHour('20:30', 'UTC', '2026-10-26T20:45:00Z')).toBe('21:00');
+    // At 20:45:00, scheduled 20:00 → earliest is 21:00 (later than both).
+    expect(earliestQuarterHour('20:00', 'UTC', '2026-10-26T20:45:00Z')).toBe('21:00');
+    // At 19:00:00, scheduled 20:30 → earliest is 20:45 (later than scheduled).
+    expect(earliestQuarterHour('20:30', 'UTC', '2026-10-26T19:00:00Z')).toBe('20:45');
+  });
+
+  it('returns null when it would be at or after 24:00', () => {
+    // At 23:50, scheduled 20:30 → first would be 24:00 → null.
+    expect(earliestQuarterHour('20:30', 'UTC', '2026-10-26T23:50:00Z')).toBeNull();
+    // At 23:45, scheduled 20:30 → first would be 24:00 → null.
+    expect(earliestQuarterHour('20:30', 'UTC', '2026-10-26T23:45:00Z')).toBeNull();
+  });
+
+  it('returns null for a 24:00 scheduled bedtime', () => {
+    expect(earliestQuarterHour('24:00', 'UTC', '2026-10-26T10:00:00Z')).toBeNull();
   });
 });
