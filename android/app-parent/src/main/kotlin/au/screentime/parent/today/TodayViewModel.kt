@@ -2,21 +2,20 @@ package au.screentime.parent.today
 
 import android.app.Application
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import au.screentime.core.model.api.ApiException
+import au.screentime.core.model.api.BedtimeTonightPut
 import au.screentime.core.model.api.GrantCreate
 import au.screentime.core.model.api.LockNow
 import au.screentime.core.model.api.Pool
 import au.screentime.core.model.api.Today
+import au.screentime.core.model.api.TodayBedtime
 import au.screentime.core.model.api.TodayKid
 import au.screentime.parent.ParentApp
 import au.screentime.parent.auth.SignedOutException
-import java.time.LocalTime
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.delay
 
 /** The Today screen's state: the answer, the refreshing state, and the error. */
 data class TodayState(
@@ -90,49 +89,53 @@ class TodayViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    // ---- Extend bedtime tonight (docs/SPEC.md §7.5). The seam: CARD-063 replaces these three. ----
+    // ---- Extend bedtime tonight (docs/SPEC.md §7.5). ----
 
-    /** The made-up extensions, by kid id, until CARD-063 reads `kid.bedtime` from Today instead. */
-    private val fakeBedtimes = mutableStateMapOf<String, Pair<String, String>>()
-
-    /** Tonight's bedtime for a kid on the Today screen. CARD-063: `kid.bedtime`. */
+    /** Tonight's bedtime for a kid on the Today screen. */
     fun bedtimeOf(kid: TodayKid): TonightBedtime {
-        val ext = fakeBedtimes[kid.id]
-        return TonightBedtime(FAKE_SCHEDULED, ext?.first ?: FAKE_SCHEDULED, ext?.second, fakeEarliest())
+        val b = kid.bedtime
+        return TonightBedtime(b.scheduled, b.tonight, b.extendedBy, b.earliest)
     }
 
     /**
      * Move tonight's bedtime to [bedtime] ("HH:MM"). Returns null when it worked, else the words to show.
-     * CARD-063: `PUT /v1/kids/{kidId}/bedtime-tonight`, then [load].
      */
     suspend fun extendBedtime(kidId: String, bedtime: String): String? {
-        delay(400)
-        fakeBedtimes[kidId] = bedtime to "You"
-        return null
+        return try {
+            session.call { putKidsBedtimeTonight(kidId, BedtimeTonightPut(bedtime)) }
+            load()
+            null
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: SignedOutException) {
+            null
+        } catch (e: ApiException) {
+            if (e.status == 422) e.error?.message ?: "Something went wrong on the server. Try again soon."
+            else "Something went wrong on the server. Try again soon."
+        } catch (e: Exception) {
+            "Can't reach Screen Time. Check the internet connection and try again."
+        }
     }
 
-    /** Back to the scheduled bedtime. Returns null when it worked, else the words to show. CARD-063: `DELETE` the same path. */
+    /** Back to the scheduled bedtime. Returns null when it worked, else the words to show. */
     suspend fun endBedtimeExtension(kidId: String): String? {
-        delay(400)
-        fakeBedtimes.remove(kidId)
-        return null
-    }
-
-    /** The fake's earliest: the next quarter hour after the phone's clock, and after the scheduled bedtime. */
-    private fun fakeEarliest(): String? {
-        val now = LocalTime.now()
-        val nowMin = now.hour * 60 + now.minute
-        val scheduled = 20 * 60 + 30
-        val first = maxOf(scheduled, nowMin - nowMin % BEDTIME_STEP) + BEDTIME_STEP
-        return if (first > 1440) null else "%02d:%02d".format(first / 60, first % 60)
+        return try {
+            session.call { deleteKidsBedtimeTonight(kidId) }
+            load()
+            null
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: SignedOutException) {
+            null
+        } catch (e: ApiException) {
+            "Something went wrong on the server. Try again soon."
+        } catch (e: Exception) {
+            "Can't reach Screen Time. Check the internet connection and try again."
+        }
     }
 
     /** Back to a blank state, after a sign-out. */
     fun clear() {
         state = TodayState()
-    }
-
-    private companion object {
-        const val FAKE_SCHEDULED = "20:30"
     }
 }

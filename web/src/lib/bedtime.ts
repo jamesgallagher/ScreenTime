@@ -1,25 +1,13 @@
 /**
  * Extend bedtime tonight (docs/SPEC.md §7.5): a parent moves one kid's bedtime later for today only. The kid keeps
  * any time that is left until the new bedtime; with none left, the always-allowed apps keep working until then.
- *
- * This file is the seam between the Today page and the server. Until CARD-063 wires it, it answers from memory:
- * every kid's bedtime is 8:30 pm and an extension lasts until the page reloads.
  */
-import type { TodayKid } from '@screentime/schemas';
+import type { TodayBedtime, TodayKid } from '@screentime/schemas';
 import { formatDuration } from '@/lib/format';
 import { formatClock } from '@/lib/schedule';
+import { api } from '@/lib/auth';
 
-/** Tonight's bedtime of one kid, as `GET /v1/today` will send it in `TodayKid.bedtime`. Times are "HH:MM", local. */
-export interface TodayBedtime {
-  /** Today's bedtime from the schedule; "24:00" means none. */
-  scheduled: string;
-  /** The bedtime that counts tonight: the extension, or `scheduled` when there is none. */
-  tonight: string;
-  /** The parent who extended it, or null when tonight is the scheduled bedtime. */
-  extendedBy: string | null;
-  /** The earliest bedtime a parent can pick now (a quarter hour after both `scheduled` and now), or null for none. */
-  earliest: string | null;
-}
+export { TodayBedtime };
 
 export const BEDTIME_STEP = 15;
 /** The bedtime the dialog starts at when there is no extension yet: an hour later than usual. */
@@ -35,42 +23,21 @@ function timeOf(minutes: number): string {
   return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
 }
 
-// ---- The seam: CARD-063 replaces these three with kid.bedtime and the two routes. ----
-
-const fake = new Map<string, { tonight: string; by: string }>();
-const FAKE_SCHEDULED = '20:30';
-
-/** The fake's earliest: the next quarter hour after the browser's clock, and after the scheduled bedtime. */
-function fakeEarliest(scheduled: string): string | null {
-  const now = new Date();
-  const nowMin = now.getHours() * 60 + now.getMinutes();
-  const first = Math.max(minutesOf(scheduled), nowMin - (nowMin % BEDTIME_STEP)) + BEDTIME_STEP;
-  return first > 1440 || minutesOf(scheduled) >= 1440 ? null : timeOf(first);
-}
+// ---- The seam: kid.bedtime and the two routes. ----
 
 /** Tonight's bedtime for a kid on the Today page. */
 export function bedtimeOf(kid: TodayKid): TodayBedtime {
-  const ext = fake.get(kid.id);
-  return {
-    scheduled: FAKE_SCHEDULED,
-    tonight: ext?.tonight ?? FAKE_SCHEDULED,
-    extendedBy: ext?.by ?? null,
-    earliest: fakeEarliest(FAKE_SCHEDULED),
-  };
+  return kid.bedtime;
 }
 
 /** PUT /v1/kids/{kidId}/bedtime-tonight `{ bedtime }`: tonight's bedtime becomes `bedtime`. */
 export async function extendBedtime(kidId: string, bedtime: string): Promise<TodayBedtime> {
-  await new Promise((r) => setTimeout(r, 400));
-  fake.set(kidId, { tonight: bedtime, by: 'You' });
-  return { scheduled: FAKE_SCHEDULED, tonight: bedtime, extendedBy: 'You', earliest: fakeEarliest(FAKE_SCHEDULED) };
+  return api.put<TodayBedtime>(`/v1/kids/${kidId}/bedtime-tonight`, { bedtime });
 }
 
 /** DELETE /v1/kids/{kidId}/bedtime-tonight: back to the scheduled bedtime. */
 export async function endBedtimeExtension(kidId: string): Promise<TodayBedtime> {
-  await new Promise((r) => setTimeout(r, 400));
-  fake.delete(kidId);
-  return { scheduled: FAKE_SCHEDULED, tonight: FAKE_SCHEDULED, extendedBy: null, earliest: fakeEarliest(FAKE_SCHEDULED) };
+  return api.delete<TodayBedtime>(`/v1/kids/${kidId}/bedtime-tonight`);
 }
 
 // ---- Pure helpers, used by the row and the dialog. ----

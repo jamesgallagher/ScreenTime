@@ -68,7 +68,7 @@ describe('poolView', () => {
 });
 
 describe('kidChips', () => {
-  const kid = (pools: TodayPool[]): TodayKid => ({ id: 'k', name: 'Alex', avatarColor: '#0F766E', pools });
+  const kid = (pools: TodayPool[]): TodayKid => ({ id: 'k', name: 'Alex', avatarColor: '#0F766E', pools, bedtime: { scheduled: '20:30', tonight: '20:30', extendedBy: null, earliest: '20:45' } });
 
   it('lists devices in use, parent mode, devices silent for 6 hours and overspend', () => {
     const pc = device({ id: 'pc', name: 'Alex on Desktop', form: 'pc', inUse: true });

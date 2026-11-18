@@ -416,6 +416,29 @@ class ApiClient(
     }
 
     /**
+     * Extend bedtime tonight.
+     *
+     * `PUT /v1/kids/{kidId}/bedtime-tonight`
+     */
+    suspend fun putKidsBedtimeTonight(
+        kidId: String,
+        body: BedtimeTonightPut,
+    ): TodayBedtime {
+        return call(HttpMethod.Put, "/v1/kids/${segment(kidId)}/bedtime-tonight", auth = true, body = body, bodyType = typeInfo<BedtimeTonightPut>()).body()
+    }
+
+    /**
+     * Back to the usual bedtime.
+     *
+     * `DELETE /v1/kids/{kidId}/bedtime-tonight`
+     */
+    suspend fun deleteKidsBedtimeTonight(
+        kidId: String,
+    ): TodayBedtime {
+        return call(HttpMethod.Delete, "/v1/kids/${segment(kidId)}/bedtime-tonight", auth = true).body()
+    }
+
+    /**
      * Ask for more time.
      *
      * `POST /v1/device/time-requests`

@@ -1432,13 +1432,17 @@
             "items": {
               "$ref": "#/components/schemas/TodayPool"
             }
+          },
+          "bedtime": {
+            "$ref": "#/components/schemas/TodayBedtime"
           }
         },
         "required": [
           "id",
           "name",
           "avatarColor",
-          "pools"
+          "pools",
+          "bedtime"
         ]
       },
       "TodayPool": {
@@ -1565,6 +1569,35 @@
           "parentMode"
         ]
       },
+      "TodayBedtime": {
+        "type": "object",
+        "properties": {
+          "scheduled": {
+            "type": "string"
+          },
+          "tonight": {
+            "type": "string"
+          },
+          "extendedBy": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "earliest": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "scheduled",
+          "tonight",
+          "extendedBy",
+          "earliest"
+        ]
+      },
       "Grant": {
         "type": "object",
         "properties": {
@@ -1661,6 +1694,18 @@
         "required": [
           "id",
           "pool"
+        ]
+      },
+      "BedtimeTonightPut": {
+        "type": "object",
+        "properties": {
+          "bedtime": {
+            "type": "string",
+            "pattern": "^(?:((?:0[1-9]|1[0-9]|2[0-3]):(00|15|30|45)|00:(15|30|45))|24:00)$"
+          }
+        },
+        "required": [
+          "bedtime"
         ]
       },
       "TimeRequest": {
@@ -5737,6 +5782,158 @@
           },
           "422": {
             "description": "The request is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/kids/{kidId}/bedtime-tonight": {
+      "put": {
+        "tags": [
+          "bedtime"
+        ],
+        "summary": "Extend bedtime tonight",
+        "description": "Moves the kid’s bedtime later for today only. The kid keeps any time that is left until the new bedtime; with none left, the always-allowed apps keep working until then.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "kidId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BedtimeTonightPut"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tonight’s bedtime.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TodayBedtime"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the code or token is wrong or expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Signed in, but not allowed to do this.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "bedtime"
+        ],
+        "summary": "Back to the usual bedtime",
+        "description": "Deletes tonight’s extension; the device locks for bedtime at once if the usual bedtime has passed.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "kidId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tonight’s bedtime.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TodayBedtime"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the code or token is wrong or expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Signed in, but not allowed to do this.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
             "content": {
               "application/json": {
                 "schema": {

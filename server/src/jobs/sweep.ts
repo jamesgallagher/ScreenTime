@@ -1,11 +1,10 @@
 import { and, desc, eq, isNotNull, isNull, lt, sql } from 'drizzle-orm';
 import type { AppDeps } from '../app.js';
 import { type FamilyTx, withFamily } from '../db/family.js';
-import { devices, events, families, kids, scheduleVersions, sosIncidents } from '../db/schema.js';
+import { devices, events, families, kids, sosIncidents } from '../db/schema.js';
 import { familyToday } from '../grants/routes.js';
-import { toSchedule } from '../kids/routes.js';
 import { notifyParents } from '../notify/dispatch.js';
-import { scheduleDay } from '../sync/day.js';
+import { scheduleDay, scheduleWithTonightBedtime } from '../sync/day.js';
 
 /** A device not seen for this long during allowed hours is reported (docs/SPEC.md §8.4, §14). */
 const OFFLINE_AFTER = sql`interval '6 hours'`;
@@ -79,14 +78,8 @@ async function reportOfflineDevices(tx: FamilyTx, familyId: string) {
       .limit(1);
     if (reported) continue;
 
-    const [scheduleRow] = await tx
-      .select()
-      .from(scheduleVersions)
-      .where(eq(scheduleVersions.kidId, device.kidId))
-      .orderBy(desc(scheduleVersions.version))
-      .limit(1);
-    if (!scheduleRow) throw new Error(`kid ${device.kidId} has no schedule`);
-    const entry = scheduleDay(toSchedule(scheduleRow), day.date);
+    const schedule = await scheduleWithTonightBedtime(tx, device.kidId, day);
+    const entry = scheduleDay(schedule, day.date);
     // `24:00` is a valid time in PostgreSQL: the next midnight.
     const window = await tx.execute<{ allowed: boolean }>(sql`
       select now() - ${OFFLINE_AFTER} >= (${day.date}::date + ${entry.wake}::time) at time zone ${timezone}

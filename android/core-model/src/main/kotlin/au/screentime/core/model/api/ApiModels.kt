@@ -518,6 +518,7 @@ data class TodayKid(
     val name: String,
     val avatarColor: AvatarColor,
     val pools: List<TodayPool>,
+    val bedtime: TodayBedtime,
 )
 
 @Serializable
@@ -558,6 +559,14 @@ data class TodayDeviceParentMode(
 )
 
 @Serializable
+data class TodayBedtime(
+    val scheduled: String,
+    val tonight: String,
+    val extendedBy: String?,
+    val earliest: String?,
+)
+
+@Serializable
 data class Grant(
     val id: String,
     val pool: Pool,
@@ -581,6 +590,11 @@ data class GrantCreate(
 data class LockNow(
     val id: String,
     val pool: Pool,
+)
+
+@Serializable
+data class BedtimeTonightPut(
+    val bedtime: String,
 )
 
 @Serializable

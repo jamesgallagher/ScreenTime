@@ -41,11 +41,13 @@ export {
   ScheduleInput,
 } from './kids.js';
 export {
+  BedtimeTonightPut,
   DeviceState,
   LockReason,
   PoolSegment,
   StateGrant,
   Today,
+  TodayBedtime,
   TodayDevice,
   TodayKid,
   TodayPool,

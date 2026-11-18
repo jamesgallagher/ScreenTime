@@ -165,6 +165,24 @@ export const TodayPool = z
 
 export type TodayPool = z.infer<typeof TodayPool>;
 
+/**
+ * Tonight's bedtime of one kid (docs/SPEC.md §7.5). Times are "HH:MM", local.
+ */
+export const TodayBedtime = z
+  .object({
+    /** Today's bedtime from the schedule; "24:00" means none. */
+    scheduled: z.string(),
+    /** The bedtime that counts tonight: the extension, or `scheduled` when there is none. */
+    tonight: z.string(),
+    /** The parent who extended it, or null when tonight is the scheduled bedtime. */
+    extendedBy: z.string().nullable(),
+    /** The earliest bedtime a parent can pick now (a quarter hour after both `scheduled` and now), or null for none. */
+    earliest: z.string().nullable(),
+  })
+  .meta({ id: 'TodayBedtime' });
+
+export type TodayBedtime = z.infer<typeof TodayBedtime>;
+
 export const TodayKid = z
   .object({
     id: z.uuid(),
@@ -172,6 +190,8 @@ export const TodayKid = z
     avatarColor: AvatarColor,
     /** Always both pools, Screens first. */
     pools: z.array(TodayPool),
+    /** Tonight's bedtime (docs/SPEC.md §7.5). */
+    bedtime: TodayBedtime,
   })
   .meta({ id: 'TodayKid' });
 
@@ -189,3 +209,19 @@ export const Today = z
   .meta({ id: 'Today' });
 
 export type Today = z.infer<typeof Today>;
+
+/**
+ * Body of PUT /v1/kids/{kidId}/bedtime-tonight (docs/SPEC.md §7.5). A quarter hour from 00:15 to 24:00.
+ */
+export const BedtimeTonightPut = z
+  .object({
+    bedtime: z
+      .string()
+      .regex(
+        /^(?:((?:0[1-9]|1[0-9]|2[0-3]):(00|15|30|45)|00:(15|30|45))|24:00)$/,
+        'Use a quarter hour (HH:00, HH:15, HH:30, HH:45) from 00:15 to 24:00.',
+      ),
+  })
+  .meta({ id: 'BedtimeTonightPut' });
+
+export type BedtimeTonightPut = z.infer<typeof BedtimeTonightPut>;

@@ -4,6 +4,7 @@ import { logger } from 'hono/logger';
 import { ErrorResponse, HealthResponse } from '@screentime/schemas';
 import { registerAdminRoutes } from './admin/routes.js';
 import { registerAuthRoutes } from './auth/routes.js';
+import { registerBedtimeRoutes } from './bedtime/routes.js';
 import type { Config } from './config.js';
 import type { Db } from './db/client.js';
 import { registerDeviceRoutes } from './devices/routes.js';
@@ -96,6 +97,7 @@ export function createApp(appDeps: AppDeps) {
   registerDeviceRoutes(app, deps);
   registerSyncRoutes(app, deps);
   registerGrantRoutes(app, deps);
+  registerBedtimeRoutes(app, deps);
   registerRequestRoutes(app, deps);
   registerMessageRoutes(app, deps);
   registerParentModeRoutes(app, deps);

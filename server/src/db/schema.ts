@@ -519,3 +519,21 @@ export const deviceGames = pgTable(
   },
   (t) => [primaryKey({ columns: [t.deviceId, t.game] }), check('device_games_source', sql`${t.source} in ('found', 'custom')`)],
 );
+
+/** One later bedtime per kid per day (docs/SPEC.md §6.1, §7.5). */
+export const bedtimeExtensions = pgTable(
+  'bedtime_extensions',
+  {
+    familyId: familyId(),
+    kidId: uuid('kid_id')
+      .notNull()
+      .references(() => kids.id),
+    day: date('day').notNull(),
+    bedtime: text('bedtime').notNull(),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => parents.id),
+    updatedAt: ts('updated_at').notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.kidId, t.day] })],
+);

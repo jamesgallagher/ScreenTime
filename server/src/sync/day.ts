@@ -1,8 +1,9 @@
-import { and, asc, eq, gt, isNotNull, isNull, lt, or, type SQL, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, isNotNull, isNull, lt, or, type SQL, sql } from 'drizzle-orm';
 import { evaluate, type EngineResult } from '@screentime/engine';
-import type { Pool, Schedule } from '@screentime/schemas';
+import type { Pool, Schedule, TodayBedtime } from '@screentime/schemas';
 import type { FamilyTx } from '../db/family.js';
-import { devices, grants, parentModeSessions, parents, usageSegments } from '../db/schema.js';
+import { bedtimeExtensions, devices, grants, parentModeSessions, parents, scheduleVersions, usageSegments } from '../db/schema.js';
+import { toSchedule } from '../kids/routes.js';
 
 /** Today in the family's time zone (docs/SPEC.md §7.2). */
 export interface FamilyDay {
@@ -13,6 +14,8 @@ export interface FamilyDay {
   dayEnd: Date;
   /** The database clock. Every request uses this one clock, so the date and the engine agree. */
   now: Date;
+  /** The family's time zone. */
+  timezone: string;
 }
 
 /** An open segment counts as still running only while its device keeps in touch (docs/SPEC.md §8.2). */
@@ -28,7 +31,7 @@ export async function familyDay(tx: FamilyTx, timezone: string): Promise<FamilyD
   `);
   const row = result.rows[0];
   if (!row) throw new Error('familyDay returned nothing');
-  return { date: row.date, dayStart: new Date(row.day_start), dayEnd: new Date(row.day_end), now: new Date(row.now) };
+  return { date: row.date, dayStart: new Date(row.day_start), dayEnd: new Date(row.day_end), now: new Date(row.now), timezone };
 }
 
 export interface DaySegment {
@@ -147,4 +150,99 @@ export function poolStatus(
     segments: poolSegments.map((s) => ({ start: s.startedAt.toISOString(), end: s.endedAt?.toISOString() ?? null })),
   });
   return { ...result, allowanceMin };
+}
+
+/**
+ * Loads a kid's schedule for today with tonight's bedtime already put into today's weekday entry
+ * (docs/SPEC.md §7.5). The schedule's `version` is unchanged.
+ */
+export async function scheduleWithTonightBedtime(
+  tx: FamilyTx,
+  kidId: string,
+  day: FamilyDay,
+): Promise<Schedule> {
+  const [scheduleRow] = await tx
+    .select()
+    .from(scheduleVersions)
+    .where(eq(scheduleVersions.kidId, kidId))
+    .orderBy(desc(scheduleVersions.version))
+    .limit(1);
+  if (!scheduleRow) throw new Error(`kid ${kidId} has no schedule`);
+  const schedule = toSchedule(scheduleRow);
+  const [ext] = await tx
+    .select({ bedtime: bedtimeExtensions.bedtime })
+    .from(bedtimeExtensions)
+    .where(and(eq(bedtimeExtensions.kidId, kidId), eq(bedtimeExtensions.day, day.date)));
+  if (!ext) return schedule;
+  const weekday = new Date(`${day.date}T00:00:00Z`).getUTCDay() || 7;
+  const entry = schedule.days.find((d) => d.weekday === weekday);
+  if (!entry) throw new Error(`schedule version ${schedule.version} has no weekday ${weekday}`);
+  const scheduled = entry.bedtime;
+  const tonight = ext.bedtime > scheduled ? ext.bedtime : scheduled;
+  if (tonight === scheduled) return schedule;
+  return {
+    ...schedule,
+    days: schedule.days.map((d) => (d.weekday === weekday ? { ...d, bedtime: tonight } : d)),
+  };
+}
+
+/**
+ * The first quarter hour that is later than both `scheduled` and the local time now (strictly: at 20:45:00
+ * the earliest is 21:00). Null when that would be after 24:00 (also when `scheduled` is `24:00`).
+ */
+export function earliestQuarterHour(scheduled: string, timezone: string, nowIso: string): string | null {
+  if (scheduled === '24:00') return null;
+  const schedMin = hms(scheduled);
+  const nowMin = localMinutes(timezone, nowIso);
+  const first = Math.max(schedMin, nowMin - (nowMin % 15)) + 15;
+  if (first > 1440) return null;
+  return `${String(Math.floor(first / 60)).padStart(2, '0')}:${String(first % 60).padStart(2, '0')}`;
+}
+
+/**
+ * Tonight's bedtime for a kid (docs/SPEC.md §7.5): the later of the schedule's and the extension row's.
+ * `extendedBy` is the parent's display name only when the extension row is later than the schedule.
+ */
+export async function tonightBedtime(
+  tx: FamilyTx,
+  kidId: string,
+  day: FamilyDay,
+): Promise<TodayBedtime> {
+  // Get the original schedule (without the extension).
+  const [scheduleRow] = await tx
+    .select()
+    .from(scheduleVersions)
+    .where(eq(scheduleVersions.kidId, kidId))
+    .orderBy(desc(scheduleVersions.version))
+    .limit(1);
+  if (!scheduleRow) throw new Error(`kid ${kidId} has no schedule`);
+  const originalSchedule = toSchedule(scheduleRow);
+  const entry = scheduleDay(originalSchedule, day.date);
+  const scheduled = entry.bedtime;
+
+  const [ext] = await tx
+    .select({ bedtime: bedtimeExtensions.bedtime, byName: parents.displayName })
+    .from(bedtimeExtensions)
+    .innerJoin(parents, eq(parents.id, bedtimeExtensions.createdBy))
+    .where(and(eq(bedtimeExtensions.kidId, kidId), eq(bedtimeExtensions.day, day.date)));
+  const tonight = ext && ext.bedtime > scheduled ? ext.bedtime : scheduled;
+  const extendedBy = ext && ext.bedtime > scheduled ? ext.byName : null;
+
+  const earliest = earliestQuarterHour(scheduled, day.timezone, day.now.toISOString());
+
+  return { scheduled, tonight, extendedBy, earliest };
+}
+
+/** Minutes of an "HH:MM" time. */
+function hms(t: string): number {
+  const [h = 0, m = 0] = t.split(':').map(Number);
+  return h * 60 + m;
+}
+
+/** Local minutes of `nowIso` in the family time zone. */
+function localMinutes(timezone: string, nowIso: string): number {
+  const parts = new Intl.DateTimeFormat('en-GB', { timeZone: timezone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(nowIso));
+  const hour = Number(parts.find((p) => p.type === 'hour')?.value ?? 0);
+  const minute = Number(parts.find((p) => p.type === 'minute')?.value ?? 0);
+  return hour * 60 + minute;
 }

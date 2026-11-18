@@ -225,6 +225,28 @@ describe.skipIf(!url)('background sweeps', () => {
       expect(sentTo('fcm-mum')).toHaveLength(1);
       expect(sentTo('fcm-dad')).toHaveLength(0);
     });
+
+    it('counts hours up to tonight\u2019s bedtime as allowed when a bedtime extension is in place', async () => {
+      // Alex's schedule has bedtime 24:00, so the offline window is the whole day.
+      // Add a bedtime extension that moves bedtime earlier (e.g. 11:00), so the
+      // 6-hour window may extend past the usual bedtime.
+      // We set the extension to a time that is still in the future, so the
+      // 6-hour window ending before now is still "allowed".
+      const { bedtimeExtensions } = await import('../src/db/schema.js');
+      const localDate = new Intl.DateTimeFormat('en-CA', { timeZone: middayZone() }).format(new Date());
+      // Set bedtime to 23:00 (still in the future at midday).
+      await db.insert(bedtimeExtensions).values({
+        familyId: familyA,
+        kidId: phone.kidId,
+        day: localDate,
+        bedtime: '23:00',
+        createdBy: dadId,
+      });
+      await lastSeen(phone, 7);
+      // The phone was last seen 7 hours ago. With bedtime 23:00 and now ~12:30,
+      // the 6-hour window (from ~6:30 to ~12:30) is entirely before 23:00, so it is allowed.
+      expect(await sweep(deps)).toEqual({ sosStopped: 0, offline: 1 });
+    });
   });
 
   describe('startSweeps', () => {

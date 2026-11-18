@@ -7,7 +7,9 @@ import {
   type DeviceForm,
   DeviceState,
   type Pool,
+  type Schedule,
   Today,
+  type TodayBedtime,
   UsageReceipt,
   type UsageSegmentIn,
   UsageUpload,
@@ -38,7 +40,7 @@ import { toSchedule } from '../kids/routes.js';
 import { notifyParents, stateChanged } from '../notify/dispatch.js';
 import { bearer, deviceBearer, errorResponses, jsonBody, jsonResponse } from '../openapi.js';
 import type { createRouter } from '../router.js';
-import { activeParentModes, dayGrants, daySegments, familyDay, poolStatus } from './day.js';
+import { activeParentModes, dayGrants, daySegments, familyDay, poolStatus, scheduleWithTonightBedtime, tonightBedtime } from './day.js';
 import { recordOverspend } from './overspend.js';
 
 type Router = ReturnType<typeof createRouter>;
@@ -133,13 +135,7 @@ export function registerSyncRoutes(app: Router, deps: AppDeps) {
       const pool = device.pool as Pool;
       const day = await familyDay(tx, family.timezone);
 
-      const [schedule] = await tx
-        .select()
-        .from(scheduleVersions)
-        .where(eq(scheduleVersions.kidId, kidId))
-        .orderBy(desc(scheduleVersions.version))
-        .limit(1);
-      if (!schedule) throw new Error(`kid ${kidId} has no schedule`);
+      const schedule = await scheduleWithTonightBedtime(tx, kidId, day);
       const familyParents = await tx
         .select({ id: parents.id, displayName: parents.displayName, phoneE164: parents.phoneE164 })
         .from(parents)
@@ -238,7 +234,7 @@ export function registerSyncRoutes(app: Router, deps: AppDeps) {
           parents: familyParents,
           contacts,
           messagePresets: presets,
-          schedule: toSchedule(schedule),
+          schedule,
           today: {
             date: day.date,
             grants: poolGrants.map((g) => ({ id: g.id, minutes: g.minutes, createdAt: g.createdAt.toISOString(), byName: g.byName })),
@@ -330,10 +326,6 @@ export function registerSyncRoutes(app: Router, deps: AppDeps) {
       if (!family) throw new Error('family vanished after requireFamilyParent');
       const day = await familyDay(tx, family.timezone);
       const kidRows = await tx.select().from(kids).where(isNull(kids.archivedAt)).orderBy(asc(kids.createdAt), asc(kids.id));
-      const schedules = await tx
-        .selectDistinctOn([scheduleVersions.kidId])
-        .from(scheduleVersions)
-        .orderBy(scheduleVersions.kidId, desc(scheduleVersions.version));
       const deviceRows = await tx
         .select()
         .from(devices)
@@ -343,13 +335,22 @@ export function registerSyncRoutes(app: Router, deps: AppDeps) {
       const allSegments = await daySegments(tx, day);
       const modes = await activeParentModes(tx);
 
+      // Load each kid's schedule with tonight's bedtime, and the bedtime info.
+      const kidSchedules = new Map<string, Schedule>();
+      const kidBedtimes = new Map<string, TodayBedtime>();
+      for (const kid of kidRows) {
+        kidSchedules.set(kid.id, await scheduleWithTonightBedtime(tx, kid.id, day));
+        kidBedtimes.set(kid.id, await tonightBedtime(tx, kid.id, day));
+      }
+
       return {
         serverTime: day.now.toISOString(),
         date: day.date,
         kids: kidRows.map((kid) => {
-          const scheduleRow = schedules.find((s) => s.kidId === kid.id);
-          if (!scheduleRow) throw new Error(`kid ${kid.id} has no schedule`);
-          const schedule = toSchedule(scheduleRow);
+          const schedule = kidSchedules.get(kid.id);
+          if (!schedule) throw new Error(`kid ${kid.id} has no schedule`);
+          const bedtime = kidBedtimes.get(kid.id);
+          if (!bedtime) throw new Error(`kid ${kid.id} has no bedtime`);
           return {
             id: kid.id,
             name: kid.name,
@@ -383,6 +384,7 @@ export function registerSyncRoutes(app: Router, deps: AppDeps) {
                   }),
               };
             }),
+            bedtime,
           };
         }),
       };

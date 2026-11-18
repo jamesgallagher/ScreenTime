@@ -4,11 +4,8 @@ import au.screentime.core.time.formatDuration
 import au.screentime.parent.kids.formatClock
 
 /**
- * Tonight's bedtime of one kid (docs/SPEC.md §7.5), as `GET /v1/today` will send it in `TodayKid.bedtime`. Times are
- * "HH:MM", local; "24:00" is midnight at the end of the day.
- *
- * Until CARD-063 wires it, [TodayViewModel.bedtimeOf] makes it up: every kid's bedtime is 8:30 pm and an extension
- * lasts until the app is closed. CARD-063 fills it from the generated `TodayBedtime`, which has the same fields.
+ * Tonight's bedtime of one kid (docs/SPEC.md §7.5), as `GET /v1/today` sends it in `TodayKid.bedtime`. Times are
+ * "HH:MM", local; "24:00" is midnight at the end of the day. The data comes from `TodayKid.bedtime`.
  */
 data class TonightBedtime(
     /** Today's bedtime from the schedule; "24:00" means none. */

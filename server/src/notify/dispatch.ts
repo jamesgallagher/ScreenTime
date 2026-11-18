@@ -10,6 +10,7 @@ import type { PushMessage, Pusher } from '../push.js';
 /** The notification kind of an event kind (docs/SPEC.md §13), or null for events that never notify. */
 export function notificationKindOf(eventKind: string): NotificationKind | null {
   if (eventKind === 'grant.added') return 'grant.by_other_parent';
+  if (eventKind === 'bedtime.extended') return 'grant.by_other_parent';
   if (eventKind.startsWith('sos.')) return 'sos';
   if (eventKind.startsWith('tamper.')) return 'tamper';
   const parsed = NotificationKind.safeParse(eventKind);
@@ -63,12 +64,17 @@ export async function notifyParents(deps: AppDeps, familyId: string, eventIds: s
   try {
     const messages = await withFamily(db, familyId, async (tx) => {
       const items = await selectEvents(tx, inArray(events.id, eventIds));
-      // The parent who made a grant does not need to hear about it.
-      const authors = await tx
+      // The parent who made a grant or a bedtime extension does not need to hear about it.
+      const grantAuthors = await tx
         .select({ eventId: events.id, parentId: grants.createdBy })
         .from(events)
         .innerJoin(grants, sql`${grants.id}::text = ${events.payload} ->> 'grantId'`)
         .where(and(inArray(events.id, eventIds), eq(events.kind, 'grant.added')));
+      const bedtimeAuthors = await tx
+        .select({ eventId: events.id, parentId: sql`${events.payload} ->> 'parentId'`.mapWith((v: string) => (v ? v : null)) })
+        .from(events)
+        .where(and(inArray(events.id, eventIds), eq(events.kind, 'bedtime.extended')));
+      const authors = [...grantAuthors, ...bedtimeAuthors];
       const sessions = await tx
         .select({ parentId: parentSessions.parentId, token: parentSessions.fcmToken })
         .from(parentSessions)

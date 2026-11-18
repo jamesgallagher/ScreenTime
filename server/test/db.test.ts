@@ -34,6 +34,7 @@ describe.skipIf(!url)('database', () => {
     expect(result.rows.map((r) => r.table_name).sort()).toEqual([
       'app_rules',
       'app_usage_daily',
+      'bedtime_extensions',
       'device_apps',
       'device_games',
       'devices',

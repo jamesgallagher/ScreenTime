@@ -4,6 +4,7 @@ import au.screentime.core.model.api.AvatarColor
 import au.screentime.core.model.api.DeviceForm
 import au.screentime.core.model.api.LockReason
 import au.screentime.core.model.api.Pool
+import au.screentime.core.model.api.TodayBedtime
 import au.screentime.core.model.api.TodayDevice
 import au.screentime.core.model.api.TodayDeviceParentMode
 import au.screentime.core.model.api.TodayKid
@@ -102,6 +103,7 @@ class TodayViewTest {
                     ),
                 ),
             ),
+            TodayBedtime("20:30", "20:30", null, "20:45"),
         )
 
         assertEquals(
@@ -121,7 +123,7 @@ class TodayViewTest {
         val days = device(lastSeenAt = "2026-10-25T05:00:00Z")
         val never = device(lastSeenAt = null)
         val inUseLongAgo = device(inUse = true, lastSeenAt = "2026-10-27T05:00:00Z")
-        fun chips(d: TodayDevice) = kidChips(TodayKid("k", "Sam", AvatarColor._7C3AED, listOf(pool(devices = listOf(d)))), now)
+        fun chips(d: TodayDevice) = kidChips(TodayKid("k", "Sam", AvatarColor._7C3AED, listOf(pool(devices = listOf(d))), TodayBedtime("20:30", "20:30", null, "20:45")), now)
 
         assertEquals(listOf(Chip("Parent mode on PC", ChipTone.NEUTRAL)), chips(endless))
         assertEquals(listOf(Chip("Parent mode on PC · 1 min", ChipTone.NEUTRAL)), chips(ending))
@@ -138,6 +140,7 @@ class TodayViewTest {
             "Alex",
             AvatarColor._0F766E,
             listOf(pool(devices = listOf(pc), overspendSec = 720), pool(which = Pool.PHONE, devices = listOf(pc), overspendSec = 59)),
+            TodayBedtime("20:30", "20:30", null, "20:45"),
         )
 
         assertEquals(
