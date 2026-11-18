@@ -451,6 +451,8 @@ Two kinds of caller: **parent** (Bearer access token from OTP login) and **devic
 | GET | `/v1/me` | parent, family, roles |
 | PUT | `/v1/me/push-token` | `{ fcmToken \| null }` for the session of the access token → 204. The same token is taken off the parent's other sessions. A revoked session → 401 |
 | GET / PUT | `/v1/me/notification-prefs` | GET: every kind of section 13 in a fixed order, each `{ kind, enabled, essential }`. PUT: list of `{ kind, enabled }`, each kind at most once; kinds left out keep their setting; turning off an essential kind → 422. Answers the full list |
+| POST | `/v1/me/app-update/check` | The parent app's own update (section 12.7, CARD-064): `{ versionCode, versionName }` → `{ offer \| null }` as for a device. Stores the version on the session of the access token. Offers `parent.json` when it is newer and, if it lists `parentIds`, the caller is one of them; a web session always gets null |
+| GET | `/v1/me/app-update/apk` | The published parent APK as plain bytes, not in the contract, for a parent it is offered to. 404 otherwise |
 | GET / PATCH | `/v1/family` | name, timezone, emergency number |
 | GET / POST | `/v1/family/parents` | list, add parent (`email`, `displayName`, `phoneE164`) |
 | PATCH / DELETE | `/v1/family/parents/{id}` | edit, disable |
@@ -715,7 +717,7 @@ Messages and requests are sent through the server. If the phone has no data, the
 
 **Removal (CARD-059).** In parent mode the main screen has **Remove Screen Time**. It always asks for the parent code, even though parent mode is already on, because parent mode can be turned on remotely while the kid holds the device. Then the app tells the server (`POST /v1/device/removed`: the device is revoked and parents get `device.removed`; offline it carries on, and the device stays listed until a parent removes it), frees every blocked app, clears its policies, gives up Device Owner, forgets its enrolment and opens Android's uninstall question. If that question is cancelled, the app shows the setup screen. Without Device Owner the service does not start, since Android refuses its foreground type.
 
-**The parent app (CARD-054)** is signed with the same key file, is installed once with adb and does not update itself; it needs no Device Owner.
+**The parent app (CARD-054)** is signed with the same key file and needs no Device Owner. It is installed once from the download page (or with adb) and then updates itself on a parent's tap (section 12.7).
 
 **minSdk = 34 (Android 14)**, decided 22 Oct 2026: the XPPen tablet runs Android 14 and the Pixel 7 is newer. This lets the app use foreground service type `systemExempted` everywhere with no fallback code. `targetSdk` = 36 and `compileSdk` = 37 (Compose 1.12, in BOM 2026.09, requires compileSdk 37; found 22 Oct 2026). The parent app uses the same minSdk.
 
@@ -847,6 +849,23 @@ Each of them, and a PC's list that changes a game whose shortcut is on, sends `s
 **Starting.** A shortcut runs `ScreenTime.Tray.exe --play <id>`, which reads `games.json`, starts the exe in its own folder with `__COMPAT_LAYER=RunAsInvoker`, and ends. For a known game it first reads `config.ini` next to the exe and, when `sub_channel` is one that stops a direct start (6 for Genshin, 3 for Star Rail), writes `sub_channel=0` and `cps=hoyoverse`, leaving every other line as it was. A program a parent added is started as it is. If the game is not in the list or cannot be started, a small message says so. Nothing runs elevated at any point, so a shortcut can only start what the kid could already start.
 
 **What it does not do.** Updating a game still goes through its launcher and needs a parent. Time is counted as before: Windows counts the session, not the game. The Android parent app has no Games screen yet; the web app does (16.5).
+
+### 12.7 Parent app updates (James, 18 Nov 2026; CARD-064)
+
+The parent app finds and downloads its own updates and installs one when a parent taps **Update**. It cannot install silently like the kid app, which is Device Owner. An emulator spike on 18 Nov 2026 (API 37, Play Store image) showed what Android allows an ordinary app:
+
+- **The first update always asks.** The app was installed by the browser, so Android shows "Update this app?" (and, until "Install unknown apps" is allowed for ST Parent, its screen to allow that). After one confirmed update the app is its own installer of record.
+- **Later updates ask nothing from Android**, even from the background, when the app declares `REQUEST_INSTALL_PACKAGES` and `UPDATE_PACKAGES_WITHOUT_USER_ACTION` and asks with `setRequireUserAction(USER_ACTION_NOT_REQUIRED)`. Without that permission every update asks.
+- **Play Protect asks for every version it has not seen** ("App scan recommended": **Scan app** sends the APK to Google, **Install without scanning** is under **More details**), also over the home screen. Whether a real parent phone does the same is not proven.
+
+So installing waits for a tap: whatever question comes, it comes right after the parent asked for it.
+
+- **Publishing.** `deploy/publish-downloads.ps1 -Parent` writes `parent.json` as before (section 12.5). `-ParentId <id>` adds `parentIds`, to offer a version to one parent's phone first; the download page shows it to everyone either way.
+- **Checking.** When the app comes to the front and a parent is signed in, it asks `POST /v1/me/app-update/check`: the first time after the app starts, then at most every 6 hours (every minute in a debug build). That also stores the version on the session, so the server knows which version each parent phone has. A failed check is ignored and tried at the next one.
+- **Downloading.** On a network that is not metered the app downloads `GET /v1/me/app-update/apk` by itself; on mobile data it waits and the row says how big it is, and **Update** downloads first. A file is kept only when its size and SHA-256 match the offer, in the app's cache, and older files are deleted.
+- **Installing.** **Update** installs with `PackageInstaller` as described above. If Android needs the parent (`STATUS_PENDING_USER_ACTION`), the app opens Android's screen at once. Any question answered no, or any failure, shows "didn't install" with **Update** to try again. While an SOS is on, nothing is offered: an install closes the app, and with it the alarm.
+- **The screens.** A quiet row at the top of every tab, under the SOS banner and above Waiting for you: "ST Parent 0.1.3 is out · Update downloads 34 MB." / "Getting ST Parent 0.1.3…" / "ST Parent 0.1.3 is ready · Takes a few seconds. The app opens again by itself." / "Updating ST Parent…" / "ST Parent 0.1.3 didn't install · Tap Update to try again." Settings shows "Version 0.1.2" with "Up to date", "0.1.3 is ready" and the like under it, and **Check for updates** when there is nothing newer to act on.
+- A phone on 0.1.2 or older has no updater: it needs one install of the first version that has it, from the download page.
 
 ## 13. Notifications
 
@@ -1045,6 +1064,8 @@ Status chips under each kid: "Using PC now", "Parent mode on Pixel 7 · 10 min",
 **Inbox:** pending time requests at top as cards ("Alex wants 30 min of Phone · 'finishing homework video'") with **Yes** (opens the roller preset to the requested amount) and **No**; then messages and events in time order.
 
 **Waiting for you** (James, 18 Nov 2026; CARD-062): a small card at the top of every tab, under the SOS banner and above the tab's title, listing everything a kid is waiting on until a parent answers it: time requests (**Other amount**, **No**, **Yes, 30m**), parent-mode requests ("answer by 3:40 pm", **Answer** opens the approval page), new apps held for approval (**Block**, **Allow**) and messages (**Got it**, which marks it seen for both parents). Nothing is drawn when nothing waits. Folded it shows the newest item and **Show 2 more**; open, every item, scrolling inside the card past 360 dp. A tapped notification for a waiting item opens the card, and a notification for something no longer waiting is cleared when the list next loads (tag `waiting:<event id>`). The Inbox tab keeps only the history and loses its badge. SOS is not a waiting item: it keeps its own red banner.
+
+**Update row** (James, 18 Nov 2026; CARD-064): when a newer ST Parent is out, one row at the top of every tab, under the SOS banner and above Waiting for you, in the surface colour with an outline (not the waiting card's tint), with the words of section 12.7 and **Update** on the right, or a small spinner while it downloads or installs. The title turns the critical colour when it didn't install. Nothing while an SOS is on. Settings ends with the version, its status and **Check for updates**.
 
 **Kids › kid:** today summary, devices (name, form icon, last seen, **Parent mode**, rename, remove), **Schedule** editor (7 rows: day, Screens, Phone, Wake, Bedtime as tappable time chips; **Copy Monday to weekdays** and **Copy Saturday to weekend**; warnings 15/5 steppers), **Always callable** contacts list (add from phone contacts or type), **Add device** (pick Phone, Tablet, PC → full-screen QR code plus the 6 digits in 48 sp and a 10-minute countdown).
 
