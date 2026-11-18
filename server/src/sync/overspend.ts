@@ -2,8 +2,7 @@ import { and, desc, eq, sql } from 'drizzle-orm';
 import type { Pool } from '@screentime/schemas';
 import type { FamilyTx } from '../db/family.js';
 import { devices, events, families, grants, scheduleVersions, usageSegments } from '../db/schema.js';
-import { toSchedule } from '../kids/routes.js';
-import { dayGrants, daySegments, familyDay, poolStatus } from './day.js';
+import { dayGrants, daySegments, familyDay, poolStatus, scheduleWithTonightBedtime } from './day.js';
 
 /** Less than this is not worth telling a parent about, and is the least a new report must add. */
 const STEP_SEC = 60;
@@ -22,17 +21,11 @@ export async function recordOverspend(tx: FamilyTx, kidId: string, deviceId: str
   if (!row) throw new Error('device vanished after requireDevice');
   const pool = row.device.pool as Pool;
   const day = await familyDay(tx, row.timezone);
-  const [scheduleRow] = await tx
-    .select()
-    .from(scheduleVersions)
-    .where(eq(scheduleVersions.kidId, kidId))
-    .orderBy(desc(scheduleVersions.version))
-    .limit(1);
-  if (!scheduleRow) throw new Error(`kid ${kidId} has no schedule`);
+  const schedule = await scheduleWithTonightBedtime(tx, kidId, day);
   const status = poolStatus(
     row.timezone,
     day,
-    toSchedule(scheduleRow),
+    schedule,
     pool,
     await dayGrants(tx, day, and(eq(grants.kidId, kidId), eq(grants.pool, pool))),
     await daySegments(tx, day, and(eq(usageSegments.kidId, kidId), eq(usageSegments.pool, pool))),

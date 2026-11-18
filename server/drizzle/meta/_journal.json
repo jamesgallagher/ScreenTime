@@ -78,6 +78,13 @@
       "when": 1794951032785,
       "tag": "0010_kid_message_seen",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1794958124399,
+      "tag": "0011_bedtime_extensions",
+      "breakpoints": true
     }
   ]
 }

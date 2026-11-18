@@ -10,7 +10,7 @@ import { findKid, toSchedule } from '../kids/routes.js';
 import { notifyParents, sendToDevices } from '../notify/dispatch.js';
 import { bearer, errorResponses, jsonBody, jsonResponse } from '../openapi.js';
 import type { createRouter } from '../router.js';
-import { dayGrants, daySegments, type FamilyDay, familyDay, poolStatus } from '../sync/day.js';
+import { dayGrants, daySegments, type FamilyDay, familyDay, poolStatus, scheduleWithTonightBedtime } from '../sync/day.js';
 
 type Router = ReturnType<typeof createRouter>;
 
@@ -235,18 +235,12 @@ export function registerGrantRoutes(app: Router, deps: AppDeps) {
       await findKid(tx, kidId);
       const stored = await existing(tx, id, kidId);
       if (stored) return { grant: stored, created: false, pushes: null };
-      const { timezone, day } = await familyToday(tx, familyId);
-      const [scheduleRow] = await tx
-        .select()
-        .from(scheduleVersions)
-        .where(eq(scheduleVersions.kidId, kidId))
-        .orderBy(desc(scheduleVersions.version))
-        .limit(1);
-      if (!scheduleRow) throw new Error(`kid ${kidId} has no schedule`);
+      const { day } = await familyToday(tx, familyId);
+      const schedule = await scheduleWithTonightBedtime(tx, kidId, day);
       const status = poolStatus(
-        timezone,
+        day.timezone,
         day,
-        toSchedule(scheduleRow),
+        schedule,
         pool,
         await dayGrants(tx, day, and(eq(grants.kidId, kidId), eq(grants.pool, pool))),
         await daySegments(tx, day, and(eq(usageSegments.kidId, kidId), eq(usageSegments.pool, pool))),
