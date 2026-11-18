@@ -56,6 +56,7 @@ import au.screentime.parent.sos.SosNews
 import au.screentime.parent.today.REFRESH_MS
 import au.screentime.parent.today.TodayScreen
 import au.screentime.parent.today.TodayViewModel
+import au.screentime.parent.update.UpdateRow
 import java.time.ZoneId
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -166,6 +167,8 @@ fun HomeScreen(
                 }
             }
             val familyZone = runCatching { ZoneId.of(me.family!!.timezone) }.getOrElse { ZoneId.systemDefault() }
+            // A newer ST Parent, on every tab; nothing while an SOS is on or when there is nothing newer.
+            UpdateRow(sosActive = !activeSos.isNullOrEmpty())
             // Everything a kid is waiting on, on every tab; nothing at all when nothing waits.
             WaitingStrip(inbox, familyZone, onParentMode)
             Box(modifier = Modifier.weight(1f)) {

@@ -26,6 +26,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -43,6 +44,9 @@ import androidx.lifecycle.repeatOnLifecycle
 import au.screentime.core.model.api.Me
 import au.screentime.core.ui.ScreenTimeTheme
 import au.screentime.parent.BuildConfig
+import au.screentime.parent.update.ParentUpdates
+import au.screentime.parent.update.canCheck
+import au.screentime.parent.update.versionStatus
 
 /** The Settings tab (docs/SPEC.md §16.4): who is signed in, the app lock, the parent code, and sign out. */
 @Composable
@@ -123,15 +127,7 @@ fun SettingsScreen(me: Me, secure: Boolean, onSignOut: () -> Unit) {
                 ) {
                     Text("Sign out")
                 }
-                Text(
-                    text = "Version ${BuildConfig.VERSION_NAME}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = ScreenTimeTheme.colors.muted,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 16.dp),
-                    textAlign = TextAlign.Center,
-                )
+                VersionFooter()
             }
         }
     }
@@ -238,4 +234,39 @@ private fun SosAlarmCard() {
         fontSize = 14.sp,
         color = ScreenTimeTheme.colors.muted,
     )
+}
+
+/**
+ * "Version 0.1.2", what the app knows about a newer one, and **Check for updates** (docs/SPEC.md §12.7). Installing
+ * happens from the row at the top of the app, so this only says where things stand.
+ */
+@Composable
+private fun VersionFooter() {
+    val state by ParentUpdates.source.state.collectAsState()
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            text = "Version ${BuildConfig.VERSION_NAME}",
+            style = MaterialTheme.typography.bodySmall,
+            color = ScreenTimeTheme.colors.muted,
+            textAlign = TextAlign.Center,
+        )
+        versionStatus(state)?.let {
+            Text(
+                text = it,
+                style = MaterialTheme.typography.bodySmall,
+                color = ScreenTimeTheme.colors.muted,
+                textAlign = TextAlign.Center,
+            )
+        }
+        if (canCheck(state)) {
+            TextButton(onClick = { ParentUpdates.source.checkNow() }, modifier = Modifier.heightIn(min = 48.dp)) {
+                Text("Check for updates")
+            }
+        }
+    }
 }
