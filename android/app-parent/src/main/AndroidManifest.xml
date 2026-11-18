@@ -11,6 +11,13 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
+    <!--
+        Self-update (docs/SPEC.md §12.7): the app installs a new version on a parent's tap. Both permissions are
+        needed: the first asks Android to allow "Install unknown apps", the second lets the app commit an install
+        without a second user action once it is the installer of record.
+    -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" />
 
     <!--
         No backup and no device-to-device transfer: the sign-in is encrypted with a key that never leaves this
@@ -60,6 +67,11 @@
             android:name=".sos.SosAlarm"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
+
+        <!-- Android's answer to a parent app install (docs/SPEC.md §12.7, CARD-064). -->
+        <receiver
+            android:name=".update.ParentUpdateResultReceiver"
+            android:exported="false" />
 
     </application>
 

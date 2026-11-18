@@ -2,6 +2,9 @@
 # The kid app is published with android\publish-kid.ps1, which also feeds that page. From the repo root, with pwsh:
 #   pwsh -File deploy\publish-downloads.ps1 -Parent             the parent app: raise versionCode and versionName in
 #                                                              android\app-parent\build.gradle.kts first
+#   pwsh -File deploy\publish-downloads.ps1 -Parent -ParentId <uuid>
+#                                                              the parent app, offered to that one parent only
+#                                                              (parent.json gets parentIds: [<id>])
 #   pwsh -File deploy\publish-downloads.ps1 -Windows            the newest ScreenTime.msi that CI built on main
 #   pwsh -File deploy\publish-downloads.ps1 -Parent -Windows    both
 #   ... -To deploy\releases                                    a folder instead: the development server's
@@ -11,6 +14,7 @@ param(
     [switch]$Windows,
     [string]$To,
     [string]$DeviceId,
+    [string]$ParentId,
     [string]$RunId,
     [string]$Ssh = 'root@192.168.0.148',
     [string]$SshDir = '/mnt/user/appdata/screentime/releases',
@@ -40,7 +44,7 @@ function Send-File([string]$path, [string]$file, [string]$jsonName, [hashtable]$
     Write-Output "Published $($release.versionName): $file, $($release.sizeBytes) bytes"
 }
 
-function Describe([string]$path, [string]$file, [string]$versionName, $versionCode, [string]$deviceId) {
+function Describe([string]$path, [string]$file, [string]$versionName, $versionCode, [string]$deviceId, [string]$parentId) {
     $release = [ordered]@{
         versionName = $versionName
         sha256      = (Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -49,13 +53,15 @@ function Describe([string]$path, [string]$file, [string]$versionName, $versionCo
     }
     if ($versionCode) { $release.versionCode = [int]$versionCode }
     if ($deviceId) { $release.deviceIds = @($deviceId) }
+    if ($parentId) { $release.parentIds = @($parentId) }
     return $release
 }
 
 if ($Parent) {
     $gradle = Get-Content "$root\android\app-parent\build.gradle.kts" -Raw
-    $code = [regex]::Match($gradle, 'versionCode\s*=\s*(\d+)').Groups[1].Value
-    $name = [regex]::Match($gradle, 'versionName\s*=\s*"([^"]+)"').Groups[1].Value
+    $code = [regex]::Match($gradle, 'versionCode\s*=.*?:\s*(\d+)').Groups[1].Value
+    $nameLine = ($gradle -split "\n" | Select-String -Pattern 'versionName\s*=')[0].Line
+    $name = ($nameLine -split '"')[-2]
     if (-not $code -or -not $name) { throw 'No versionCode or versionName in android\app-parent\build.gradle.kts.' }
     if (-not (Test-Path "$root\android\keystore.properties")) { throw 'No android\keystore.properties: a release build would not be signed.' }
     if (-not (Test-Path "$root\android\app-parent\google-services.json")) { throw 'No android\app-parent\google-services.json: the app would get no push messages.' }
@@ -64,7 +70,7 @@ if ($Parent) {
     if ($LASTEXITCODE -ne 0) { throw 'The parent app did not build.' }
     $apk = "$root\android\app-parent\build\outputs\apk\release\app-parent-release.apk"
     $file = "parent-$code.apk"
-    Send-File $apk $file 'parent.json' (Describe $apk $file $name $code $null)
+    Send-File $apk $file 'parent.json' (Describe $apk $file $name $code $null $ParentId)
 }
 
 if ($Windows) {

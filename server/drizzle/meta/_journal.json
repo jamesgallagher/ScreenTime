@@ -85,6 +85,13 @@
       "when": 1794958124399,
       "tag": "0011_bedtime_extensions",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1794971664796,
+      "tag": "0012_parent_app_version",
+      "breakpoints": true
     }
   ]
 }

@@ -56,6 +56,7 @@ import au.screentime.parent.sos.SosNews
 import au.screentime.parent.today.REFRESH_MS
 import au.screentime.parent.today.TodayScreen
 import au.screentime.parent.today.TodayViewModel
+import au.screentime.parent.update.ParentUpdates
 import au.screentime.parent.update.UpdateRow
 import java.time.ZoneId
 import kotlinx.coroutines.delay
@@ -95,6 +96,8 @@ fun HomeScreen(
                 }
             }
             loadSos()
+            // The app's own update: checks when one is due (docs/SPEC.md §12.7).
+            ParentUpdates.source.onForeground()
             launch {
                 while (true) {
                     inbox.load()

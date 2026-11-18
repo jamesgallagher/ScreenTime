@@ -32,8 +32,8 @@ android {
         applicationId = "au.screentime.parent"
         minSdk = 34
         targetSdk = 36
-        versionCode = 3
-        versionName = "0.1.2"
+        versionCode = (findProperty("parentVersionCode") as String?)?.toInt() ?: 3
+        versionName = (findProperty("parentVersionName") as String?) ?: "0.1.2"
         for (name in listOf("FIREBASE_APP_ID", "FIREBASE_API_KEY", "FIREBASE_PROJECT_ID", "FIREBASE_SENDER_ID")) {
             buildConfigField("String", name, "\"${firebase[name].orEmpty()}\"")
         }

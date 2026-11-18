@@ -138,6 +138,27 @@ class SessionTest {
     }
 
     @Test
+    fun theAccessTokenFunctionReturnsTheCurrentTokenAndARefreshedOneWhenStale() = runBlocking {
+        val store = MemoryStore()
+        val session = session(store) { request ->
+            when (request.url.encodedPath) {
+                "/v1/auth/otp/verify" -> tokens("a1", "r1")
+                "/v1/auth/refresh" -> tokens("a2", "r2")
+                else -> respond("", HttpStatusCode.NoContent)
+            }
+        }
+        session.verify("dad@example.com", "123456", "Pixel 10")
+
+        // The current token is returned without a refresh.
+        assertEquals("a1", session.accessToken())
+
+        // Once it is a minute past running out, it refreshes and returns the new one.
+        now += 841_000
+        assertEquals("a2", session.accessToken())
+        assertEquals("r2", store.saved?.refreshToken)
+    }
+
+    @Test
     fun a401SwapsTheTokensAndTriesOnceMore() = runBlocking {
         val store = MemoryStore()
         var logouts = 0
