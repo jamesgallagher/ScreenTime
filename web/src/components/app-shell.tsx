@@ -1,6 +1,6 @@
 import type { Me } from '@screentime/schemas';
 import { Link } from '@tanstack/react-router';
-import { Inbox, LogOut, Menu, Settings, Shield, Sun, Users } from 'lucide-react';
+import { BarChart3, Inbox, LogOut, Menu, Settings, Shield, Sun, Users } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { Brand } from '@/components/brand';
 import { Button } from '@/components/ui/button';
@@ -11,11 +11,12 @@ const FAMILY_LINKS = [
   { to: '/', label: 'Today', icon: Sun },
   { to: '/inbox', label: 'Inbox', icon: Inbox },
   { to: '/kids', label: 'Kids', icon: Users },
+  { to: '/reports', label: 'Reports', icon: BarChart3 },
   { to: '/settings', label: 'Settings', icon: Settings },
 ] as const;
 const ADMIN_LINK = { to: '/admin', label: 'Admin', icon: Shield } as const;
 
-/** Today, Inbox, Kids, Settings for a parent; Admin for the super admin (a super admin with no family sees only Admin). */
+/** Today, Inbox, Kids, Reports, Settings for a parent; Admin for the super admin (a super admin with no family sees only Admin). */
 export function navLinks(me: Me) {
   const family = me.family ? FAMILY_LINKS : [];
   return me.roles.includes('superadmin') ? [...family, ADMIN_LINK] : [...family];
