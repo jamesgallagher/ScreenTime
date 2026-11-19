@@ -195,7 +195,9 @@ function AppRow({ app, kidId, timeZone }: { app: KidApp; kidId: string; timeZone
 }
 
 /** docs/SPEC.md §12.4 and §16.5: what is on the kid's Android devices, what is new, and what is blocked. */
-export function AppsPanel({ kidId, kidName }: { kidId: string; kidName: string }) {
+export function AppsPanel({ kidId, kidName, shared = false }: { kidId: string; kidName: string; shared?: boolean }) {
+  // A shared device (docs/SPEC.md §12.8) is named on its own: "Mum's tablet", not "Mum's tablet's device".
+  const device = shared ? kidName : `${kidName}'s device`;
   const auth = useAuth();
   const queryClient = useQueryClient();
   const timeZone = (auth.status === 'signedIn' && auth.me.family?.timezone) || 'UTC';
@@ -231,7 +233,7 @@ export function AppsPanel({ kidId, kidName }: { kidId: string; kidName: string }
             <label htmlFor="new-app-approval" className="font-medium">
               New apps need approval
             </label>
-            <p className="text-sm text-muted">A new app on {kidName}'s device stays blocked until a parent says yes.</p>
+            <p className="text-sm text-muted">A new app on {device} stays blocked until a parent says yes.</p>
             {approval.error && (
               <p role="alert" className="mt-1 text-sm text-danger">
                 {messageOf(approval.error)}
@@ -249,13 +251,15 @@ export function AppsPanel({ kidId, kidName }: { kidId: string; kidName: string }
       <Card>
         <CardHeader>
           <CardTitle>Apps</CardTitle>
-          <CardDescription>What's on {kidName}'s Android devices, with the newest installs first.</CardDescription>
+          <CardDescription>
+            What's on {shared ? kidName : `${kidName}'s Android devices`}, with the newest installs first.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {apps.data.apps.length === 0 ? (
             <div className="flex flex-col items-center gap-2 rounded-xl bg-surface-variant/60 py-8 text-center">
               <AppWindow className="size-6 text-muted" />
-              <p className="text-sm text-muted">No apps yet. They show up after {kidName}'s device next connects.</p>
+              <p className="text-sm text-muted">No apps yet. They show up after {device} next connects.</p>
             </div>
           ) : (
             <ul>

@@ -14,11 +14,12 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ApiError } from '@/lib/api';
+import { isShared, poolLabel, poolsShown, sharedForm } from '@/lib/shared';
 import { kidChips } from '@/lib/today';
 import { useDevices, useKids } from '@/pages/kids';
 import { BedtimeRow, ChipList, PoolRow, useToday } from '@/pages/today';
 
-function TodayPanel({ kid }: { kid: Kid }) {
+function TodayPanel({ kid, shared }: { kid: Kid; shared: boolean }) {
   const today = useToday();
   const [adjusting, setAdjusting] = useState<Pool | null>(null);
   const [bedtimeOpen, setBedtimeOpen] = useState(false);
@@ -27,8 +28,14 @@ function TodayPanel({ kid }: { kid: Kid }) {
   return (
     <Card>
       <CardContent className="flex flex-col gap-5">
-        {todayKid.pools.map((pool) => (
-          <PoolRow key={pool.pool} kid={todayKid} pool={pool} onAdjust={() => setAdjusting(pool.pool)} />
+        {poolsShown(todayKid).map((pool) => (
+          <PoolRow
+            key={pool.pool}
+            kid={todayKid}
+            pool={pool}
+            label={poolLabel(pool.pool, shared)}
+            onAdjust={() => setAdjusting(pool.pool)}
+          />
         ))}
         <BedtimeRow kid={todayKid} onExtend={() => setBedtimeOpen(true)} />
         <ChipList chips={kidChips(todayKid, new Date(today.data.serverTime))} />
@@ -57,6 +64,7 @@ export function KidPage({ kidId }: { kidId: string }) {
   const devices = useDevices();
   const [editing, setEditing] = useState(false);
   const kid = kids.data?.find((k) => k.id === kidId);
+  const shared = kid ? isShared(kid) : false;
   // Apps are Android only (docs/SPEC.md §12.4).
   const hasAndroid = devices.data?.some((d) => d.kidId === kidId && d.platform === 'android') ?? false;
 
@@ -104,8 +112,16 @@ export function KidPage({ kidId }: { kidId: string }) {
     <>
       <BackLink />
       <div className="mb-6 flex items-center gap-4">
-        <KidAvatar name={kid.name} color={kid.avatarColor} className="size-14 text-xl" />
-        <h1 className="min-w-0 flex-1 truncate text-2xl font-semibold tracking-tight">{kid.name}</h1>
+        <KidAvatar
+          name={kid.name}
+          color={kid.avatarColor}
+          form={shared ? sharedForm(devices.data, kid.id) : undefined}
+          className="size-14 text-xl"
+        />
+        <div className="min-w-0 flex-1">
+          <h1 className="truncate text-2xl font-semibold tracking-tight">{kid.name}</h1>
+          {shared && <p className="text-sm text-muted">Shared device · its own time, never a kid's</p>}
+        </div>
         <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
           <Pencil />
           Edit
@@ -115,27 +131,29 @@ export function KidPage({ kidId }: { kidId: string }) {
         <TabsList aria-label={`${kid.name}'s settings`}>
           <TabsTrigger value="today">Today</TabsTrigger>
           <TabsTrigger value="schedule">Schedule</TabsTrigger>
-          <TabsTrigger value="devices">Devices</TabsTrigger>
-          <TabsTrigger value="contacts">Contacts</TabsTrigger>
+          <TabsTrigger value="devices">{shared ? 'Device' : 'Devices'}</TabsTrigger>
+          {!shared && <TabsTrigger value="contacts">Contacts</TabsTrigger>}
           {hasAndroid && <TabsTrigger value="apps">Apps</TabsTrigger>}
         </TabsList>
         <TabsContent value="today">
-          <TodayPanel kid={kid} />
+          <TodayPanel kid={kid} shared={shared} />
         </TabsContent>
         <TabsContent value="schedule">
-          <ScheduleEditor kidId={kid.id} kidName={kid.name} />
+          <ScheduleEditor kidId={kid.id} kidName={kid.name} shared={shared} />
         </TabsContent>
         <TabsContent value="devices">
-          <DevicesPanel kidId={kid.id} kidName={kid.name} />
+          <DevicesPanel kidId={kid.id} kidName={kid.name} shared={shared} />
         </TabsContent>
-        <TabsContent value="contacts">
-          <ContactsEditor kidId={kid.id} kidName={kid.name} />
-        </TabsContent>
+        {!shared && (
+          <TabsContent value="contacts">
+            <ContactsEditor kidId={kid.id} kidName={kid.name} />
+          </TabsContent>
+        )}
         <TabsContent value="apps">
-          <AppsPanel kidId={kid.id} kidName={kid.name} />
+          <AppsPanel kidId={kid.id} kidName={kid.name} shared={shared} />
         </TabsContent>
       </Tabs>
-      <KidDialog open={editing} kid={kid} onClose={() => setEditing(false)} />
+      <KidDialog open={editing} kid={kid} shared={shared} onClose={() => setEditing(false)} />
     </>
   );
 }

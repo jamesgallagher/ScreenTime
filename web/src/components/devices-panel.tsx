@@ -257,7 +257,7 @@ function DeviceRow({
 }
 
 /** docs/SPEC.md §16.4 devices: name, form icon, last seen, Parent mode, rename, Games on a PC, remove, and Add device. */
-export function DevicesPanel({ kidId, kidName }: { kidId: string; kidName: string }) {
+export function DevicesPanel({ kidId, kidName, shared = false }: { kidId: string; kidName: string; shared?: boolean }) {
   const devices = useDevices();
   const today = useToday();
   const [action, setAction] = useState<Action | null>(null);
@@ -276,13 +276,20 @@ export function DevicesPanel({ kidId, kidName }: { kidId: string; kidName: strin
         <CardContent className="flex flex-col gap-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="text-lg font-semibold">Devices</h2>
-              <p className="text-sm text-muted">Phones count as Phone time. Tablets and PCs share Screens time.</p>
+              <h2 className="text-lg font-semibold">{shared ? 'Device' : 'Devices'}</h2>
+              <p className="text-sm text-muted">
+                {shared
+                  ? 'One phone, tablet or PC with its own time. It never counts against a kid.'
+                  : 'Phones count as Phone time. Tablets and PCs share Screens time.'}
+              </p>
             </div>
-            <Button onClick={() => setAdding(true)}>
-              <Plus />
-              Add device
-            </Button>
+            {/* A shared device has one device at most (docs/SPEC.md §12.8). */}
+            {!(shared && (mine?.length ?? 0) > 0) && (
+              <Button onClick={() => setAdding(true)}>
+                <Plus />
+                {shared ? 'Connect the device' : 'Add device'}
+              </Button>
+            )}
           </div>
           {devices.isError && !mine ? (
             <div className="flex flex-col items-center gap-3 py-8 text-center">
@@ -299,7 +306,9 @@ export function DevicesPanel({ kidId, kidName }: { kidId: string; kidName: strin
           ) : mine.length === 0 ? (
             <div className="flex flex-col items-center gap-2 rounded-xl bg-surface-variant/60 py-8 text-center">
               <Smartphone className="size-6 text-muted" />
-              <p className="text-sm text-muted">No devices yet. Add {kidName}'s phone, tablet or PC.</p>
+              <p className="text-sm text-muted">
+                {shared ? 'Not connected yet. Connect the tablet, phone or PC.' : `No devices yet. Add ${kidName}'s phone, tablet or PC.`}
+              </p>
             </div>
           ) : (
             <div>
@@ -323,6 +332,7 @@ export function DevicesPanel({ kidId, kidName }: { kidId: string; kidName: strin
         open={adding}
         kidId={kidId}
         kidName={kidName}
+        shared={shared}
         onClose={() => {
           setAdding(false);
           void today.refetch();

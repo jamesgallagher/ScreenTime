@@ -49,8 +49,14 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import au.screentime.parent.kids.formBadge
+import au.screentime.parent.kids.isShared
+import au.screentime.parent.kids.poolLabel
+import au.screentime.parent.kids.poolsShown
 import androidx.lifecycle.repeatOnLifecycle
 import au.screentime.core.model.api.Pool
+import au.screentime.core.model.api.DeviceForm
 import au.screentime.core.model.api.TodayKid
 import au.screentime.core.model.api.TodayPool
 import au.screentime.core.ui.AvatarColors
@@ -125,7 +131,10 @@ fun TodayScreen(vm: TodayViewModel) {
                             )
                         }
                     }
-                    items(today.kids, key = { it.id }) { kid ->
+                    // Kids first, then the shared devices under their own heading (docs/SPEC.md §12.8).
+                    val kids = today.kids.filterNot { isShared(it) }
+                    val shared = today.kids.filter { isShared(it) }
+                    items(kids, key = { it.id }) { kid ->
                         KidCard(
                             kid = kid,
                             now = now,
@@ -133,6 +142,27 @@ fun TodayScreen(vm: TodayViewModel) {
                             onAdjust = { adjusting = kid.id to it.pool },
                             onBedtime = { bedtimeKidId = kid.id },
                         )
+                    }
+                    if (shared.isNotEmpty()) {
+                        item {
+                            Text(
+                                text = "Shared devices",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onBackground,
+                                modifier = Modifier.padding(top = 8.dp),
+                            )
+                        }
+                        items(shared, key = { it.id }) { kid ->
+                            KidCard(
+                                kid = kid,
+                                now = now,
+                                bedtime = vm.bedtimeOf(kid),
+                                shared = true,
+                                onAdjust = { adjusting = kid.id to it.pool },
+                                onBedtime = { bedtimeKidId = kid.id },
+                            )
+                        }
                     }
                 }
             }
@@ -152,6 +182,7 @@ private fun KidCard(
     kid: TodayKid,
     now: Instant,
     bedtime: TonightBedtime,
+    shared: Boolean = false,
     onAdjust: (TodayPool) -> Unit,
     onBedtime: () -> Unit,
 ) {
@@ -164,7 +195,7 @@ private fun KidCard(
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Avatar(kid)
+                Avatar(kid, if (shared) formBadge(todayForm(kid)) else null)
                 Spacer(Modifier.size(12.dp))
                 Text(
                     text = kid.name,
@@ -173,9 +204,9 @@ private fun KidCard(
                     color = MaterialTheme.colorScheme.onSurface,
                 )
             }
-            for (pool in kid.pools) {
+            for (pool in poolsShown(kid.pools, shared)) {
                 Spacer(Modifier.height(16.dp))
-                PoolRow(kid, pool) { onAdjust(pool) }
+                PoolRow(kid, pool, poolLabel(pool.pool, shared)) { onAdjust(pool) }
             }
             Spacer(Modifier.height(16.dp))
             BedtimeRow(kid, bedtime, onBedtime)
@@ -194,9 +225,9 @@ private fun KidCard(
     }
 }
 
-/** The kid's avatar: a 40 dp circle in the kid's colour with the initial. */
+/** The kid's avatar: a 40 dp circle in the kid's colour with the initial, or a shared device's device picture. */
 @Composable
-private fun Avatar(kid: TodayKid) {
+private fun Avatar(kid: TodayKid, badge: String? = null) {
     val color = AvatarColors.getOrElse(kid.avatarColor.ordinal) { AvatarColors[0] }
     Box(
         modifier = Modifier
@@ -204,19 +235,27 @@ private fun Avatar(kid: TodayKid) {
             .background(color, CircleShape),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = initial(kid.name),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = Color.White,
-        )
+        if (badge != null) {
+            Text(badge, fontSize = 20.sp)
+        } else {
+            Text(
+                text = initial(kid.name),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+            )
+        }
     }
 }
 
-/** A pool row: the name and status with the Adjust button, the bar, and the detail. */
+/** The form of a shared device's one device from its Today pools; a tablet before it has one. */
+private fun todayForm(kid: TodayKid): DeviceForm =
+    kid.pools.firstNotNullOfOrNull { it.devices.firstOrNull()?.form } ?: DeviceForm.TABLET
+
+/** A pool row: the name and status with the Adjust button, the bar, and the detail. A shared device's says Time. */
 @Composable
-private fun PoolRow(kid: TodayKid, pool: TodayPool, onAdjust: () -> Unit) {
-    val view = poolView(pool)
+private fun PoolRow(kid: TodayKid, pool: TodayPool, label: String, onAdjust: () -> Unit) {
+    val view = poolView(pool).copy(name = label)
     val toneColor = toneColor(view.tone)
     Column {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -239,7 +278,7 @@ private fun PoolRow(kid: TodayKid, pool: TodayPool, onAdjust: () -> Unit) {
                 contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
                 modifier = Modifier
                     .height(34.dp)
-                    .semantics { contentDescription = "Change ${kid.name}'s ${poolName(pool.pool)}" },
+                    .semantics { contentDescription = "Change ${kid.name}'s ${label}" },
             ) {
                 Text(text = "Adjust", style = MaterialTheme.typography.labelMedium)
             }

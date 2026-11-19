@@ -39,6 +39,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import au.screentime.core.model.api.Pool
 import au.screentime.core.model.api.TodayKid
+import au.screentime.parent.kids.isShared
 import au.screentime.core.ui.ScreenTimeTheme
 import au.screentime.parent.R
 import kotlinx.coroutines.launch
@@ -52,7 +53,7 @@ import java.util.UUID
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AdjustSheet(kid: TodayKid, startPool: Pool, vm: TodayViewModel, onDone: () -> Unit) {
-    var pool by remember { mutableStateOf(startPool) }
+    var pool by remember { mutableStateOf(if (isShared(kid)) Pool.SCREENS else startPool) }
     var amount by remember { mutableStateOf(ADJUST_DEFAULT) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -96,16 +97,19 @@ fun AdjustSheet(kid: TodayKid, startPool: Pool, vm: TodayViewModel, onDone: () -
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.fillMaxWidth(),
             )
-            Spacer(Modifier.height(16.dp))
-            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                kid.pools.forEachIndexed { index, p ->
-                    SegmentedButton(
-                        selected = pool == p.pool,
-                        onClick = { if (!busy) changePool(p.pool) },
-                        shape = SegmentedButtonDefaults.itemShape(index, kid.pools.size),
-                        enabled = !busy,
-                    ) {
-                        Text(poolName(p.pool))
+            // A shared device has one pool, so there is nothing to choose (docs/SPEC.md §12.8).
+            if (!isShared(kid)) {
+                Spacer(Modifier.height(16.dp))
+                SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                    kid.pools.forEachIndexed { index, p ->
+                        SegmentedButton(
+                            selected = pool == p.pool,
+                            onClick = { if (!busy) changePool(p.pool) },
+                            shape = SegmentedButtonDefaults.itemShape(index, kid.pools.size),
+                            enabled = !busy,
+                        ) {
+                            Text(poolName(p.pool))
+                        }
                     }
                 }
             }
@@ -204,7 +208,7 @@ fun AdjustSheet(kid: TodayKid, startPool: Pool, vm: TodayViewModel, onDone: () -
 
     if (confirmLock) {
         AlertDialog(
-            title = { Text(lockTitle(kid.name, pool)) },
+            title = { Text(if (isShared(kid)) "Lock ${kid.name} now?" else lockTitle(kid.name, pool)) },
             text = { Text(lockText(kid.name, poolView)) },
             confirmButton = {
                 TextButton(

@@ -1,4 +1,4 @@
-import type { Pool, Today, TodayKid, TodayPool } from '@screentime/schemas';
+import type { DeviceForm, Pool, Today, TodayKid, TodayPool } from '@screentime/schemas';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Moon, RefreshCw, SlidersHorizontal, Users } from 'lucide-react';
@@ -12,8 +12,10 @@ import { Card, CardContent } from '@/components/ui/card';
 import { ApiError } from '@/lib/api';
 import { api } from '@/lib/auth';
 import { bedtimeAction, bedtimeLine, bedtimeOf } from '@/lib/bedtime';
+import { isShared, poolLabel, poolsShown, sharedForm, splitByKind } from '@/lib/shared';
 import { type Chip, kidChips, POOL_NAMES, poolView, type Tone } from '@/lib/today';
 import { cn } from '@/lib/utils';
+import { useDevices } from '@/pages/kids';
 
 /** Refreshed every 30 seconds while the page is open, and at once after an adjustment. */
 export function useToday() {
@@ -40,9 +42,20 @@ function longDate(date: string): string {
   );
 }
 
-export function PoolRow({ kid, pool, onAdjust }: { kid: TodayKid; pool: TodayPool; onAdjust: () => void }) {
+export function PoolRow({
+  kid,
+  pool,
+  label,
+  onAdjust,
+}: {
+  kid: TodayKid;
+  pool: TodayPool;
+  /** The pool's name; a shared device's says Time. */
+  label?: string;
+  onAdjust: () => void;
+}) {
   const view = poolView(pool);
-  const name = POOL_NAMES[pool.pool];
+  const name = label ?? POOL_NAMES[pool.pool];
   return (
     <div className="flex items-center gap-3">
       <div className="min-w-0 flex-1">
@@ -115,28 +128,38 @@ export function ChipList({ chips }: { chips: Chip[] }) {
 function KidCard({
   kid,
   now,
+  form,
   onAdjust,
   onBedtime,
 }: {
   kid: TodayKid;
   now: Date;
+  /** A shared device's form, for its icon. */
+  form?: DeviceForm;
   onAdjust: (pool: Pool) => void;
   onBedtime: () => void;
 }) {
   const chips = kidChips(kid, now);
+  const shared = isShared(kid);
   return (
     <Card>
       <CardContent className="flex flex-col gap-5">
         <div className="flex items-center gap-3">
-          <KidAvatar name={kid.name} color={kid.avatarColor} />
+          <KidAvatar name={kid.name} color={kid.avatarColor} form={shared ? (form ?? 'tablet') : undefined} />
           <h2 className="text-lg font-semibold">
             <Link to="/kids/$kidId" params={{ kidId: kid.id }} className="underline-offset-4 hover:underline">
               {kid.name}
             </Link>
           </h2>
         </div>
-        {kid.pools.map((pool) => (
-          <PoolRow key={pool.pool} kid={kid} pool={pool} onAdjust={() => onAdjust(pool.pool)} />
+        {poolsShown(kid).map((pool) => (
+          <PoolRow
+            key={pool.pool}
+            kid={kid}
+            pool={pool}
+            label={poolLabel(pool.pool, shared)}
+            onAdjust={() => onAdjust(pool.pool)}
+          />
         ))}
         <BedtimeRow kid={kid} onExtend={onBedtime} />
         <ChipList chips={chips} />
@@ -164,6 +187,8 @@ export function TodayPage() {
   const adjustKid = data?.kids.find((k) => k.id === adjusting?.kidId) ?? null;
   const [bedtimeKidId, setBedtimeKidId] = useState<string | null>(null);
   const bedtimeKid = data?.kids.find((k) => k.id === bedtimeKidId) ?? null;
+  const split = splitByKind(data?.kids ?? []);
+  const devices = useDevices();
 
   return (
     <>
@@ -196,17 +221,38 @@ export function TodayPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2">
-          {data.kids.map((kid) => (
-            <KidCard
-              key={kid.id}
-              kid={kid}
-              now={now}
-              onAdjust={(pool) => setAdjusting({ kidId: kid.id, pool })}
-              onBedtime={() => setBedtimeKidId(kid.id)}
-            />
-          ))}
-        </div>
+        <>
+          <div className="grid gap-4 md:grid-cols-2">
+            {split.kids.map((kid) => (
+              <KidCard
+                key={kid.id}
+                kid={kid}
+                now={now}
+                onAdjust={(pool) => setAdjusting({ kidId: kid.id, pool })}
+                onBedtime={() => setBedtimeKidId(kid.id)}
+              />
+            ))}
+          </div>
+          {split.shared.length > 0 && (
+            <section className="mt-8" aria-labelledby="today-shared">
+              <h2 id="today-shared" className="mb-3 text-lg font-semibold">
+                Shared devices
+              </h2>
+              <div className="grid gap-4 md:grid-cols-2">
+                {split.shared.map((kid) => (
+                  <KidCard
+                    key={kid.id}
+                    kid={kid}
+                    now={now}
+                    form={sharedForm(devices.data, kid.id)}
+                    onAdjust={(pool) => setAdjusting({ kidId: kid.id, pool })}
+                    onBedtime={() => setBedtimeKidId(kid.id)}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
+        </>
       )}
       <AdjustDialog kid={adjustKid} pool={adjusting?.pool ?? 'screens'} onClose={() => setAdjusting(null)} />
       <BedtimeDialog kid={bedtimeKid} onClose={() => setBedtimeKidId(null)} />

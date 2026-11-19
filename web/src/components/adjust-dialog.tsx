@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/compone
 import { ApiError } from '@/lib/api';
 import { api } from '@/lib/auth';
 import { formatDuration } from '@/lib/format';
+import { isShared, poolLabel } from '@/lib/shared';
 import {
   ADJUST_MAX,
   ADJUST_MIN,
@@ -49,7 +50,10 @@ function PoolSwitch({ value, onChange }: { value: Pool; onChange: (pool: Pool) =
 /** The dialog's body: mounted fresh each time it opens, so it starts at +15m with new request ids. */
 function AdjustBody({ kid, initialPool, onDone }: { kid: TodayKid; initialPool: Pool; onDone: () => void }) {
   const queryClient = useQueryClient();
-  const [pool, setPool] = useState<Pool>(initialPool);
+  const shared = isShared(kid);
+  // A shared device has only Screens (docs/SPEC.md §12.8).
+  const [pool, setPool] = useState<Pool>(shared ? 'screens' : initialPool);
+  const name = poolLabel(pool, shared);
   const [minutes, setMinutes] = useState(ADJUST_STEP);
   const [confirmLock, setConfirmLock] = useState(false);
   // Made once per opening: a retry after a lost answer sends the same id and cannot add the time twice.
@@ -78,7 +82,7 @@ function AdjustBody({ kid, initialPool, onDone }: { kid: TodayKid; initialPool: 
     return (
       <>
         <DialogTitle>
-          Lock {POOL_NAMES[pool]} for {kid.name} now?
+          {shared ? `Lock ${kid.name} now?` : `Lock ${name} for ${kid.name} now?`}
         </DialogTitle>
         <DialogDescription>
           This takes away the {formatDuration(today.remainingSec)} left today. {kid.name} can still ask for more time.
@@ -104,13 +108,15 @@ function AdjustBody({ kid, initialPool, onDone }: { kid: TodayKid; initialPool: 
   return (
     <>
       <DialogTitle>Adjust time for {kid.name}</DialogTitle>
-      <PoolSwitch
-        value={pool}
-        onChange={(p) => {
-          setPool(p);
-          grant.reset();
-        }}
-      />
+      {!shared && (
+        <PoolSwitch
+          value={pool}
+          onChange={(p) => {
+            setPool(p);
+            grant.reset();
+          }}
+        />
+      )}
 
       <div className="flex items-center justify-between gap-4">
         <Button
@@ -180,7 +186,7 @@ function AdjustBody({ kid, initialPool, onDone }: { kid: TodayKid; initialPool: 
           setConfirmLock(true);
         }}
       >
-        {today.locked ? `${POOL_NAMES[pool]} is already locked` : `Lock ${POOL_NAMES[pool]} now`}
+        {today.locked ? (shared ? 'Already locked' : `${name} is already locked`) : shared ? 'Lock now' : `Lock ${name} now`}
       </Button>
     </>
   );

@@ -78,9 +78,10 @@ fun pickedClock(hour: Int, minute: Int, bedtime: Boolean): String {
     return timeOf(minutes)
 }
 
-/** A day's row in the week overview: "Screens 2h · Phone 1h 30m". */
-fun allowanceLine(day: ScheduleDay): String =
-    "Screens ${formatAllowance(day.screensMin)} · Phone ${formatAllowance(day.phoneMin)}"
+/** A day's row in the week overview: "Screens 2h · Phone 1h 30m", or "Time 30m" for a shared device (§12.8). */
+fun allowanceLine(day: ScheduleDay, shared: Boolean = false): String =
+    if (shared) "Time ${formatAllowance(day.screensMin)}"
+    else "Screens ${formatAllowance(day.screensMin)} · Phone ${formatAllowance(day.phoneMin)}"
 
 /** A day's second line in the week overview: "7:00 am – 8:30 pm". */
 fun hoursLine(day: ScheduleDay): String = "${formatClock(day.wake)} – ${formatClock(day.bedtime)}"

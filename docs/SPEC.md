@@ -102,6 +102,7 @@ These are James's answers from the requirements interview (22 Oct 2026). Section
 | Q37 | (5 Nov 2026) Per kid switch: new apps stay blocked until a parent approves them. Off by default. Waiting for an answer makes this notification essential, as Q17's rule says. | 12.4, 13 |
 | Q38 | (5 Nov 2026) A kid cannot ask for more time on one app yet. A parent can change the limit at any time. | 12.4, 18 |
 | Q39 | (18 Nov 2026) A parent can **extend bedtime** for one kid, tonight only, without giving time. Until the new bedtime the kid keeps any time that is left; with none left, the device stays locked as out of time, so the always-allowed apps keep working (homework, for example). Adding time after bedtime still unlocks everything, as before. | 7.5 |
+| Q40 | (19 Nov 2026) A **shared device** belongs to no kid, for example Mum's tablet that the kids borrow. It has its own time (0 by default), bedtime, app blocks, always-allowed apps and new-app approval (on by default), and kids ask for time on it like on their own device. Time on it never comes off a kid. A parent who wants to use it uses parent mode, which on a shared device ends when the screen goes off. Shown in its own **Shared devices** section in the web and parent apps. | 12.8 |
 | Future | School-hours blocks, a cooldown between time requests, app allowlists. | 18 |
 
 Also decided in research (22 Oct 2026): the tech stack in section 4, the sync design in section 8, Device Owner with Lock Task for Android, and a LocalSystem service plus tray helper for Windows.
@@ -212,7 +213,7 @@ Every family-owned table (all except `otp_codes`) has `family_id` and a row-leve
 
 **notification_prefs**: `family_id`, `parent_id`, `kind`, `enabled`. Missing row means enabled. Essential kinds ignore this table (section 13).
 
-**kids**: `id`, `family_id`, `name`, `avatar_color` (one of the 8 tokens in 16.1), `created_at`, `archived_at`.
+**kids**: `id`, `family_id`, `name`, `avatar_color` (one of the 8 tokens in 16.1), `kind` (`kid` | `shared`, default `kid`, set at creation and never changed; section 12.8), `created_at`, `archived_at`.
 
 **kid_contacts** (Q33 always-callable list): `id`, `family_id`, `kid_id`, `label` (for example "Dad", "Grandma"), `phone_e164`, `sort`. At most 10 per kid. Parents with a phone number appear automatically at the top and are not stored here.
 
@@ -553,7 +554,7 @@ Device state snapshot:
   "serverTime": "2026-10-22T09:00:00Z",
   "stateVersion": "b3f1…",
   "device": { "id": "…", "name": "Pixel 7", "form": "phone", "pool": "phone", "hasCellular": true },
-  "kid": { "id": "…", "name": "Alex" },
+  "kid": { "id": "…", "name": "Alex", "kind": "kid" },
   "family": { "timezone": "Australia/Sydney", "emergencyNumber": "000", "parentCodeSecret": "BASE32…" },
   "parents": [ { "id": "…", "displayName": "Dad", "phoneE164": "+614…" } ],
   "contacts": [ { "label": "Grandma", "phoneE164": "+614…" } ],
@@ -868,6 +869,23 @@ So installing waits for a tap: whatever question comes, it comes right after the
 - **The screens.** A quiet row at the top of every tab, under the SOS banner and above Waiting for you: "ST Parent 0.1.3 is out · Update downloads 34 MB." / "Getting ST Parent 0.1.3…" / "ST Parent 0.1.3 is ready · Takes a few seconds. The app opens again by itself." / "Updating ST Parent…" / "ST Parent 0.1.3 didn't install · Tap Update to try again." Settings shows "Version 0.1.2" with "Up to date", "0.1.3 is ready" and the like under it, and **Check for updates** when there is nothing newer to act on.
 - A phone on 0.1.2 or older has no updater: it needs one install of the first version that has it, from the download page.
 
+### 12.8 Shared devices (Q40, James, 19 Nov 2026; CARD-065)
+
+A device that belongs to no kid: the first one is Mum's Lenovo tablet, which the kids borrow. It gets no time unless a parent gives some, Play Store stays blocked and new apps wait for a parent, and a parent who wants to use it hands it to themselves with parent mode.
+
+**Model: a kid row of kind `shared`.** A shared device is stored as a `kids` row with `kind = 'shared'` (6.1), named after the device ("Mum's tablet"). So everything already keyed by kid works for it unchanged: the schedule, grants, time requests, messages, the time engine, app rules, new-app approval, always-allowed apps, bedtime tonight, lock now, parent mode, events and pushes. Parents never see the word kid for it: the apps call it a shared device. Rules that differ:
+
+- **One device at most.** `POST /v1/kids/{kidId}/enrolment-codes` for a shared one that already has a device that is not revoked answers **409** `shared_has_device`. Removing the device frees the slot. Its form may be phone, tablet or PC.
+- **One pool: Screens.** The device's `pool` is always `screens`, whatever its form, and the parent apps call it **Time**, not Screens. `GET /v1/today` lists only its `screens` pool. The schedule keeps `phoneMin`, which nothing reads and the parent apps do not show.
+- **Defaults at creation** (`POST /v1/kids` with `kind: 'shared'`): `new_app_approval` is on, and the first schedule gives 0 minutes every day, with each day's wake-up the latest and bedtime the earliest of the family's kids' current schedules for that weekday (07:00 and 20:00 when the family has no kids), warnings 15 and 5.
+- **No contacts and no SOS.** `GET /v1/kids/{kidId}/contacts` answers `[]` and `PUT` answers **409** `shared_device`. The snapshot's `contacts` is empty. The kid app shows no call row, emergency button or SOS on a shared device, even a phone with a SIM.
+- **Parent mode ends at screen off** (Android): on a shared device any parent-mode session, "Until I end it" too, ends when the screen goes off, exactly as **End now** does (the device sends `POST /v1/device/parent-mode/end` and locks again if it is out of time). So a parent can put it down without leaving it open for a kid. The parent apps' duration choices do not change.
+- **Words.** The kid app names the device, never a kid: the main screen says "Mum's tablet" where it says "Hi Alex", and "Time left" where it says "Screens left"; locks say "Out of time" and "Bedtime". Pushes and the inbox use the name as they use a kid's. The web inbox says "time" in place of the pool's name ("Mum's tablet asked for 30m more time"); the parent app's pushes and inbox still say "Screens" (they cannot tell a shared device yet, accepted).
+- `kind` is in `Kid` (`GET /v1/kids`, `GET /v1/kids/{kidId}`), `TodayKid` and the snapshot's `kid` (8.2). `POST /v1/kids` takes an optional `kind` (default `kid`); `PATCH` does not take it.
+- **Windows:** a PC account can be a shared device with the same rules, except that parent mode does not end when the PC locks (not built).
+
+**The screens.** Web Kids page and parent app Kids tab: a **Shared devices** section under the kids, one row each with a device-form icon on the avatar colour instead of an initial, and its device's name and last seen. The web page has **Add shared device** (name, for example "Mum's tablet", and a colour), then opens its page; the parent app does not add them, as with kids. A shared device's page has Today (one **Time** row, the bedtime row, chips), Schedule (per day **Time**, wake-up and bedtime; warnings), Device (its one device with Parent mode, rename, remove, games for a PC, and **Add device** only while it has none) and Apps (with an Android device; the approval switch reads "A new app on Mum's tablet stays blocked until a parent says yes"). No Contacts. Today lists shared devices after the kids, under a **Shared devices** heading.
+
 ## 13. Notifications
 
 Parent notifications go to the Android parent app by FCM. The web app shows the same items in its inbox and as banners while open (polling `/v1/events` every 30 s), and sends no browser push in v1.
@@ -1072,6 +1090,8 @@ Status chips under each kid: "Using PC now", "Parent mode on Pixel 7 · 10 min",
 
 **Kids › kid › Apps (12.4):** only for a kid with an Android device. A **New apps need approval** switch, then the apps, newest install first, with waiting apps at the top. A row has a circle with the app's initial (no icons), the name, a line such as "From Play Store · 3 Nov on Pixel 7", then "First used 4 Nov" or "Never opened", and today's time. **Allowed | Blocked | Limit** sets the rule, and Limit shows − and + in 5-minute steps, default 30 minutes. An app that cannot be blocked shows "Always allowed" instead, and a removed app shows "Removed" and stays until its rule is cleared. The inbox shows `app.approval` as a card with **Allow** and **Block**, and the other `app.*` events as plain rows.
 
+**Shared devices (12.8):** Today and Kids show them after the kids under a **Shared devices** heading, with a form icon in place of the initial and a single **Time** row; the page has Today, Schedule (Time, wake-up, bedtime), the device and Apps, no contacts.
+
 **Parent code:** reachable from Settings and from the parent mode notification: the 6-digit code in 48 sp with a circular 30-second countdown.
 
 **SOS alert:** full-screen red activity (shown over the lock screen), as in section 15.
@@ -1092,7 +1112,7 @@ As planned (CARD-042): the parent app starts Firebase itself from four `BuildCon
 
 ### 16.5 Parent web app
 
-Kid detail has an **Apps** tab with the same content as 16.4. The bedtime row and the extend bedtime sheet of 16.4 are on Today's kid cards and the kid's Today tab; the sheet is a dialog. On the Devices tab, a PC's **More** menu has **Games…** (section 12.6): a dialog with a switch per game the PC found ("Not on this PC any more" for one that is gone, with its switch disabled), the programs a parent added with a remove button, and **Add another program** (a name and the full path to an .exe; a bad path says what is wrong). The Android parent app does not have it yet. Same functions as the parent app except SOS alarms (the web shows a red banner at the top of every page while an SOS is active, with the map link) and parent code (also shown in Settings).
+Kid detail has an **Apps** tab with the same content as 16.4. Shared devices (12.8) have their own section on Kids with **Add shared device**, and their page has the tabs Today, Schedule, Device and Apps. The bedtime row and the extend bedtime sheet of 16.4 are on Today's kid cards and the kid's Today tab; the sheet is a dialog. On the Devices tab, a PC's **More** menu has **Games…** (section 12.6): a dialog with a switch per game the PC found ("Not on this PC any more" for one that is gone, with its switch disabled), the programs a parent added with a remove button, and **Add another program** (a name and the full path to an .exe; a bad path says what is wrong). The Android parent app does not have it yet. Same functions as the parent app except SOS alarms (the web shows a red banner at the top of every page while an SOS is active, with the map link) and parent code (also shown in Settings).
 
 Development (CARD-022): `pnpm dev:web` serves the app on http://localhost:5173 and passes `/v1/*` and `/health` to the API on :8080, so the browser sees one origin (in production the server serves the build, CARD-027). Routes are defined in code (TanStack Router, no generator); components are shadcn/ui-style files in `web/src/components/ui` with our tokens, not the shadcn defaults.
 

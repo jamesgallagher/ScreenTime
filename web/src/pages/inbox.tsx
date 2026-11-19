@@ -12,13 +12,26 @@ import { saveAppRule } from '@/lib/apps';
 import { api, useAuth } from '@/lib/auth';
 import { formatDuration } from '@/lib/format';
 import { type EventTone, eventView, pendingAppApprovals, pendingParentModeRequests, whenText } from '@/lib/inbox';
+import { splitByKind } from '@/lib/shared';
 import { POOL_NAMES } from '@/lib/today';
+import { useKids } from '@/pages/kids';
 import { cn } from '@/lib/utils';
 
 const PAGE = 50;
 const APPROVE_MIN = 15;
 const APPROVE_MAX = 480;
 const QUICK = [15, 30, 60, 120];
+
+/** The ids of the family's shared devices (docs/SPEC.md §12.8), for the inbox's words. */
+function useSharedIds(): Set<string> {
+  const kids = useKids();
+  return new Set(splitByKind(kids.data ?? []).shared.map((k) => k.id));
+}
+
+/** "Screens" or "Phone", or "time" for a shared device. */
+function requestPool(request: TimeRequest, sharedIds: Set<string>): string {
+  return sharedIds.has(request.kidId) ? 'time' : POOL_NAMES[request.pool];
+}
 
 function messageOf(err: unknown): string {
   return err instanceof ApiError ? err.message : 'Something went wrong. Try again.';
@@ -74,6 +87,7 @@ function ToneIcon({ tone }: { tone: EventTone }) {
 
 function ApproveBody({ request, onDone }: { request: TimeRequest; onDone: () => void }) {
   const refreshAll = useRefreshAll();
+  const sharedIds = useSharedIds();
   const [minutes, setMinutes] = useState(request.minutes);
   const approve = useMutation({
     mutationFn: () => api.post<TimeRequest>(`/v1/requests/${request.id}/approve`, { minutes }),
@@ -86,7 +100,7 @@ function ApproveBody({ request, onDone }: { request: TimeRequest; onDone: () => 
   return (
     <>
       <DialogTitle>
-        Give {request.kidName} more {POOL_NAMES[request.pool]}
+        Give {request.kidName} more {requestPool(request, sharedIds)}
       </DialogTitle>
       <DialogDescription>
         {request.kidName} asked for {formatDuration(request.minutes * 60)}. It counts for today only.
@@ -140,6 +154,7 @@ function TimeRequestCard({ request, timeZone, now }: { request: TimeRequest; tim
   const deny = useMutation({ mutationFn: () => api.post<TimeRequest>(`/v1/requests/${request.id}/deny`), onSuccess: refreshAll });
   const busy = approve.isPending || deny.isPending;
   const error = approve.error ?? deny.error;
+  const sharedIds = useSharedIds();
   const asked = formatDuration(request.minutes * 60);
   return (
     <Card>
@@ -148,7 +163,7 @@ function TimeRequestCard({ request, timeZone, now }: { request: TimeRequest; tim
           <ToneIcon tone="request" />
           <div className="min-w-0">
             <p className="font-semibold">
-              {request.kidName} wants {asked} more {POOL_NAMES[request.pool]}
+              {request.kidName} wants {asked} more {requestPool(request, sharedIds)}
             </p>
             {request.reason && <p className="text-sm">“{request.reason}”</p>}
             <p className="text-xs text-muted">
@@ -241,7 +256,7 @@ function ParentModeCard({ event, timeZone, now }: { event: EventItem; timeZone: 
 /** A new app that stays blocked until a parent answers (docs/SPEC.md §12.4). */
 function AppApprovalCard({ event, timeZone, now }: { event: EventItem; timeZone: string; now: Date }) {
   const refreshAll = useRefreshAll();
-  const view = eventView(event, timeZone);
+  const view = eventView(event, timeZone, useSharedIds().has(String(event.kidId)));
   const save = useMutation({
     mutationFn: (mode: 'allowed' | 'blocked') => saveAppRule(String(event.kidId), String(event.payload.package), mode),
     onSuccess: refreshAll,
@@ -273,7 +288,7 @@ function AppApprovalCard({ event, timeZone, now }: { event: EventItem; timeZone:
 }
 
 function EventRow({ event, timeZone, now }: { event: EventItem; timeZone: string; now: Date }) {
-  const view = eventView(event, timeZone);
+  const view = eventView(event, timeZone, useSharedIds().has(String(event.kidId)));
   return (
     <li className="flex gap-3 border-t border-outline py-3 first:border-t-0 first:pt-0 last:pb-0">
       <ToneIcon tone={view.tone} />

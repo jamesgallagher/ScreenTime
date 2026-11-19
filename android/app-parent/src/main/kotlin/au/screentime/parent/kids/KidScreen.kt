@@ -62,7 +62,8 @@ import java.time.Instant
 import kotlinx.coroutines.launch
 
 /**
- * The kid page (docs/SPEC.md §16.4): the kid's devices with Rename and Remove, and Add device.
+ * The kid page (docs/SPEC.md §16.4): the kid's devices with Rename and Remove, and Add device. For a shared device
+ * (§12.8): its one device, Add device only while it has none, and no always-callable numbers.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -71,6 +72,7 @@ fun KidScreen(kid: Kid, vm: KidsViewModel, onBack: () -> Unit, onAdd: (DeviceFor
     val state = vm.state
     val scope = rememberCoroutineScope()
     val devices = state.devices.filter { it.kidId == kid.id }
+    val shared = isShared(kid)
     val now = Instant.now()
     var renaming by remember { mutableStateOf<Device?>(null) }
     var removing by remember { mutableStateOf<Device?>(null) }
@@ -86,14 +88,23 @@ fun KidScreen(kid: Kid, vm: KidsViewModel, onBack: () -> Unit, onAdd: (DeviceFor
             IconButton(onClick = onBack) {
                 Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = "Back")
             }
-            Avatar(kid)
+            Avatar(kid, if (shared) formBadge(sharedForm(devices, kid.id)) else null)
             Spacer(Modifier.size(12.dp))
-            Text(
-                text = kid.name,
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onBackground,
-            )
+            Column {
+                Text(
+                    text = kid.name,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onBackground,
+                )
+                if (shared) {
+                    Text(
+                        text = "Shared device · its own time",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = ScreenTimeTheme.colors.muted,
+                    )
+                }
+            }
         }
         PullToRefreshBox(
             isRefreshing = state.refreshing,
@@ -108,13 +119,17 @@ fun KidScreen(kid: Kid, vm: KidsViewModel, onBack: () -> Unit, onAdd: (DeviceFor
                 item {
                     Column {
                         Text(
-                            text = "Devices",
+                            text = if (shared) "Device" else "Devices",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onBackground,
                         )
                         Text(
-                            text = "Phones count as Phone time. Tablets and PCs share Screens time.",
+                            text = if (shared) {
+                                "One phone, tablet or PC with its own time. It never counts against a kid."
+                            } else {
+                                "Phones count as Phone time. Tablets and PCs share Screens time."
+                            },
                             style = MaterialTheme.typography.bodySmall,
                             color = ScreenTimeTheme.colors.muted,
                         )
@@ -123,7 +138,7 @@ fun KidScreen(kid: Kid, vm: KidsViewModel, onBack: () -> Unit, onAdd: (DeviceFor
                 if (devices.isEmpty()) {
                     item {
                         Text(
-                            text = "No devices yet.",
+                            text = if (shared) "Not connected yet." else "No devices yet.",
                             style = MaterialTheme.typography.bodyLarge,
                             color = ScreenTimeTheme.colors.muted,
                         )
@@ -156,14 +171,16 @@ fun KidScreen(kid: Kid, vm: KidsViewModel, onBack: () -> Unit, onAdd: (DeviceFor
                         )
                     }
                 }
-                item {
-                    FilledTonalButton(
-                        onClick = { showingForm = true },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-                    ) {
-                        Icon(painterResource(R.drawable.ic_add), contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Add device")
+                if (canAddDevice(shared, devices.size)) {
+                    item {
+                        FilledTonalButton(
+                            onClick = { showingForm = true },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                        ) {
+                            Icon(painterResource(R.drawable.ic_add), contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text(if (shared) "Connect the device" else "Add device")
+                        }
                     }
                 }
                 item {
@@ -200,24 +217,27 @@ fun KidScreen(kid: Kid, vm: KidsViewModel, onBack: () -> Unit, onAdd: (DeviceFor
                                     color = ScreenTimeTheme.colors.muted,
                                 )
                             }
-                            HorizontalDivider(color = ScreenTimeTheme.colors.outline)
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { onContacts() }
-                                    .padding(16.dp),
-                            ) {
-                                Text(
-                                    text = "Always callable",
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                )
-                                Text(
-                                    text = "Numbers ${kid.name}'s phone can call when locked.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = ScreenTimeTheme.colors.muted,
-                                )
+                            // A shared device has no always-callable numbers (docs/SPEC.md §12.8).
+                            if (!shared) {
+                                HorizontalDivider(color = ScreenTimeTheme.colors.outline)
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { onContacts() }
+                                        .padding(16.dp),
+                                ) {
+                                    Text(
+                                        text = "Always callable",
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                    )
+                                    Text(
+                                        text = "Numbers ${kid.name}'s phone can call when locked.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = ScreenTimeTheme.colors.muted,
+                                    )
+                                }
                             }
                             // Apps are Android only (docs/SPEC.md §12.4).
                             if (devices.any { it.platform == Platform.ANDROID }) {
@@ -320,16 +340,9 @@ private fun DeviceRow(d: Device, now: Instant, onRename: () -> Unit, onRemove: (
     }
 }
 
-/** The picture on a device's badge. */
-private fun formBadge(form: DeviceForm): String = when (form) {
-    DeviceForm.PHONE -> "\uD83D\uDCF1"
-    DeviceForm.TABLET -> "\uD83C\uDFA8"
-    DeviceForm.PC -> "\uD83D\uDCBB"
-}
-
-/** The kid's avatar: a 40 dp circle in the kid's colour with the initial. */
+/** The kid's avatar: a 40 dp circle in the kid's colour with the initial, or a shared device's device picture. */
 @Composable
-private fun Avatar(kid: Kid) {
+private fun Avatar(kid: Kid, badge: String? = null) {
     val color = AvatarColors.getOrElse(kid.avatarColor.ordinal) { AvatarColors[0] }
     Box(
         modifier = Modifier
@@ -337,12 +350,16 @@ private fun Avatar(kid: Kid) {
             .background(color, CircleShape),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = initial(kid.name),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = Color.White,
-        )
+        if (badge != null) {
+            Text(badge, fontSize = 20.sp)
+        } else {
+            Text(
+                text = initial(kid.name),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+            )
+        }
     }
 }
 
