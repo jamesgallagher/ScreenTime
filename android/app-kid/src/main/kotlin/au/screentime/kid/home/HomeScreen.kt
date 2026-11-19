@@ -120,7 +120,7 @@ private fun Home(s: KidStatus) {
                         .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.Center,
                 ) {
-                    Greeting(s.kidName)
+                    Greeting(s.kidName, s.shared)
                     Spacer(Modifier.height(16.dp))
                     Details(s, TextAlign.Start)
                     Spacer(Modifier.height(24.dp))
@@ -129,7 +129,7 @@ private fun Home(s: KidStatus) {
             }
         } else {
             Column(modifier = Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
-                Greeting(s.kidName, Modifier.fillMaxWidth().padding(end = 80.dp))
+                Greeting(s.kidName, s.shared, Modifier.fillMaxWidth().padding(end = 80.dp))
                 Spacer(Modifier.weight(1f))
                 Ring(s, left)
                 Spacer(Modifier.height(24.dp))
@@ -164,9 +164,9 @@ private fun KidActions(s: KidStatus) {
 }
 
 @Composable
-private fun Greeting(name: String, modifier: Modifier = Modifier) {
+private fun Greeting(name: String, shared: Boolean = false, modifier: Modifier = Modifier) {
     Text(
-        text = "Hi $name",
+        text = if (shared) name else "Hi $name",
         modifier = modifier,
         style = MaterialTheme.typography.headlineMedium,
         fontWeight = FontWeight.Bold,
