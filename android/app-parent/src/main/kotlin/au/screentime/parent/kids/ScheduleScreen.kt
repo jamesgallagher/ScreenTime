@@ -255,7 +255,7 @@ fun ScheduleScreen(kid: Kid, vm: KidsViewModel, onBack: () -> Unit) {
                             Column {
                                 (1..7).forEach { weekday ->
                                     if (weekday > 1) HorizontalDivider(color = ScreenTimeTheme.colors.outline)
-                                    DayRow(d.days.first { it.weekday == weekday }) { editing = weekday }
+                                    DayRow(d.days.first { it.weekday == weekday }, isShared(kid)) { editing = weekday }
                                 }
                             }
                         }
@@ -305,6 +305,7 @@ fun ScheduleScreen(kid: Kid, vm: KidsViewModel, onBack: () -> Unit) {
         val day = editDraft.days.first { it.weekday == editDay }
         DaySheet(
             day = day,
+            shared = isShared(kid),
             onScreens = { by -> applyEdit(stepScreens(editDay, by)) },
             onPhone = { by -> applyEdit(stepPhone(editDay, by)) },
             canScreens = { by -> stepScreens(editDay, by) != null },
@@ -338,7 +339,7 @@ fun ScheduleScreen(kid: Kid, vm: KidsViewModel, onBack: () -> Unit) {
 
 /** One day in the week overview: the day, its time and its hours, and a chevron; a tap opens the day's editor. */
 @Composable
-private fun DayRow(day: ScheduleDay, onClick: () -> Unit) {
+private fun DayRow(day: ScheduleDay, shared: Boolean, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -354,7 +355,7 @@ private fun DayRow(day: ScheduleDay, onClick: () -> Unit) {
         )
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = allowanceLine(day),
+                text = allowanceLine(day, shared),
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurface,
             )
@@ -379,6 +380,7 @@ private fun DayRow(day: ScheduleDay, onClick: () -> Unit) {
 @Composable
 private fun DaySheet(
     day: ScheduleDay,
+    shared: Boolean,
     onScreens: (Int) -> Unit,
     onPhone: (Int) -> Unit,
     canScreens: (Int) -> Boolean,
@@ -393,19 +395,22 @@ private fun DaySheet(
             Text(dayName, style = MaterialTheme.typography.headlineSmall)
             Spacer(Modifier.height(8.dp))
             Stepper(
-                label = "Screens",
+                label = if (shared) "Time" else "Screens",
                 value = formatAllowance(day.screensMin),
-                what = "$dayName Screens",
+                what = if (shared) "$dayName time" else "$dayName Screens",
                 onLess = if (canScreens(-1)) { { onScreens(-1) } } else null,
                 onMore = if (canScreens(1)) { { onScreens(1) } } else null,
             )
-            Stepper(
-                label = "Phone",
-                value = formatAllowance(day.phoneMin),
-                what = "$dayName Phone",
-                onLess = if (canPhone(-1)) { { onPhone(-1) } } else null,
-                onMore = if (canPhone(1)) { { onPhone(1) } } else null,
-            )
+            // A shared device has no Phone time (docs/SPEC.md §12.8).
+            if (!shared) {
+                Stepper(
+                    label = "Phone",
+                    value = formatAllowance(day.phoneMin),
+                    what = "$dayName Phone",
+                    onLess = if (canPhone(-1)) { { onPhone(-1) } } else null,
+                    onMore = if (canPhone(1)) { { onPhone(1) } } else null,
+                )
+            }
             Spacer(Modifier.height(12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 ClockButton("Wake-up", day.wake, Modifier.weight(1f)) { picking = "wake" }

@@ -178,8 +178,25 @@ private fun KidsList(vm: KidsViewModel, state: KidsState, onOpen: (Kid) -> Unit)
                             }
                         }
                     }
-                    items(state.kids, key = { it.id }) { kid ->
+                    val kids = state.kids.filterNot { isShared(it) }
+                    val shared = state.kids.filter { isShared(it) }
+                    items(kids, key = { it.id }) { kid ->
                         KidRowCard(kid, state.devices) { onOpen(kid) }
+                    }
+                    // Shared devices (docs/SPEC.md §12.8) under the kids; they are added in the web app, like kids.
+                    if (shared.isNotEmpty()) {
+                        item {
+                            Text(
+                                text = "Shared devices",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onBackground,
+                                modifier = Modifier.padding(top = 12.dp),
+                            )
+                        }
+                        items(shared, key = { it.id }) { kid ->
+                            KidRowCard(kid, state.devices, shared = true) { onOpen(kid) }
+                        }
                     }
                 }
             }
@@ -187,10 +204,10 @@ private fun KidsList(vm: KidsViewModel, state: KidsState, onOpen: (Kid) -> Unit)
     }
 }
 
-/** A kid card: the avatar and name, what devices they have, and a chevron. */
+/** A kid card: the avatar and name, what devices they have, and a chevron. A shared device shows its device instead. */
 @Composable
-private fun KidRowCard(kid: Kid, devices: List<Device>, onClick: () -> Unit) {
-    val countText = devicesSummary(devices.filter { it.kidId == kid.id })
+private fun KidRowCard(kid: Kid, devices: List<Device>, shared: Boolean = false, onClick: () -> Unit) {
+    val countText = if (shared) sharedSummary(devices, kid.id) else devicesSummary(devices.filter { it.kidId == kid.id })
     Card(
         onClick = onClick,
         modifier = Modifier
@@ -200,7 +217,7 @@ private fun KidRowCard(kid: Kid, devices: List<Device>, onClick: () -> Unit) {
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
     ) {
         Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Avatar(kid)
+            Avatar(kid, if (shared) formBadge(sharedForm(devices, kid.id)) else null)
             Spacer(Modifier.size(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
@@ -220,9 +237,9 @@ private fun KidRowCard(kid: Kid, devices: List<Device>, onClick: () -> Unit) {
     }
 }
 
-/** The kid's avatar: a 40 dp circle in the kid's colour with the initial. */
+/** The kid's avatar: a 40 dp circle in the kid's colour with the initial, or a shared device's device picture. */
 @Composable
-private fun Avatar(kid: Kid) {
+private fun Avatar(kid: Kid, badge: String? = null) {
     val color = AvatarColors.getOrElse(kid.avatarColor.ordinal) { AvatarColors[0] }
     Box(
         modifier = Modifier
@@ -230,11 +247,15 @@ private fun Avatar(kid: Kid) {
             .background(color, CircleShape),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = initial(kid.name),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = Color.White,
-        )
+        if (badge != null) {
+            Text(badge, fontSize = 20.sp)
+        } else {
+            Text(
+                text = initial(kid.name),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+            )
+        }
     }
 }

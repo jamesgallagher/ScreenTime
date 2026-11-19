@@ -23,7 +23,9 @@ function num(payload: Record<string, unknown>, key: string): number | null {
   return typeof value === 'number' ? value : null;
 }
 
-function poolName(payload: Record<string, unknown>): string {
+/** The pool in words; "time" for a shared device, which has only one (docs/SPEC.md §12.8). */
+function poolName(payload: Record<string, unknown>, shared = false): string {
+  if (shared) return 'time';
   const pool = str(payload, 'pool');
   return pool === 'screens' || pool === 'phone' ? POOL_NAMES[pool as Pool] : 'time';
 }
@@ -47,9 +49,10 @@ const TAMPER: Record<string, string> = {
 
 /**
  * One line of the event history (docs/SPEC.md §13) in plain words. Payload fields are read defensively:
- * an event from a newer server, or with a missing field, still reads as something sensible.
+ * an event from a newer server, or with a missing field, still reads as something sensible. `shared` is true when
+ * the event is about a shared device.
  */
-export function eventView(event: EventItem, timeZone: string): EventView {
+export function eventView(event: EventItem, timeZone: string, shared = false): EventView {
   const p = event.payload;
   const kid = event.kidName ?? 'A kid';
   const device = event.deviceName ?? str(p, 'deviceName') ?? 'a device';
@@ -58,7 +61,7 @@ export function eventView(event: EventItem, timeZone: string): EventView {
     case 'time_request': {
       const reason = str(p, 'reason');
       return {
-        text: `${kid} asked for ${minutesText(num(p, 'minutes') ?? 0)} more ${poolName(p)}`,
+        text: `${kid} asked for ${minutesText(num(p, 'minutes') ?? 0)} more ${poolName(p, shared)}`,
         detail: reason ? quoted(reason) : null,
         tone: 'request',
       };
@@ -70,10 +73,10 @@ export function eventView(event: EventItem, timeZone: string): EventView {
     case 'grant.added': {
       const minutes = num(p, 'minutes') ?? 0;
       const who = by ?? 'A parent';
-      if (p.lockNow === true) return { text: `${who} locked ${kid}'s ${poolName(p)}`, detail: null, tone: 'time' };
+      if (p.lockNow === true) return { text: `${who} locked ${kid}'s ${poolName(p, shared)}`, detail: null, tone: 'time' };
       return minutes >= 0
-        ? { text: `${who} added ${minutesText(minutes)} of ${poolName(p)} for ${kid}`, detail: null, tone: 'time' }
-        : { text: `${who} took away ${minutesText(minutes)} of ${poolName(p)} from ${kid}`, detail: null, tone: 'time' };
+        ? { text: `${who} added ${minutesText(minutes)} of ${poolName(p, shared)} for ${kid}`, detail: null, tone: 'time' }
+        : { text: `${who} took away ${minutesText(minutes)} of ${poolName(p, shared)} from ${kid}`, detail: null, tone: 'time' };
     }
     case 'bedtime.extended': {
       const who = by ?? 'A parent';
@@ -130,7 +133,7 @@ export function eventView(event: EventItem, timeZone: string): EventView {
     }
     case 'overspend':
       return {
-        text: `${kid} went ${formatDuration(num(p, 'overspendSec') ?? 0)} over on ${poolName(p)}`,
+        text: `${kid} went ${formatDuration(num(p, 'overspendSec') ?? 0)} over on ${poolName(p, shared)}`,
         detail: `${device} was offline, so it could not know the time had run out`,
         tone: 'alert',
       };

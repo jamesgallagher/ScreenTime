@@ -16,6 +16,13 @@ const FORMS: { form: DeviceForm; icon: typeof Smartphone; detail: string }[] = [
   { form: 'pc', icon: Monitor, detail: 'Windows PC account. Counts as Screens time.' },
 ];
 
+/** For a shared device (docs/SPEC.md §12.8): its one device has its own time, whatever its form. */
+const SHARED_FORMS: typeof FORMS = [
+  { form: 'tablet', icon: Tablet, detail: 'Android tablet.' },
+  { form: 'phone', icon: Smartphone, detail: 'Android phone. Calls and SOS stay off.' },
+  { form: 'pc', icon: Monitor, detail: 'Windows PC account.' },
+];
+
 /** "phone", "tablet", "PC", for the middle of a sentence. */
 function formWord(form: DeviceForm): string {
   return form === 'pc' ? 'PC' : FORM_NAMES[form].toLowerCase();
@@ -40,9 +47,11 @@ function CodeStep({
   onNewCode,
   busy,
   onDone,
+  shared,
 }: {
   kidId: string;
   kidName: string;
+  shared: boolean;
   form: DeviceForm;
   code: EnrolmentCode;
   knownIds: Set<string>;
@@ -63,8 +72,9 @@ function CodeStep({
         <div className="flex flex-col items-center gap-3 py-4 text-center">
           <CircleCheck className="size-16 text-primary" />
           <p className="text-sm text-muted">
-            It now counts toward {kidName}'s {added.pool === 'phone' ? 'Phone' : 'Screens'} time. You can rename it on the
-            Devices tab.
+            {shared
+              ? `It is now ${kidName}, with its own time. You can rename it on the Device tab.`
+              : `It now counts toward ${kidName}'s ${added.pool === 'phone' ? 'Phone' : 'Screens'} time. You can rename it on the Devices tab.`}
           </p>
         </div>
         <Button onClick={onDone}>Done</Button>
@@ -74,13 +84,11 @@ function CodeStep({
 
   return (
     <>
-      <DialogTitle>
-        Add {kidName}'s {formWord(form)}
-      </DialogTitle>
+      <DialogTitle>{shared ? `Connect ${kidName}` : `Add ${kidName}'s ${formWord(form)}`}</DialogTitle>
       <DialogDescription>
         {form === 'pc'
-          ? `On the PC, a parent opens Screen Time Setup and types this code for ${kidName}'s Windows account.`
-          : `On ${kidName}'s ${formWord(form)}, open Screen Time and tap Scan QR code, or type the code.`}
+          ? `On the PC, a parent opens Screen Time Setup and types this code for ${shared ? 'the shared' : `${kidName}'s`} Windows account.`
+          : `On ${shared ? 'the' : `${kidName}'s`} ${formWord(form)}, open Screen Time and tap Scan QR code, or type the code.`}
       </DialogDescription>
       {form !== 'pc' && (
         <div className="flex justify-center">
@@ -117,7 +125,17 @@ function CodeStep({
 }
 
 /** The dialog's body: mounted fresh each time it opens. */
-function AddDeviceBody({ kidId, kidName, onDone }: { kidId: string; kidName: string; onDone: () => void }) {
+function AddDeviceBody({
+  kidId,
+  kidName,
+  shared,
+  onDone,
+}: {
+  kidId: string;
+  kidName: string;
+  shared: boolean;
+  onDone: () => void;
+}) {
   const queryClient = useQueryClient();
   const [form, setForm] = useState<DeviceForm | null>(null);
   // The kid's devices when the dialog opened: a device that is not in this set is the new one.
@@ -133,6 +151,7 @@ function AddDeviceBody({ kidId, kidName, onDone }: { kidId: string; kidName: str
       <CodeStep
         kidId={kidId}
         kidName={kidName}
+        shared={shared}
         form={form}
         code={makeCode.data}
         knownIds={knownIds}
@@ -145,10 +164,12 @@ function AddDeviceBody({ kidId, kidName, onDone }: { kidId: string; kidName: str
 
   return (
     <>
-      <DialogTitle>Add a device for {kidName}</DialogTitle>
-      <DialogDescription>What are you adding? You get a code that works once, for 10 minutes.</DialogDescription>
+      <DialogTitle>{shared ? `Connect ${kidName}` : `Add a device for ${kidName}`}</DialogTitle>
+      <DialogDescription>
+        {shared ? 'What is it? ' : 'What are you adding? '}You get a code that works once, for 10 minutes.
+      </DialogDescription>
       <div className="flex flex-col gap-2">
-        {FORMS.map(({ form: f, icon: Icon, detail }) => (
+        {(shared ? SHARED_FORMS : FORMS).map(({ form: f, icon: Icon, detail }) => (
           <button
             key={f}
             type="button"
@@ -183,16 +204,20 @@ export function AddDeviceDialog({
   open,
   kidId,
   kidName,
+  shared = false,
   onClose,
 }: {
   open: boolean;
   kidId: string;
   kidName: string;
+  shared?: boolean;
   onClose: () => void;
 }) {
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent>{open && <AddDeviceBody kidId={kidId} kidName={kidName} onDone={onClose} />}</DialogContent>
+      <DialogContent>
+        {open && <AddDeviceBody kidId={kidId} kidName={kidName} shared={shared} onDone={onClose} />}
+      </DialogContent>
     </Dialog>
   );
 }

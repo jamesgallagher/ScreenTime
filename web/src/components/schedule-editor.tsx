@@ -30,6 +30,8 @@ function inputOf(schedule: Schedule): ScheduleInput {
 }
 
 const GRID = 'grid grid-cols-2 gap-3 md:grid-cols-[7.5rem_repeat(4,minmax(0,1fr))] md:items-center';
+/** A shared device has one allowance, Time (docs/SPEC.md §12.8). */
+const GRID_SHARED = 'grid grid-cols-2 gap-3 md:grid-cols-[7.5rem_repeat(3,minmax(0,1fr))] md:items-center';
 
 function Field<T extends string | number>({
   label,
@@ -62,24 +64,36 @@ function Field<T extends string | number>({
   );
 }
 
-function DayRow({ day, error, onChange }: { day: ScheduleDay; error?: string; onChange: (day: ScheduleDay) => void }) {
+function DayRow({
+  day,
+  error,
+  shared,
+  onChange,
+}: {
+  day: ScheduleDay;
+  error?: string;
+  shared: boolean;
+  onChange: (day: ScheduleDay) => void;
+}) {
   const name = WEEKDAYS[day.weekday - 1];
   return (
     <div role="group" aria-label={name} className="border-t border-outline py-3 first:border-t-0">
-      <div className={GRID}>
+      <div className={shared ? GRID_SHARED : GRID}>
         <p className="col-span-2 text-sm font-semibold md:col-span-1">{name}</p>
         <Field
-          label="Screens"
+          label={shared ? 'Time' : 'Screens'}
           value={day.screensMin}
           options={allowanceOptions(day.screensMin)}
           onChange={(screensMin) => onChange({ ...day, screensMin })}
         />
-        <Field
-          label="Phone"
-          value={day.phoneMin}
-          options={allowanceOptions(day.phoneMin)}
-          onChange={(phoneMin) => onChange({ ...day, phoneMin })}
-        />
+        {!shared && (
+          <Field
+            label="Phone"
+            value={day.phoneMin}
+            options={allowanceOptions(day.phoneMin)}
+            onChange={(phoneMin) => onChange({ ...day, phoneMin })}
+          />
+        )}
         <Field label="Wake-up" value={day.wake} options={timeOptions('wake', day.wake)} onChange={(wake) => onChange({ ...day, wake })} />
         <Field
           label="Bedtime"
@@ -102,7 +116,7 @@ function DayRow({ day, error, onChange }: { day: ScheduleDay; error?: string; on
  * docs/SPEC.md §16.4 Schedule: 7 rows (Screens and Phone allowance, wake-up, bedtime), the two copy
  * buttons and the two warnings. Saving writes a new schedule version; devices pick it up on their next sync.
  */
-export function ScheduleEditor({ kidId, kidName }: { kidId: string; kidName: string }) {
+export function ScheduleEditor({ kidId, kidName, shared = false }: { kidId: string; kidName: string; shared?: boolean }) {
   const queryClient = useQueryClient();
   const schedule = useQuery({
     queryKey: ['schedule', kidId],
@@ -155,19 +169,21 @@ export function ScheduleEditor({ kidId, kidName }: { kidId: string; kidName: str
         <CardHeader>
           <CardTitle>Week</CardTitle>
           <CardDescription>
-            Time {kidName} can use each day, and when the devices lock for the night. Bedtime always locks.
+            {shared
+              ? `Time ${kidName} can be used each day, and when it locks for the night. Bedtime always locks.`
+              : `Time ${kidName} can use each day, and when the devices lock for the night. Bedtime always locks.`}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className={cn(GRID, 'hidden pb-2 text-xs font-medium text-muted md:grid')} aria-hidden>
+          <div className={cn(shared ? GRID_SHARED : GRID, 'hidden pb-2 text-xs font-medium text-muted md:grid')} aria-hidden>
             <span />
-            <span>Screens</span>
-            <span>Phone</span>
+            <span>{shared ? 'Time' : 'Screens'}</span>
+            {!shared && <span>Phone</span>}
             <span>Wake-up</span>
             <span>Bedtime</span>
           </div>
           {value.days.map((day) => (
-            <DayRow key={day.weekday} day={day} error={errors.days[day.weekday]} onChange={setDay} />
+            <DayRow key={day.weekday} day={day} error={errors.days[day.weekday]} shared={shared} onChange={setDay} />
           ))}
           <div className="mt-3 flex flex-wrap gap-2">
             <Button variant="outline" size="sm" onClick={() => edit({ ...value, days: copyMondayToWeekdays(value.days) })}>
@@ -185,7 +201,11 @@ export function ScheduleEditor({ kidId, kidName }: { kidId: string; kidName: str
       <Card>
         <CardHeader>
           <CardTitle>Warnings</CardTitle>
-          <CardDescription>How long before time runs out {kidName} gets a warning.</CardDescription>
+          <CardDescription>
+            {shared
+              ? 'How long before time runs out the device shows a warning.'
+              : `How long before time runs out ${kidName} gets a warning.`}
+          </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 sm:max-w-md sm:grid-cols-2">
           <label className="flex flex-col gap-1">
@@ -235,7 +255,7 @@ export function ScheduleEditor({ kidId, kidName }: { kidId: string; kidName: str
           ) : saved ? (
             <span className="flex items-center gap-1.5 text-primary">
               <Check className="size-4" />
-              Saved. {kidName}'s devices pick it up on their next sync.
+              {shared ? `Saved. ${kidName} picks it up on its next sync.` : `Saved. ${kidName}'s devices pick it up on their next sync.`}
             </span>
           ) : dirty ? (
             <span className="text-muted">Unsaved changes</span>
