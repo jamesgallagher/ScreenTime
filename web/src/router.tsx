@@ -10,12 +10,14 @@ import { Loader2 } from 'lucide-react';
 import { AppShell } from '@/components/app-shell';
 import { SosBanner } from '@/components/sos-banner';
 import { useAuth } from '@/lib/auth';
+import { parseReportSearch } from '@/lib/reports';
 import { AdminPage } from '@/pages/admin';
 import { DownloadPage } from '@/pages/download';
 import { InboxPage } from '@/pages/inbox';
 import { KidPage } from '@/pages/kid';
 import { KidsPage } from '@/pages/kids';
 import { NotFoundPage } from '@/pages/not-found';
+import { ReportsPage } from '@/pages/reports';
 import { SettingsPage } from '@/pages/settings';
 import { SignInPage } from '@/pages/sign-in';
 import { TodayPage } from '@/pages/today';
@@ -70,13 +72,22 @@ const kidRoute = createRoute({
     return <KidPage key={kidId} kidId={kidId} />;
   },
 });
+/** docs/SPEC.md §12.9: the choices are in the address, so a report can be bookmarked or sent to the other parent. */
+const reportsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/reports',
+  validateSearch: parseReportSearch,
+  component: function ReportsRoute() {
+    return <ReportsPage search={reportsRoute.useSearch()} />;
+  },
+});
 const settingsRoute = createRoute({ getParentRoute: () => appRoute, path: '/settings', component: SettingsPage });
 const adminRoute = createRoute({ getParentRoute: () => appRoute, path: '/admin', component: AdminOnly });
 
 const routeTree = rootRoute.addChildren([
   signInRoute,
   downloadRoute,
-  appRoute.addChildren([todayRoute, inboxRoute, kidsRoute, kidRoute, settingsRoute, adminRoute]),
+  appRoute.addChildren([todayRoute, inboxRoute, kidsRoute, kidRoute, reportsRoute, settingsRoute, adminRoute]),
 ]);
 
 export const router = createRouter({ routeTree, defaultPreload: 'intent' });

@@ -15,7 +15,7 @@ Markers used below:
 
 1. Product summary
 2. Household and devices (v1)
-3. Requirements decisions (interview log Q1 to Q39)
+3. Requirements decisions (interview log Q1 to Q41)
 4. System architecture
 5. Repository layout
 6. Data model
@@ -103,6 +103,7 @@ These are James's answers from the requirements interview (22 Oct 2026). Section
 | Q38 | (5 Nov 2026) A kid cannot ask for more time on one app yet. A parent can change the limit at any time. | 12.4, 18 |
 | Q39 | (18 Nov 2026) A parent can **extend bedtime** for one kid, tonight only, without giving time. Until the new bedtime the kid keeps any time that is left; with none left, the device stays locked as out of time, so the always-allowed apps keep working (homework, for example). Adding time after bedtime still unlocks everything, as before. | 7.5 |
 | Q40 | (19 Nov 2026) A **shared device** belongs to no kid, for example Mum's tablet that the kids borrow. It has its own time (0 by default), bedtime, app blocks, always-allowed apps and new-app approval (on by default), and kids ask for time on it like on their own device. Time on it never comes off a kid. A parent who wants to use it uses parent mode, which on a shared device ends when the screen goes off. Shown in its own **Shared devices** section in the web and parent apps. | 12.8 |
+| Q41 | (20 Nov 2026) **Reports**: per kid or shared device, then all devices or one, which apps were used and for how long, by day, week (Monday to Sunday) and calendar month, kept forever, screen time on top, removed apps and devices still shown. No alerts. Windows programs, websites (a separate report), the parent app and emails come in later phases. | 12.9 |
 | Future | School-hours blocks, a cooldown between time requests, app allowlists. | 18 |
 
 Also decided in research (22 Oct 2026): the tech stack in section 4, the sync design in section 8, Device Owner with Lock Task for Android, and a LocalSystem service plus tray helper for Windows.
@@ -509,6 +510,7 @@ App control routes (Android only, section 12.4):
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/v1/kids/{kidId}/apps` | `{ newAppApproval, apps: [{ package, label, source, blockable, todaySeconds, rule: { mode, dailyMinutes } \| null, devices: [{ deviceId, deviceName, installedAt, firstUsedAt, removedAt }] }] }`, across the kid's Android devices. An app gone from every device is still listed, with `removedAt` set |
+| GET | `/v1/reports/apps?kidId=&period=&date=&deviceId=` | The apps report (section 12.9, CARD-066) → `AppReport { kidId, period, from, to, today, deviceId, devices: [{ deviceId, name, form, platform, removedAt, appsRecorded }], screenTime: [{ pool, usedSec }], apps: [{ package, label, totalSec, devices: [{ deviceId, sec }], installedAt, removedAt }] }`. `period` `day`, `week` or `month`, `date` any day in it (default today; after today → 422), `deviceId` optional, one of the kid's devices (removed too) |
 | PUT | `/v1/kids/{kidId}/apps/{package}/rule` | `{ mode, dailyMinutes }` → the app's rule (`dailyMinutes` null unless `limit`). `mode` is `allowed`, `blocked` or `limit`; `held` is only written by the server (422). `dailyMinutes` 5 to 480 in steps of 5 for `limit`, and anything but null otherwise is refused (422). A package not on any of the kid's devices → 404; one that any of them says is not `blockable` → 409. Answering a `held` app also writes `app.answered` |
 | PUT | `/v1/kids/{kidId}/app-settings` | `{ newAppApproval }` → 204 |
 
@@ -799,7 +801,7 @@ Not tried yet, so **each card's rehearsal or the rollout must prove it**: a real
 
 **New apps (Q37).** With `newAppApproval` on, a package the device has not seen before and has no rule for is suspended by the device at once, without waiting for the server. Apps already on the device when the switch is turned on are not touched. A parent answers from the inbox or the Apps page: **Allow** writes `allowed`, **Block** writes `blocked`, and either writes the history event `app.answered` (payload `{ package, label, approved, byName }`), so the card leaves the inbox. Rules outlive an uninstall, so reinstalling a blocked app blocks it again.
 
-**Daily limits (Q36).** The service adds up each package's time since local midnight in the family time zone from the usage events (resumed to paused, and ending at screen off), leaving out parent mode. Used time is that number plus `today.appUsage` from the kid's other devices. Two devices using one app at the same time count twice, which is simple and errs on the short side. Totals go up with `POST /v1/device/app-usage` at each sync, for every app, so parents see them. While a limited app is in front, the service's loop also wakes when its time should run out. A warning shows at 5 minutes left. At the limit the app is blocked and a notification says "That's all your YouTube for today", on the "Time warnings" channel. Limits reset at the first check after local midnight; with the screen off, that is the next unlock. A device offline can run over; this is not reported, and nothing carries over. The sum is a small pure Kotlin function with JUnit tests. It is not part of the time engine, which is unchanged: app time keeps counting towards the pool as before.
+**Daily limits (Q36).** The service adds up each package's time since local midnight in the family time zone from the usage events (resumed to paused, and ending at screen off), leaving out parent mode. Used time is that number plus `today.appUsage` from the kid's other devices. Two devices using one app at the same time count twice, which is simple and errs on the short side. Totals go up with `POST /v1/device/app-usage` at each sync, for every app and the last 8 days (12.9), so parents see them. While a limited app is in front, the service's loop also wakes when its time should run out. A warning shows at 5 minutes left. At the limit the app is blocked and a notification says "That's all your YouTube for today", on the "Time warnings" channel. Limits reset at the first check after local midnight; with the screen off, that is the next unlock. A device offline can run over; this is not reported, and nothing carries over. The sum is a small pure Kotlin function with JUnit tests. It is not part of the time engine, which is unchanged: app time keeps counting towards the pool as before.
 
 **Parent mode and locks.** Parent mode releases every blocked app, including hidden ones, so a parent can use the Play Store and it can run updates; its end blocks them again. App time does not count during parent mode. When the device is locked by the engine, Lock Task still decides what can open. App blocks do not change during an SOS.
 
@@ -885,6 +887,56 @@ A device that belongs to no kid: the first one is Mum's Lenovo tablet, which the
 - **Windows:** a PC account can be a shared device with the same rules, except that parent mode does not end when the PC locks (not built).
 
 **The screens.** Web Kids page and parent app Kids tab: a **Shared devices** section under the kids, one row each with a device-form icon on the avatar colour instead of an initial, and its device's name and last seen. The web page has **Add shared device** (name, for example "Mum's tablet", and a colour), then opens its page; the parent app does not add them, as with kids. A shared device's page has Today (one **Time** row, the bedtime row, chips), Schedule (per day **Time**, wake-up and bedtime; warnings), Device (its one device with Parent mode, rename, remove, games for a PC, and **Add device** only while it has none) and Apps (with an Android device; the approval switch reads "A new app on Mum's tablet stays blocked until a parent says yes"). No Contacts. Today lists shared devices after the kids, under a **Shared devices** heading.
+
+### 12.9 Reports (Q41, James, 20 Nov 2026; CARD-066)
+
+A parent can see, for each kid or shared device, **which apps were used and for how long**, by day, by week (Monday to Sunday) and by calendar month, with every device together or one device at a time. The page is **Reports**. It is for looking back, not for limits, and raises no alerts. Later phases add Windows programs, websites (a separate report with its own classification), the Android parent app and daily or weekly emails; this section is the apps report, which CARD-066 builds on the Android data the devices already send.
+
+**How others do it.** Apple Screen Time, Google Family Link, Microsoft Family Safety and Qustodio all show a child's report across all devices first and let a parent narrow it to one device; Microsoft mixes PC and phone apps in one list and warns that app time need not add up to device time. Reports does the same.
+
+**Decided with James (20 Nov 2026):**
+
+- Per kid or shared device, then **All devices** (the default) or one device. A shared device has one device, so it has no device choice.
+- **Day**, **Week** (Monday to Sunday) and **Month** (calendar month) in the family time zone, stepping back as far as the data goes. History is kept **forever**: nothing deletes `app_usage_daily` or `usage_segments`.
+- **Screen time at the top, then the apps**, ranked from most to least used. Each app row shows its time and, in All devices, the split per device under it ("Pixel 1h 10m · XPPen 30m"). The same Android package on two devices is one row.
+- **Removed apps and removed devices still show**, marked as removed, with when the app was installed and removed: a kid who installs an app and deletes it quickly is exactly what a parent wants to see.
+- **Every package that came to the front is listed**, system and helper apps too. Apps under one minute in the period are folded into an **Other** row that opens.
+- Parent mode is left out, as everywhere else.
+- **No cache.** `app_usage_daily` is already one row per device, package and day (about 20,000 rows a device a year), and its `(kid_id, day)` index makes a month a quick query. A cache of past periods would go wrong when an offline device uploads a day late, which the upsert allows.
+- The report is built by one server function, so the emails of a later phase show the same numbers.
+
+**Where the numbers come from.**
+
+- **Apps:** `app_usage_daily` (6.1) of the devices in the report, summed per package over the period's days. Only Android devices record apps so far (`appsRecorded: false` for a PC; Windows programs are a later phase).
+- **Screen time:** `usage_segments` of the devices in the report, per pool: the length of the **union** of their segments (two devices used at once count once, as in 7.2), clipped to the period (from local midnight of its first day to local midnight after its last day, through the time zone) and to now. All devices of a kid gives the kid's **Screens** and **Phone**, the same time the rest of the app uses; one device gives that device's pool. A segment still open (`ended_at` null) ends at the device's `last_seen_at` (never before its start, never after now), so a device that went quiet does not keep growing in a report.
+- **The app's name** is the `label` of its `device_apps` row on the report's devices (the one seen most recently), else on any of the kid's devices, else the package name (a package with no launcher icon is never listed, 12.4).
+- **Installed and removed:** `installedAt` is the earliest `device_apps.installed_at` of the package on the report's devices; `removedAt` is the latest `removed_at` when it is removed from **every** one of them that listed it, and null while any still has it. Both are null when no device listed it.
+- App time need not add up to screen time: the launcher, the lock screen and the kid app count in one and not the other, and always-allowed apps count towards apps but not the pool (12.4). The page says so in one line.
+
+**Android: a week of days at each upload.** Until CARD-066 the kid app sent only yesterday and today, so a device offline for two days or more lost those days' app time for good. It now sends **the last 8 days** (today and the 7 before, the most `POST /v1/device/app-usage` takes) at every sync, still only when the body changed. It keeps parent mode's spans for those 8 days, not just today, so an older day still leaves parent mode out (the server keeps the larger value and could never take it back). Android keeps usage events for about a week; a day it no longer fully has just sends less, and the server keeps the larger value it already has.
+
+**The API (9.2).** `GET /v1/reports/apps?kidId=&period=&date=&deviceId=` answers `AppReport`:
+
+```json
+{
+  "kidId": "…", "period": "week", "from": "2026-11-16", "to": "2026-11-22", "today": "2026-11-20", "deviceId": null,
+  "devices": [ { "deviceId": "…", "name": "Pixel", "form": "phone", "platform": "android", "removedAt": null, "appsRecorded": true } ],
+  "screenTime": [ { "pool": "screens", "usedSec": 15300 }, { "pool": "phone", "usedSec": 9120 } ],
+  "apps": [ { "package": "com.google.android.youtube", "label": "YouTube", "totalSec": 6000,
+              "devices": [ { "deviceId": "…", "sec": 4200 }, { "deviceId": "…", "sec": 1800 } ],
+              "installedAt": "2026-10-02T03:11:00.000Z", "removedAt": null } ]
+}
+```
+
+- `period` is `day`, `week` or `month`; `date` (default the family's today) is any day in it, and `from` and `to` are its first and last day (a week from Monday, a month from the 1st). `to` may be after today. A `date` after the family's today, or not a real date → 422. `deviceId`, when given, must be one of the kid's devices, removed ones too (404 otherwise); the report is then that device only.
+- `devices`: the kid's devices, oldest enrolment first: every one not removed, and each removed one with any segment or app time in the period. `removedAt` is the device's `revoked_at`. It always lists them all, also when `deviceId` is given, so the page can show its chips.
+- `screenTime`: one entry per pool that a device in the report belongs to, Screens first (none when the report has no device).
+- `apps`: packages with more than 0 seconds in the period, most used first, then by label, then by package; `devices` lists each device with time, in the order of `devices`.
+- No such kid, or a kid of another family → 404. An archived kid still answers.
+
+**The screens (16.5; the Android parent app is a later phase).** A **Reports** page in the sidebar after Kids. At the top: the kid or shared device (kids first, then shared devices; archived ones are not offered), **Day / Week / Month**, and the period with ‹ and › ("Thu 20 Nov", "17 – 23 Nov", "November 2026"; › stops at the period that holds today, and **Today**, **This week** or **This month** jumps back). Under it, chips for **All devices** and each device (a removed one says so), not shown for a shared device. Then a **Screen time** card (Screens and Phone, or Time for a shared device, or the one device's time) and the **Apps** list: rows with the name, a bar against the most used app, the time, and in All devices with more than one device the split line. A removed app says "Installed 3 Nov · removed 4 Nov". A PC in the report says "Apps on a PC aren't recorded yet". The choices are in the address (`/reports?kid=…&device=…&period=week&date=2026-11-20`), so a report can be bookmarked or sent to the other parent.
+
+**Later phases (not CARD-066).** Windows programs in front (the service and tray, counting while the PC is unlocked, no idle cut-off); websites from Device Owner network logging on Android (so Bark keeps its VPN) and the Windows DNS log with window titles, classified by the family's local LLM, as a separate **Websites** report; the Android parent app; daily and weekly emails.
 
 ## 13. Notifications
 
@@ -1112,11 +1164,11 @@ As planned (CARD-042): the parent app starts Firebase itself from four `BuildCon
 
 ### 16.5 Parent web app
 
-Kid detail has an **Apps** tab with the same content as 16.4. Shared devices (12.8) have their own section on Kids with **Add shared device**, and their page has the tabs Today, Schedule, Device and Apps. The bedtime row and the extend bedtime sheet of 16.4 are on Today's kid cards and the kid's Today tab; the sheet is a dialog. On the Devices tab, a PC's **More** menu has **Games…** (section 12.6): a dialog with a switch per game the PC found ("Not on this PC any more" for one that is gone, with its switch disabled), the programs a parent added with a remove button, and **Add another program** (a name and the full path to an .exe; a bad path says what is wrong). The Android parent app does not have it yet. Same functions as the parent app except SOS alarms (the web shows a red banner at the top of every page while an SOS is active, with the map link) and parent code (also shown in Settings).
+**Reports** (section 12.9) is a page in the sidebar after Kids. Kid detail has an **Apps** tab with the same content as 16.4. Shared devices (12.8) have their own section on Kids with **Add shared device**, and their page has the tabs Today, Schedule, Device and Apps. The bedtime row and the extend bedtime sheet of 16.4 are on Today's kid cards and the kid's Today tab; the sheet is a dialog. On the Devices tab, a PC's **More** menu has **Games…** (section 12.6): a dialog with a switch per game the PC found ("Not on this PC any more" for one that is gone, with its switch disabled), the programs a parent added with a remove button, and **Add another program** (a name and the full path to an .exe; a bad path says what is wrong). The Android parent app does not have it yet. Same functions as the parent app except SOS alarms (the web shows a red banner at the top of every page while an SOS is active, with the map link) and parent code (also shown in Settings).
 
 Development (CARD-022): `pnpm dev:web` serves the app on http://localhost:5173 and passes `/v1/*` and `/health` to the API on :8080, so the browser sees one origin (in production the server serves the build, CARD-027). Routes are defined in code (TanStack Router, no generator); components are shadcn/ui-style files in `web/src/components/ui` with our tokens, not the shadcn defaults.
 
-Layout: left sidebar 240 px on ≥ 1024 px (Today, Inbox, Kids, Settings, and Admin for the super admin), top bar with a menu sheet below 1024 px. Content max width 1100 px. shadcn/ui components themed with the tokens in 16.1; light and dark follow the OS.
+Layout: left sidebar 240 px on ≥ 1024 px (Today, Inbox, Kids, Reports, Settings, and Admin for the super admin), top bar with a menu sheet below 1024 px. Content max width 1100 px. shadcn/ui components themed with the tokens in 16.1; light and dark follow the OS.
 
 Pages: Sign in (email, then 6-digit code boxes), Today (kid cards as 16.4 in a responsive grid; the adjust sheet is a dialog with − and + buttons in 15-minute steps and quick amounts +15m, +30m, +1h, +2h instead of the wheel, CARD-023; a device silent for 6 hours shows an offline chip), Kids (one row per kid, **Add kid**, CARD-024), Kid detail (tabs: Today, Schedule, Devices, Contacts, CARD-024: the schedule uses selects in 15-minute steps instead of time chips, allowances up to 12 h and bedtime up to midnight; warnings are picked from 10/15/20/30/45/60 and 1/2/3/5/10 min; **Add device** asks for the device list every 3 s while the code is valid and says when the new device is connected; a PC code has no QR code; contact numbers are stored in E.164, and a 10-digit Australian number starting with 0 gets +61), Inbox (CARD-025: waiting time requests with **Yes**, **No** and **Other amount**, and parent-mode requests found in the events, a parent_mode.request under 10 minutes old with no used/denied/ended event for its session; then the event history, 50 at a time, refreshed every 30 s; the SOS banner checks `/v1/sos?active=true` every 15 s and uses the light theme's danger red in both themes), Settings (CARD-025b: one column of cards: the parent code first, hidden until **Show code**, worked out in the browser with Web Crypto and a 30 s ring, and **Make a new code** to rotate the secret; notification switches for the signed-in parent with the essential kinds shown as always on and listed first; up to 10 message presets saved as one list, with move up; parents add, edit and remove, never yourself, with a warning when a parent has no mobile; family name, time zone and emergency number, after which the sign-in is refreshed so every page uses the new time zone), Admin (CARD-026: families list, oldest first, with time zone, parent count, start date and a Disabled chip; **New family** dialog: name, time zone (the browser's by default), emergency number (000) and the first parent's email, name and optional mobile; each enabled family has **Add parent** and **Disable family** with a confirm step; a disabled family cannot be turned back on; a super admin with no family goes straight from sign-in to Admin).
 
@@ -1145,7 +1197,7 @@ Pages: Sign in (email, then 6-digit code boxes), Today (kid cards as 16.4 in a r
 - Windows credential provider so the lock screen can show Ask / Message / Parent buttons.
 - Offline unlock codes for extra time (not just parent mode).
 - Offline cap: a device unsynced for 30 minutes may only use half of what was left.
-- History and weekly reports.
+- Later phases of Reports (12.9): Windows programs, websites, the parent app, emails.
 - MDM extras: install/remove apps, location outside SOS, remote wipe.
 - Accessibility-service fallback for devices that cannot be Device Owner.
 - Browser push for the web app.
