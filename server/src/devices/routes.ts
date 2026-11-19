@@ -150,7 +150,15 @@ export function registerDeviceRoutes(app: Router, deps: AppDeps) {
     const { form } = c.req.valid('json');
     const code = await freeCode();
     const row = await withFamily(db, familyId, async (tx) => {
-      await findKid(tx, kidId);
+      const kid = await findKid(tx, kidId);
+      if (kid.kind === 'shared') {
+        const [existing] = await tx
+          .select({ id: devices.id })
+          .from(devices)
+          .where(and(eq(devices.kidId, kidId), isNull(devices.revokedAt)))
+          .limit(1);
+        if (existing) throw new ApiError('conflict', 'This shared device already has a device. Remove it first.', { code: 'shared_has_device' });
+      }
       const [saved] = await tx
         .insert(enrolmentCodes)
         .values({ familyId, kidId, form, code, expiresAt: CODE_TTL, createdBy: parentId })
@@ -249,6 +257,7 @@ export function registerDeviceRoutes(app: Router, deps: AppDeps) {
           .returning({ id: devices.id });
       }
       const name = (body.platform === 'windows' ? `${body.windowsUserName} on ${body.model}` : body.model).slice(0, 40);
+      const pool = kid.kind === 'shared' ? 'screens' : form === 'phone' ? 'phone' : 'screens';
       const [device] = await tx
         .insert(devices)
         .values({
@@ -256,7 +265,7 @@ export function registerDeviceRoutes(app: Router, deps: AppDeps) {
           kidId: kid.id,
           platform: body.platform,
           form,
-          pool: form === 'phone' ? 'phone' : 'screens',
+          pool,
           name,
           hasCellular: body.hasCellular,
           model: body.model,
