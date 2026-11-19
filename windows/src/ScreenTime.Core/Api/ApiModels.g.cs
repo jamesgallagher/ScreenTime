@@ -27,6 +27,13 @@ public enum ErrorCode
     [JsonStringEnumMemberName("internal")] Internal,
 }
 
+[JsonConverter(typeof(JsonStringEnumConverter<KidKind>))]
+public enum KidKind
+{
+    [JsonStringEnumMemberName("kid")] Kid,
+    [JsonStringEnumMemberName("shared")] Shared,
+}
+
 public sealed record Schedule(
     [property: JsonPropertyName("version")] int Version,
     [property: JsonPropertyName("warn1Min")] int Warn1Min,
@@ -133,7 +140,8 @@ public sealed record DeviceStateDevice(
 
 public sealed record DeviceStateKid(
     [property: JsonPropertyName("id")] string Id,
-    [property: JsonPropertyName("name")] string Name);
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("kind"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] KidKind? Kind = null);
 
 public sealed record DeviceStateFamily(
     [property: JsonPropertyName("timezone")] string Timezone,
@@ -467,6 +475,7 @@ public sealed record PushTokenPut(
 [JsonSerializable(typeof(ErrorResponse))]
 [JsonSerializable(typeof(ErrorResponseError))]
 [JsonSerializable(typeof(ErrorCode))]
+[JsonSerializable(typeof(KidKind))]
 [JsonSerializable(typeof(Schedule))]
 [JsonSerializable(typeof(ScheduleDay))]
 [JsonSerializable(typeof(DeviceForm))]

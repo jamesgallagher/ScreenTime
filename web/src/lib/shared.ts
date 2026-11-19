@@ -8,41 +8,16 @@ import { POOL_NAMES } from '@/lib/today';
 
 export type KidKind = 'kid' | 'shared';
 
-// ---- The seam: `kind` on Kid and TodayKid, and creating one. CARD-065 wires it. ----
-
-/**
- * Until the server sends `kind`, the shared devices made in this browser are remembered here, so the screens can
- * be tried. CARD-065 deletes this and reads `kind` alone.
- */
-const FAKE_KEY = 'screentime.fakeSharedKids';
-
-function fakeSharedIds(): Set<string> {
-  try {
-    const ids: unknown = JSON.parse(localStorage.getItem(FAKE_KEY) ?? '[]');
-    return new Set(Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : []);
-  } catch {
-    return new Set();
-  }
-}
-
-function rememberFakeShared(id: string): void {
-  try {
-    localStorage.setItem(FAKE_KEY, JSON.stringify([...fakeSharedIds(), id]));
-  } catch {
-    // Private window: the new one shows as a kid until the server sends `kind`.
-  }
-}
+// ---- The seam: `kind` on Kid and TodayKid, and creating one. The kind comes from the server. ----
 
 /** A kid, a Today kid or the snapshot's kid: `kid` unless it is a shared device. */
 export function kindOf(kid: { id: string; kind?: KidKind }): KidKind {
-  return kid.kind ?? (fakeSharedIds().has(kid.id) ? 'shared' : 'kid');
+  return kid.kind ?? 'kid';
 }
 
 /** POST /v1/kids `{ name, avatarColor, kind: 'shared' }`: the server turns new-app approval on and gives 0 minutes. */
 export async function createShared(name: string, avatarColor: AvatarColor): Promise<Kid> {
-  const kid = await api.post<Kid>('/v1/kids', { name, avatarColor });
-  rememberFakeShared(kid.id);
-  return kid;
+  return api.post<Kid>('/v1/kids', { name, avatarColor, kind: 'shared' });
 }
 
 // ---- Pure helpers. ----

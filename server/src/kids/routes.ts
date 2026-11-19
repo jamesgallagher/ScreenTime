@@ -5,6 +5,7 @@ import {
   KidContact,
   KidContactsPut,
   KidCreate,
+  KidKind,
   KidPatch,
   Schedule,
   type ScheduleDay,
@@ -19,14 +20,14 @@ import { ApiError } from '../errors.js';
 import { disconnectDevices, stateChanged } from '../notify/dispatch.js';
 import { bearer, errorResponses, jsonBody, jsonResponse } from '../openapi.js';
 import type { createRouter } from '../router.js';
-import { DEFAULT_WARN1_MIN, DEFAULT_WARN2_MIN, defaultWeek } from './schedule.js';
+import { DEFAULT_WARN1_MIN, DEFAULT_WARN2_MIN, defaultWeek, sharedWeek } from './schedule.js';
 
 type Router = ReturnType<typeof createRouter>;
 
 const KidParam = z.object({ kidId: z.uuid() });
 
 function toKid(row: typeof kids.$inferSelect): Kid {
-  return { id: row.id, name: row.name, avatarColor: row.avatarColor as Kid['avatarColor'] };
+  return { id: row.id, name: row.name, avatarColor: row.avatarColor as Kid['avatarColor'], kind: row.kind as Kid['kind'] };
 }
 
 export function toSchedule(row: typeof scheduleVersions.$inferSelect): Schedule {
@@ -166,16 +167,37 @@ export function registerKidRoutes(app: Router, deps: AppDeps) {
   app.openapi(createKidRoute, async (c) => {
     const { familyId, parentId } = await caller(c);
     const body = c.req.valid('json');
+    const kind = body.kind ?? 'kid';
     const row = await withFamily(db, familyId, async (tx) => {
-      const [kid] = await tx.insert(kids).values({ familyId, name: body.name, avatarColor: body.avatarColor }).returning();
+      const [kid] = await tx
+        .insert(kids)
+        .values({ familyId, name: body.name, avatarColor: body.avatarColor, kind, newAppApproval: kind === 'shared' })
+        .returning();
       if (!kid) throw new Error('kid insert returned nothing');
+      let days: ScheduleDay[];
+      if (kind === 'shared') {
+        // The current schedules of the family's other non-archived kids (highest version each).
+        const otherKids = await tx
+          .select({ kidId: scheduleVersions.kidId, days: scheduleVersions.days })
+          .from(scheduleVersions)
+          .innerJoin(kids, eq(scheduleVersions.kidId, kids.id))
+          .where(and(eq(scheduleVersions.familyId, familyId), eq(kids.kind, 'kid'), isNull(kids.archivedAt)))
+          .orderBy(desc(scheduleVersions.version));
+        const latestByKid = new Map<string, { days: ScheduleDay[] }>();
+        for (const r of otherKids) {
+          if (!latestByKid.has(r.kidId)) latestByKid.set(r.kidId, { days: r.days as ScheduleDay[] });
+        }
+        days = sharedWeek([...latestByKid.values()]);
+      } else {
+        days = defaultWeek();
+      }
       await tx.insert(scheduleVersions).values({
         familyId,
         kidId: kid.id,
         version: 1,
         warn1Min: DEFAULT_WARN1_MIN,
         warn2Min: DEFAULT_WARN2_MIN,
-        days: defaultWeek(),
+        days,
         createdBy: parentId,
       });
       return kid;
@@ -278,7 +300,8 @@ export function registerKidRoutes(app: Router, deps: AppDeps) {
     const { familyId } = await caller(c);
     const { kidId } = c.req.valid('param');
     const rows = await withFamily(db, familyId, async (tx) => {
-      await findKid(tx, kidId);
+      const kid = await findKid(tx, kidId);
+      if (kid.kind === 'shared') return [];
       return tx
         .select()
         .from(kidContacts)
@@ -293,7 +316,8 @@ export function registerKidRoutes(app: Router, deps: AppDeps) {
     const { kidId } = c.req.valid('param');
     const { contacts } = c.req.valid('json');
     const rows = await withFamily(db, familyId, async (tx) => {
-      await findKid(tx, kidId);
+      const kid = await findKid(tx, kidId);
+      if (kid.kind === 'shared') throw new ApiError('conflict', 'A shared device has no contacts.', { code: 'shared_device' });
       await tx.delete(kidContacts).where(and(eq(kidContacts.familyId, familyId), eq(kidContacts.kidId, kidId)));
       if (contacts.length === 0) return [];
       return tx

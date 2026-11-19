@@ -164,6 +164,7 @@ data class Kid(
     val id: String,
     val name: String,
     val avatarColor: AvatarColor,
+    val kind: KidKind,
 )
 
 @Serializable
@@ -179,9 +180,16 @@ enum class AvatarColor(override val wire: String) : ApiEnum {
 }
 
 @Serializable
+enum class KidKind(override val wire: String) : ApiEnum {
+    @SerialName("kid") KID("kid"),
+    @SerialName("shared") SHARED("shared");
+}
+
+@Serializable
 data class KidCreate(
     val name: String,
     val avatarColor: AvatarColor,
+    val kind: KidKind? = null,
 )
 
 @Serializable
@@ -379,6 +387,7 @@ data class DeviceStateDevice(
 data class DeviceStateKid(
     val id: String,
     val name: String,
+    val kind: KidKind? = null,
 )
 
 @Serializable
@@ -517,6 +526,7 @@ data class TodayKid(
     val id: String,
     val name: String,
     val avatarColor: AvatarColor,
+    val kind: KidKind,
     val pools: List<TodayPool>,
     val bedtime: TodayBedtime,
 )

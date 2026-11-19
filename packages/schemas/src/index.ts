@@ -35,6 +35,7 @@ export {
   KidContact,
   KidContactsPut,
   KidCreate,
+  KidKind,
   KidPatch,
   Schedule,
   ScheduleDay,

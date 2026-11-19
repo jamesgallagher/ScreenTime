@@ -1,5 +1,8 @@
 package au.screentime.core.model.api
 
+import au.screentime.core.model.api.AvatarColor
+import au.screentime.core.model.api.Kid
+import au.screentime.core.model.api.KidKind
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.MockRequestHandleScope
 import io.ktor.client.engine.mock.respond
@@ -39,11 +42,11 @@ class ApiClientTest {
 
     @Test
     fun getSendsTheTokenAndReadsAList() = runBlocking {
-        val api = client { json("""[{"id":"k1","name":"Mia","avatarColor":"#0F766E"}]""") }
+        val api = client { json("""[{"id":"k1","name":"Mia","avatarColor":"#0F766E","kind":"kid"}]""") }
 
         val kids = api.getKids()
 
-        assertEquals(listOf(Kid("k1", "Mia", AvatarColor._0F766E)), kids)
+        assertEquals(listOf(Kid("k1", "Mia", AvatarColor._0F766E, KidKind.KID)), kids)
         assertEquals(HttpMethod.Get, requests.single().method)
         assertEquals("https://api.example/v1/kids", requests.single().url.toString())
         assertEquals("Bearer tok", requests.single().headers[HttpHeaders.Authorization])
@@ -107,7 +110,7 @@ class ApiClientTest {
 
     @Test
     fun aPathParameterIsEncoded() = runBlocking {
-        val api = client { json("""{"id":"a/b","name":"Mia","avatarColor":"#0F766E"}""") }
+        val api = client { json("""{"id":"a/b","name":"Mia","avatarColor":"#0F766E","kind":"kid"}""") }
 
         api.getKidsById("a/b")
 

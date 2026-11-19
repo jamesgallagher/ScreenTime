@@ -2,6 +2,7 @@ package au.screentime.kid.status
 
 import au.screentime.core.model.api.DeviceForm
 import au.screentime.core.model.api.DeviceState
+import au.screentime.core.model.api.KidKind
 import au.screentime.core.model.api.Pool
 import au.screentime.core.time.EngineResult
 import au.screentime.core.time.LockReason
@@ -70,6 +71,8 @@ data class KidStatus(
     val parentModeEndsText: String? = null,
     /** The family's secret for the parent code (base32). */
     val parentCodeSecret: String = "",
+    /** True for a shared device (docs/SPEC.md §12.8). */
+    val shared: Boolean = false,
 ) {
     val locked: Boolean get() = lockReason != null
 
@@ -96,9 +99,9 @@ data class KidStatus(
     fun parentModeText(): String =
         "Parent mode · " + (parentModeEndsText?.let { "ends $it" } ?: "until you end it")
 
-    /** "Out of Phone time", "It's bedtime" or "Not yet, it's early". */
+    /** "Out of Phone time", "Out of time" (shared), "It's bedtime" or "Not yet, it's early". */
     fun headline(reason: LockReason): String = when (reason) {
-        LockReason.OUT_OF_TIME -> "Out of $poolName time"
+        LockReason.OUT_OF_TIME -> if (shared) "Out of time" else "Out of $poolName time"
         LockReason.BEDTIME -> "It's bedtime"
         LockReason.BEFORE_WAKE -> "Not yet, it's early"
     }
@@ -167,9 +170,14 @@ fun kidStatus(
         else -> null
     }
 
+    val isShared = state.kid.kind == KidKind.SHARED
     return KidStatus(
         kidName = state.kid.name,
-        poolName = if (state.device.pool == Pool.PHONE) "Phone" else "Screens",
+        poolName = when {
+            isShared -> "Time"
+            state.device.pool == Pool.PHONE -> "Phone"
+            else -> "Screens"
+        },
         deviceWord = if (state.device.form == DeviceForm.TABLET) "tablet" else "phone",
         lockReason = if (result.locked && parentMode == null) result.lockReason else null,
         leftSec = leftSec,
@@ -186,13 +194,14 @@ fun kidStatus(
         parentNames = state.parents.map { it.displayName },
         presets = state.messagePresets.map { Preset(it.id, it.text) },
         pendingMinutes = state.pendingRequest?.minutes,
-        canCall = state.device.form == DeviceForm.PHONE && state.device.hasCellular,
+        canCall = !isShared && state.device.form == DeviceForm.PHONE && state.device.hasCellular,
         callables = callablesOf(state.parents, state.contacts),
         emergencyNumber = state.family.emergencyNumber,
         parentMode = parentMode != null,
         parentModeEndsAtMs = parentMode?.endsAtMs,
         parentModeEndsText = parentMode?.endsAtMs?.let { clockText(Instant.ofEpochMilli(it).atZone(tz).toLocalTime()) },
         parentCodeSecret = state.family.parentCodeSecret,
+        shared = isShared,
     )
 }
 

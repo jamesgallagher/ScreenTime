@@ -17,6 +17,7 @@ import android.provider.Settings
 import android.util.Log
 import au.screentime.core.model.api.ApiClient
 import au.screentime.core.model.api.DeviceEventKind
+import au.screentime.core.model.api.KidKind
 import au.screentime.core.model.api.PushTokenPut
 import au.screentime.core.time.evaluate
 import au.screentime.kid.admin.Policies
@@ -163,6 +164,10 @@ class KidService : Service() {
                 Intent.ACTION_USER_PRESENT, Intent.ACTION_SCREEN_ON -> scope.launch { onScreenOn(at) }
                 Intent.ACTION_SCREEN_OFF -> scope.launch {
                     recorder.stop(at)
+                    // A shared device ends parent mode at screen off (docs/SPEC.md §12.8).
+                    if (endsParentModeAtScreenOff(states.load()?.state, parentModeOn = paused)) {
+                        endParentMode()
+                    }
                     sync()
                     giveBackLocationIfDone()
                 }
@@ -453,7 +458,8 @@ class KidService : Service() {
      * on the answers channel before the rest, so a parent's change of time is never missed while the socket is down.
      */
     private fun onNews(frame: String?) {
-        frame?.let(::grantNewsOf)?.let(::grantText)?.let(notifier::showGrant)
+        val shared = states.load()?.state?.kid?.kind == KidKind.SHARED
+        frame?.let(::grantNewsOf)?.let { grantText(it, shared) }?.let(notifier::showGrant)
         frame?.let(::answerOf)?.let(::onAnswer)
         frame?.let(::parentModeNewsOf)?.let {
             Log.i(TAG, "parent mode: news active=${it.active}")

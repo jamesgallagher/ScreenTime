@@ -57,7 +57,7 @@ describe.skipIf(!url)('kid routes', () => {
     it('adds a kid with the default schedule', async () => {
       const res = await api.post('/v1/kids', mum.token, { name: ' Alex ', avatarColor: '#0F766E' });
       expect(res.status).toBe(201);
-      expect(res.body).toEqual({ id: expect.any(String), name: 'Alex', avatarColor: '#0F766E' });
+      expect(res.body).toEqual({ id: expect.any(String), name: 'Alex', avatarColor: '#0F766E', kind: 'kid' });
       const [version] = await db.select().from(scheduleVersions).where(eq(scheduleVersions.kidId, res.body.id));
       expect(version).toMatchObject({ version: 1, warn1Min: 15, warn2Min: 5, days: defaultWeek(), createdBy: mum.id });
     });

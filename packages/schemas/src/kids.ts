@@ -8,21 +8,28 @@ export const AvatarColor = z
 
 export type AvatarColor = z.infer<typeof AvatarColor>;
 
+/** `kid` or `shared` (docs/SPEC.md §12.8). */
+export const KidKind = z.enum(['kid', 'shared']).meta({ id: 'KidKind' });
+
+export type KidKind = z.infer<typeof KidKind>;
+
 export const Kid = z
   .object({
     id: z.uuid(),
     name: z.string(),
     avatarColor: AvatarColor,
+    kind: KidKind,
   })
   .meta({ id: 'Kid' });
 
 export type Kid = z.infer<typeof Kid>;
 
-/** Body of POST /v1/kids. The kid starts with the default schedule. */
+/** Body of POST /v1/kids. The kid starts with the default schedule; a shared device gets 0 minutes and new-app approval. */
 export const KidCreate = z
   .object({
     name: z.string().trim().min(1).max(40),
     avatarColor: AvatarColor,
+    kind: KidKind.optional(),
   })
   .meta({ id: 'KidCreate' });
 

@@ -3,6 +3,7 @@ package au.screentime.parent.kids
 import au.screentime.core.model.api.Device
 import au.screentime.core.model.api.DeviceForm
 import au.screentime.core.model.api.Kid
+import au.screentime.core.model.api.KidKind
 import au.screentime.core.model.api.Pool
 import au.screentime.core.model.api.TodayKid
 import au.screentime.core.model.api.TodayPool
@@ -13,20 +14,13 @@ import au.screentime.parent.today.poolName
  * a kid of kind `shared`, so every kid screen works for it; these decide how the screens show it.
  */
 
-// ---- The seam: `kind` on Kid and TodayKid. CARD-065 adds the field and replaces both bodies with
-// `kid.kind == KidKind.SHARED`. Until then every row is a kid, so nothing changes on a phone. ----
+// ---- The seam: `kind` on Kid and TodayKid. The kind comes from the server. ----
 
 /** True for a shared device on the Kids tab. */
-fun isShared(kid: Kid): Boolean = SharedSeam.sharedIds.contains(kid.id)
+fun isShared(kid: Kid): Boolean = kid.kind == KidKind.SHARED
 
 /** True for a shared device on the Today tab. */
-fun isShared(kid: TodayKid): Boolean = SharedSeam.sharedIds.contains(kid.id)
-
-/** Only for trying the screens before CARD-065 (tests, a debug run): ids to show as shared devices. */
-object SharedSeam {
-    @Volatile
-    var sharedIds: Set<String> = emptySet()
-}
+fun isShared(kid: TodayKid): Boolean = kid.kind == KidKind.SHARED
 
 // ---- Pure helpers. ----
 
