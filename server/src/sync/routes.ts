@@ -229,7 +229,7 @@ export function registerSyncRoutes(app: Router, deps: AppDeps) {
         serverTime: day.now.toISOString(),
         content: {
           device: { id: device.id, name: device.name, form: device.form as DeviceForm, pool, hasCellular: device.hasCellular },
-          kid: { id: kid.id, name: kid.name },
+          kid: { id: kid.id, name: kid.name, kind: kid.kind as 'kid' | 'shared' },
           family: { timezone: family.timezone, emergencyNumber: family.emergencyNumber, parentCodeSecret: family.parentCodeSecret },
           parents: familyParents,
           contacts,
@@ -351,11 +351,13 @@ export function registerSyncRoutes(app: Router, deps: AppDeps) {
           if (!schedule) throw new Error(`kid ${kid.id} has no schedule`);
           const bedtime = kidBedtimes.get(kid.id);
           if (!bedtime) throw new Error(`kid ${kid.id} has no bedtime`);
+          const pools: Pool[] = kid.kind === 'shared' ? ['screens'] : POOLS;
           return {
             id: kid.id,
             name: kid.name,
             avatarColor: kid.avatarColor as AvatarColor,
-            pools: POOLS.map((pool) => {
+            kind: kid.kind as 'kid' | 'shared',
+            pools: pools.map((pool) => {
               const poolGrants = allGrants.filter((g) => g.kidId === kid.id && g.pool === pool);
               const poolSegments = allSegments.filter((s) => s.kidId === kid.id && s.pool === pool);
               const status = poolStatus(family.timezone, day, schedule, pool, poolGrants, poolSegments);
