@@ -117,6 +117,8 @@ export const kids = pgTable(
     familyId: familyId(),
     name: text('name').notNull(),
     avatarColor: text('avatar_color').notNull(),
+    /** `kid` or `shared` (docs/SPEC.md §12.8). */
+    kind: text('kind').notNull().default('kid'),
     newAppApproval: boolean('new_app_approval').notNull().default(false),
     createdAt: createdAt(),
     archivedAt: ts('archived_at'),
@@ -126,6 +128,7 @@ export const kids = pgTable(
       'kids_avatar_color',
       sql`${t.avatarColor} in ('#0F766E', '#7C3AED', '#DB2777', '#2563EB', '#EA580C', '#16A34A', '#CA8A04', '#475569')`,
     ),
+    check('kids_kind', sql`${t.kind} in ('kid', 'shared')`),
   ],
 );
 

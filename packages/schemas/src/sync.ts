@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { AppRuleMode } from './apps.js';
 import { DeviceForm, Pool } from './devices.js';
 import { StateGame } from './games.js';
-import { AvatarColor, Schedule } from './kids.js';
+import { AvatarColor, KidKind, Schedule } from './kids.js';
 
 /** Why a pool is locked (docs/SPEC.md §7.3). */
 export const LockReason = z.enum(['out_of_time', 'bedtime', 'before_wake']).meta({ id: 'LockReason' });
@@ -48,7 +48,7 @@ export const DeviceState = z
       pool: Pool,
       hasCellular: z.boolean(),
     }),
-    kid: z.object({ id: z.uuid(), name: z.string() }),
+    kid: z.object({ id: z.uuid(), name: z.string(), kind: KidKind.optional() }),
     family: z.object({ timezone: z.string(), emergencyNumber: z.string(), parentCodeSecret: z.string() }),
     /** Every parent of the family, oldest first. Only those with a phone number can be called. */
     parents: z.array(z.object({ id: z.uuid(), displayName: z.string(), phoneE164: z.string().nullable() })),
@@ -188,7 +188,8 @@ export const TodayKid = z
     id: z.uuid(),
     name: z.string(),
     avatarColor: AvatarColor,
-    /** Always both pools, Screens first. */
+    kind: KidKind,
+    /** Always both pools, Screens first. A shared device has only its `screens` pool. */
     pools: z.array(TodayPool),
     /** Tonight's bedtime (docs/SPEC.md §7.5). */
     bedtime: TodayBedtime,
