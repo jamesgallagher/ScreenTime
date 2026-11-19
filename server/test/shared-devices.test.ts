@@ -173,6 +173,7 @@ describe.skipIf(!url)('shared devices', () => {
     const res = await api.post(`/v1/kids/${shared.id}/enrolment-codes`, mum, { form: 'tablet' });
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe('conflict');
+    expect(res.body.error.details).toEqual({ code: 'shared_has_device' });
     expect(res.body.error.message).toBe('This shared device already has a device. Remove it first.');
 
     // After revoking, a new code works
@@ -218,6 +219,7 @@ describe.skipIf(!url)('shared devices', () => {
     const put = await api.put(`/v1/kids/${shared.id}/contacts`, mum, { contacts: [{ label: 'Grandma', phoneE164: '+61400000001' }] });
     expect(put.status).toBe(409);
     expect(put.body.error.code).toBe('conflict');
+    expect(put.body.error.details).toEqual({ code: 'shared_device' });
     expect(put.body.error.message).toBe('A shared device has no contacts.');
   });
 
@@ -262,5 +264,37 @@ describe.skipIf(!url)('shared devices', () => {
     expect(res.status).toBe(201);
     const [grant] = await db.select().from(grants).where(eq(grants.id, res.body.id));
     expect(grant?.minutes).toBeLessThan(0);
+  });
+
+  it('an app rule works for a shared device', async () => {
+    const shared = await addKid('Rule Shared', 'shared');
+    const tablet = await addDevice(shared.id, 'tablet', 'Tab');
+    const list = await api.put('/v1/device/apps', tablet.token, {
+      apps: [
+        {
+          package: 'com.android.vending',
+          label: 'Play Store',
+          source: 'preinstalled',
+          installer: null,
+          blockable: true,
+          installedAt: '2026-11-01T00:00:00Z',
+          firstUsedAt: null,
+        },
+      ],
+    });
+    expect(list.status).toBeLessThan(300);
+    const res = await api.put(`/v1/kids/${shared.id}/apps/com.android.vending/rule`, mum, { mode: 'blocked', dailyMinutes: null });
+    expect(res.status).toBe(200);
+    const apps = await api.get(`/v1/kids/${shared.id}/apps`, mum);
+    expect(apps.body.newAppApproval).toBe(true);
+  });
+
+  it('bedtime tonight works for a shared device', async () => {
+    const shared = await addKid('Bedtime Shared', 'shared');
+    // Midnight is later than any default bedtime and than now, at any hour of the run.
+    const res = await api.put(`/v1/kids/${shared.id}/bedtime-tonight`, mum, { bedtime: '24:00' });
+    expect(res.status).toBe(200);
+    expect(res.body.tonight).toBe('24:00');
+    expect(res.body.extendedBy).toBe('Mum');
   });
 });

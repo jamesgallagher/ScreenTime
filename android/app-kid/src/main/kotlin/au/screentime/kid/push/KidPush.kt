@@ -46,15 +46,19 @@ fun grantNewsOf(frame: String): GrantNews? = try {
 
 /**
  * The notification words for [news], or null: when [GrantNews.fromRequest] (the "Dad said yes!" answer already
- * shows), or when the minutes are 0.
+ * shows), or when the minutes are 0. A shared device has one pool, so it says plain "time" (docs/SPEC.md §12.8).
  */
-fun grantText(news: GrantNews): String? {
+fun grantText(news: GrantNews, shared: Boolean = false): String? {
     if (news.fromRequest || news.minutes == 0) return null
-    val pool = if (news.pool == "phone") "Phone" else "Screens"
+    val what = when {
+        shared -> "time"
+        news.pool == "phone" -> "Phone time"
+        else -> "Screens time"
+    }
     val amount = minutesText(abs(news.minutes))
     return if (news.minutes > 0) {
-        "${news.byName} added $amount of $pool time"
+        "${news.byName} added $amount of $what"
     } else {
-        "${news.byName} took away $amount of $pool time"
+        "${news.byName} took away $amount of $what"
     }
 }

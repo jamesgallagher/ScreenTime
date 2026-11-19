@@ -101,7 +101,7 @@ data class KidStatus(
 
     /** "Out of Phone time", "Out of time" (shared), "It's bedtime" or "Not yet, it's early". */
     fun headline(reason: LockReason): String = when (reason) {
-        LockReason.OUT_OF_TIME -> if (poolName == "Time") "Out of time" else "Out of $poolName time"
+        LockReason.OUT_OF_TIME -> if (shared) "Out of time" else "Out of $poolName time"
         LockReason.BEDTIME -> "It's bedtime"
         LockReason.BEFORE_WAKE -> "Not yet, it's early"
     }

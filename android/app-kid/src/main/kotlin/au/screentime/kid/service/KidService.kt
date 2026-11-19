@@ -165,7 +165,7 @@ class KidService : Service() {
                 Intent.ACTION_SCREEN_OFF -> scope.launch {
                     recorder.stop(at)
                     // A shared device ends parent mode at screen off (docs/SPEC.md §12.8).
-                    if (paused && states.load()?.state?.kid?.kind == KidKind.SHARED) {
+                    if (endsParentModeAtScreenOff(states.load()?.state, parentModeOn = paused)) {
                         endParentMode()
                     }
                     sync()
@@ -458,7 +458,8 @@ class KidService : Service() {
      * on the answers channel before the rest, so a parent's change of time is never missed while the socket is down.
      */
     private fun onNews(frame: String?) {
-        frame?.let(::grantNewsOf)?.let(::grantText)?.let(notifier::showGrant)
+        val shared = states.load()?.state?.kid?.kind == KidKind.SHARED
+        frame?.let(::grantNewsOf)?.let { grantText(it, shared) }?.let(notifier::showGrant)
         frame?.let(::answerOf)?.let(::onAnswer)
         frame?.let(::parentModeNewsOf)?.let {
             Log.i(TAG, "parent mode: news active=${it.active}")

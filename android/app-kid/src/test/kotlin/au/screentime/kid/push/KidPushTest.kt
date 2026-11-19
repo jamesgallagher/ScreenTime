@@ -31,6 +31,8 @@ class KidPushTest {
         assertEquals("Dad added 15 min of Phone time", grantText(GrantNews("g", "phone", 15, "Dad", false)))
         assertEquals("Mum added 2h of Screens time", grantText(GrantNews("g", "screens", 120, "Mum", false)))
         assertEquals("Dad took away 1h 30m of Screens time", grantText(GrantNews("g", "screens", -90, "Dad", false)))
+        // A shared device has one pool, called time (docs/SPEC.md §12.8).
+        assertEquals("Mum added 15 min of time", grantText(GrantNews("g", "screens", 15, "Mum", false), shared = true))
         // A yes to "Ask for more time" already shows "Dad said yes!", so its grant shows nothing more.
         assertNull(grantText(GrantNews("g", "phone", 30, "Dad", true)))
         assertNull(grantText(GrantNews("g", "phone", 0, "Dad", false)))
