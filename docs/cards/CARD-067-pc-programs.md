@@ -55,7 +55,7 @@ The existing stack only: TypeScript (Hono, zod, Drizzle, Vitest), C# (.NET 10, x
 - **`state.db`.** Do not raise `user_version`. Add `program_days` with `CREATE TABLE IF NOT EXISTS`, the way `kv` was added in CARD-051, so an existing store gets it at its next open.
 - **UWP windows.** `ApplicationFrameHost.exe` owns the frame; take the first child window whose process id differs. If there is none (the app is starting or suspended), nothing counts.
 - **The tray must not slow down.** Do the naming (process path and version info) off the UI thread, and cache by process id: `FileVersionInfo` reads the file each time.
-- **Windows Sandbox** is turned on; Docker Desktop must be running. The MSI comes from your PR's CI run (native AOT needs C++ tools James's PC does not have). The Sandbox has no console session, so the service runs with `--session <its session> --dry-lock`, as `windows/installer/sandbox/in-sandbox-trayexit.ps1` does; its log lines go to the Application event log.
+- **Windows Sandbox** is turned on; Docker Desktop must be running. The MSI comes from your PR's CI run (native AOT needs C++ tools James's PC does not have). The Sandbox has no console session, so the service runs with `--session <its session> --dry-lock`, as `windows/installer/sandbox/in-sandbox-trayexit.ps1` does; it writes only warnings and errors to the Application event log (its information lines, such as `front:`, never appear there), so check results on the server instead.
 - `pnpm test` builds first and covers `packages/schemas` and `web`. Run `dotnet test` from `windows`.
 
 ## 5. Design (what to build)
@@ -190,21 +190,22 @@ Paste the **real totals** each test runner prints (files and tests, passed and f
 
 Write `windows/installer/sandbox/Test-Programs.ps1` and `windows/installer/sandbox/in-sandbox-programs.ps1`, modelled on `Test-TrayExit.ps1` and `in-sandbox-trayexit.ps1` (same layout: a work folder under `C:\Users\james\OpenCode\Testing\temp\`, `in` and `out` mapped folders, the dev server reset, Sam's PC code, a LogonCommand, results in `out\results.txt`, the Sandbox shut down at the end). Each check prints `ok: …` or `FAILED: …`, and the last line is `=== done: <n> failed`.
 
-In the Sandbox (as WDAGUtilityAccount), in this order:
+In the Sandbox (as WDAGUtilityAccount), in this order. **Corrected 20 Nov 2026 after Bob's first run** (Claude's mistakes in the first version: the Sandbox has no working Notepad, `MinimizeAll` does not minimise dialog windows such as Character Map, and the service writes only warnings and errors to the event log, so its `front:` and `programs: sent` lines never appear there). Every check prints `ok: …` or `FAILED: …`; a failed check never lets the script carry on silently.
 
 1. Install the MSI, enrol the account as Sam, point the service at this session with `--session <id> --dry-lock` and restart it, wait for the tray. Check: `ok: tray running`.
-2. Start Notepad and make sure it is in front (if `GetForegroundWindow` is not Notepad's window after starting it, bring it to the front with `SetForegroundWindow`, using the documented ALT-key press first if needed). Check what is in front **before** timing: `ok: Notepad in front`. Keep it in front 90 s.
-3. Start Character Map (`charmap.exe`) the same way; check `ok: Character Map in front`; keep it 60 s. (Windows Sandbox has no Store apps, so Calculator is not there: Claude's spike covered the Store-app path.)
-4. Minimise everything (`(New-Object -ComObject Shell.Application).MinimizeAll()`); check that the window in front is the desktop or nothing; wait 60 s.
-5. Print the service's `front:` lines from the Application event log (each with its time). Checks: a `front: notepad.exe Notepad` line, a `front: charmap.exe Character Map` line, and a `front: nothing` line after step 4.
-6. Wait for a sync (up to 3 minutes) until the log has `programs: sent`, and print that line.
+2. Start Character Map (`charmap.exe`) and make sure it is in front (if `GetForegroundWindow` is not its window, bring it to the front with `SetForegroundWindow`, using the documented ALT-key press first if needed). Check what is in front **before** timing: `ok: Character Map in front` (its exe is `charmap.exe`). Keep it in front 90 s.
+3. Start About Windows (`winver.exe`) the same way; check `ok: winver in front`; keep it 60 s.
+4. Close both programs by the process ids the script started (`Stop-Process -Id`, inside the Sandbox only); check that the window in front now belongs to `explorer.exe` with class `Progman` or `WorkerW`, or that there is none: `ok: nothing in front`. Wait 60 s.
+5. Keep the Sandbox running 150 s more, so the service syncs at least twice, then shut it down.
 
 Back on the host, after the Sandbox closes, `Test-Programs.ps1` prints `server/scripts/dev-report.ts Sam day` for today and checks:
 
-- `notepad.exe` labelled `Notepad` with 80 to 100 seconds;
-- `charmap.exe` labelled `Character Map` with 50 to 70 seconds;
-- nothing else above 15 seconds (the 60 s on the desktop were not counted), except the console that runs the script (`powershell.exe`, `conhost.exe`, `openconsole.exe` or `windowsterminal.exe`), which is printed but not checked;
+- `charmap.exe` labelled `Character Map` with 80 to 100 seconds;
+- `winver.exe` labelled `Version Reporter Applet` with 50 to 70 seconds;
+- nothing else above 15 seconds (the time on the desktop before step 2 and after step 4 is not counted), except the console that runs the script (`powershell.exe`, `conhost.exe`, `openconsole.exe` or `windowsterminal.exe`), which is printed but not checked;
 - the PC has `appsRecorded: true`.
+
+(Windows Sandbox has no Store apps, so neither Calculator nor Notepad is there: Claude's spike on James's PC covered the Store-app path. Bob's first run already showed the server receiving `charmap.exe`, labelled `Character Map`, from the Sandbox.)
 
 Then paste the **whole** of `out\results.txt` and the host output into the handback. A summary counts as `NOT RUN`. The run takes about 10 minutes; a Sandbox window opens and closes by itself: do not click in it. Nothing is installed on James's PC and no program is opened on his desktop.
 

@@ -19,6 +19,6 @@ $run = (gh run list --branch <your branch> --workflow Windows --limit 1 --json d
 gh run download $run --name ScreenTime-msi --dir C:\Users\james\OpenCode\Testing\temp\msi-$run
 ```
 
-**Facts about the Sandbox:** no Store apps (no Calculator; classic `notepad.exe` and `charmap.exe` are there); a program a script starts may not get the front window, so check `GetForegroundWindow` before timing; the service logs to the Application event log (`Get-WinEvent -LogName Application`); `Microsoft-Windows-Security-SPP` errors are harmless; there is no real lock.
+**Facts about the Sandbox:** no Store apps (no Calculator, and Notepad does not start; classic programs such as `charmap.exe` and `winver.exe` work); a program a script starts may not get the front window, so check `GetForegroundWindow` before timing; the service writes only warnings and errors to the Application event log (its information lines never appear there), so check results on the server, not in the log; `MinimizeAll` does not minimise dialog windows, so close programs by the id you started instead; `Microsoft-Windows-Security-SPP` errors are harmless; there is no real lock.
 
 Each check prints `ok: …` or `FAILED: …` and the last line is `=== done: <n> failed`. Paste the whole `results.txt` and the host output into the handback.
