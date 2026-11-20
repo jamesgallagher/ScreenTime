@@ -1,1 +1,0 @@
-CREATE TABLE IF NOT EXISTS `segments` (`id` TEXT NOT NULL, `startedAtMs` INTEGER NOT NULL, `endedAtMs` INTEGER, `lastSeenAtMs` INTEGER NOT NULL, `recordedOffline` INTEGER NOT NULL, `version` INTEGER NOT NULL, `sentVersion` INTEGER NOT NULL, PRIMARY KEY(`id`))
