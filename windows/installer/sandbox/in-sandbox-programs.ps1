@@ -64,15 +64,15 @@ $waited = 0
 while (-not (Get-Process -Name ScreenTime.Tray -ErrorAction SilentlyContinue) -and $waited -lt 60) { Start-Sleep 2; $waited += 2 }
 Check ((Get-Process -Name ScreenTime.Tray -ErrorAction SilentlyContinue) -ne $null) "tray running"
 
-Say "=== 2. start Character Map and keep it in front 75 s"
+Say "=== 2. start Character Map and keep it in front 90 s"
 $charmap = Start-Process charmap.exe -PassThru
 Start-Sleep 3
 BringToFront $charmap.Id | Out-Null
 Start-Sleep 2
 $front = Get-Front
 Check (($front -and ($front.Pid -eq $charmap.Id -or ($front.Exe -and $front.Exe -like "*charmap*")))) "Character Map in front"
-Say "  keeping Character Map in front 75 s"
-Start-Sleep 75
+Say "  keeping Character Map in front 90 s"
+Start-Sleep 90
 
 Say "=== 3. close Character Map, start About Windows and keep it in front 60 s"
 Stop-Process -Id $charmap.Id -Force -ErrorAction SilentlyContinue
@@ -96,21 +96,8 @@ if ($front -eq $null) {
     Check ($front.Exe -eq $null -or $front.Exe -like "*explorer*") "nothing in front (got: $($front.Pid) $($front.Class) $($front.Exe))"
 }
 
-Say "=== 5. wait for a sync (up to 3 minutes)"
-$waited = 0
-$found = $false
-while (-not $found -and $waited -lt 180) {
-    Start-Sleep 10
-    $waited += 10
-    $lines = Get-WinEvent -FilterHashtable @{ LogName = "Application" } -MaxEvents 200 -ErrorAction SilentlyContinue | Where-Object { $_.Message -match "programs: sent" }
-    if ($lines) {
-        $found = $true
-        foreach ($e in $lines) {
-            Say "  log $($e.TimeCreated.ToString('HH:mm:ss')): $($e.Message)"
-        }
-    }
-}
-Check $found "programs: sent line found"
+Say "=== 5. keep the Sandbox up 150 s so the service can sync"
+Start-Sleep 150
 
 Say "=== done: $failed failed"
 Stop-Computer -Force

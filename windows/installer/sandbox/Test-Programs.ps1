@@ -40,7 +40,7 @@ Set-Content $wsb @"
 Start-Process $wsb
 $results = Join-Path $out "results.txt"
 $waited = 0
-while (-not ((Test-Path $results) -and (Select-String -Path $results -Pattern "^=== done:" -Quiet)) -and $waited -lt 1500) { Start-Sleep 10; $waited += 10 }
+while (-not ((Test-Path $results) -and (Select-String -Path $results -Pattern "=== done:" -Quiet)) -and $waited -lt 1500) { Start-Sleep 10; $waited += 10 }
 "--- what the Sandbox saw (waited $waited s)"
 Get-Content $results -ErrorAction SilentlyContinue
 "--- the report for Sam, today"
