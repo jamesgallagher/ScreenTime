@@ -36,7 +36,6 @@ export function registerSiteRoutes(app: Router, deps: AppDeps) {
   app.openapi(siteLookupsRoute, async (c) => {
     const { deviceId, kidId, familyId } = await requireDevice(c, db);
     const { lookups } = c.req.valid('json');
-    const timezone = await withFamily(db, familyId, (tx) => timezoneOf(tx, familyId));
     // The server's own clock decides what is in range (docs/SPEC.md §9.3).
     const now = new Date();
     const inRange = lookups.filter((l) => {
@@ -44,6 +43,7 @@ export function registerSiteRoutes(app: Router, deps: AppDeps) {
       return at >= new Date(now.getTime() - 30 * 86_400_000) && at <= new Date(now.getTime() + 86_400_000);
     });
     const received = await withFamily(db, familyId, async (tx) => {
+      const timezone = await timezoneOf(tx, familyId);
       const rows = await tx
         .insert(siteLookups)
         .values(
