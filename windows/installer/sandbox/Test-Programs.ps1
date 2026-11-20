@@ -1,9 +1,9 @@
 # Proves program counting on a PC (docs/SPEC.md §12.9) in Windows Sandbox. Run from the repo root, with
 # Docker Desktop running, Windows Sandbox turned on and the PC unlocked:
 #   windows\installer\sandbox\Test-Programs.ps1 -Msi <path to ScreenTime.msi>
-# Inside, in-sandbox-programs.ps1 installs the MSI, enrols the account as Sam, opens Notepad and Character Map,
-# waits for the tray to see them and the service to sync, then prints the service's front lines and the programs
-# line. Back on the host, the script prints the dev report for Sam and checks the program time.
+# Inside, in-sandbox-programs.ps1 installs the MSI, enrols the account as Sam, opens Character Map and About
+# Windows, waits for the tray to see them and the service to sync, then closes both. Back on the host, the
+# script prints the dev report for Sam and checks the program time.
 param([Parameter(Mandatory)][string]$Msi)
 $ErrorActionPreference = "Stop"
 $here = $PSScriptRoot
@@ -40,15 +40,9 @@ Set-Content $wsb @"
 Start-Process $wsb
 $results = Join-Path $out "results.txt"
 $waited = 0
-while (-not ((Test-Path $results) -and (Select-String -Path $results -Pattern "^done$" -Quiet)) -and $waited -lt 1500) { Start-Sleep 10; $waited += 10 }
+while (-not ((Test-Path $results) -and (Select-String -Path $results -Pattern "^=== done:" -Quiet)) -and $waited -lt 1500) { Start-Sleep 10; $waited += 10 }
 "--- what the Sandbox saw (waited $waited s)"
 Get-Content $results -ErrorAction SilentlyContinue
-"--- the PC's events on the server (Sydney time)"
-docker compose -f deploy/docker-compose.yml --env-file deploy/.env exec -T db psql -U screentime -d screentime -At -c "select e.kind, to_char(e.at at time zone 'Australia/Sydney','HH24:MI:SS'), d.name from events e join devices d on d.id = e.device_id where d.platform = 'windows' order by e.at"
-"--- the PC's program time on the server"
-docker compose -f deploy/docker-compose.yml --env-file deploy/.env exec -T db psql -U screentime -d screentime -At -c "select p.package, p.label, p.first_seen_at, p.last_seen_at from device_programs p join devices d on d.id = p.device_id where d.platform = 'windows'"
-"--- the PC's app usage on the server"
-docker compose -f deploy/docker-compose.yml --env-file deploy/.env exec -T db psql -U screentime -d screentime -At -c "select a.package, a.day, a.seconds from app_usage_daily a join devices d on d.id = a.device_id where d.platform = 'windows' order by a.day, a.package"
 "--- the report for Sam, today"
 $report = pnpm --silent --filter @screentime/server exec tsx scripts/dev-report.ts Sam day
 $report
