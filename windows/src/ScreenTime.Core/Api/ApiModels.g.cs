@@ -371,7 +371,8 @@ public sealed record DeviceAppUsageUploadDaysItem(
 
 public sealed record DeviceAppUsageUploadDaysItemAppsItem(
     [property: JsonPropertyName("package")] string Package,
-    [property: JsonPropertyName("seconds")] int Seconds);
+    [property: JsonPropertyName("seconds")] int Seconds,
+    [property: JsonPropertyName("label"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Label = null);
 
 public sealed record AppUpdateAnswer(
     [property: JsonPropertyName("offer")] AppUpdateOffer? Offer);

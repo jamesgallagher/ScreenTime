@@ -75,7 +75,16 @@ export const DeviceAppUsageUpload = z
       .array(
         z.object({
           day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-          apps: z.array(z.object({ package: z.string().min(1).max(255), seconds: z.int().min(0).max(86400) })).max(500),
+          apps: z
+            .array(
+              z.object({
+                package: z.string().min(1).max(255),
+                seconds: z.int().min(0).max(86400),
+                /** The name of a PC program (docs/SPEC.md §12.9); 1 to 80 characters after trimming. */
+                label: z.string().trim().min(1).max(80).optional(),
+              }),
+            )
+            .max(500),
         }),
       )
       .min(1)

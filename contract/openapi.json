@@ -2617,6 +2617,11 @@
                         "type": "integer",
                         "minimum": 0,
                         "maximum": 86400
+                      },
+                      "label": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
                       }
                     },
                     "required": [

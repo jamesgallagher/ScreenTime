@@ -1,7 +1,7 @@
 import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import { AppReport as AppReportSchema, type AppReport, type AppReportApp, type AppReportDevice, type AppReportPool, type Pool, type ReportPeriod } from '@screentime/schemas';
 import type { FamilyTx } from '../db/family.js';
-import { appUsageDaily, deviceApps, devices, families, kids, usageSegments } from '../db/schema.js';
+import { appUsageDaily, deviceApps, devicePrograms, devices, families, kids, usageSegments } from '../db/schema.js';
 import { ApiError } from '../errors.js';
 
 /**
@@ -51,6 +51,11 @@ export async function buildAppReport(
   // The devices list: every not-removed device, plus each removed one with app time or a segment in the period.
   const deviceList = allDevices.length === 0 ? [] : await reportDevices(tx, kid.id, allDevices, start, end, from, to);
 
+  // A PC records programs once it has sent any (docs/SPEC.md §12.9); a PC on an older version has no rows.
+  const programDevices = new Set(
+    (await tx.select({ deviceId: devicePrograms.deviceId }).from(devicePrograms).where(eq(devicePrograms.kidId, kid.id))).map((r) => r.deviceId),
+  );
+
   return AppReportSchema.parse({
     kidId: kid.id,
     period: query.period,
@@ -64,7 +69,7 @@ export async function buildAppReport(
       form: d.form as AppReportDevice['form'],
       platform: d.platform as AppReportDevice['platform'],
       removedAt: d.revokedAt?.toISOString() ?? null,
-      appsRecorded: d.platform === 'android',
+      appsRecorded: d.platform === 'android' || programDevices.has(d.id),
     })),
     screenTime,
     apps,
@@ -295,11 +300,25 @@ async function reportApps(
     allByPackage.set(r.package, [...(allByPackage.get(r.package) ?? []), r]);
   }
 
+  // device_programs rows of the report's devices, for a PC program's label (docs/SPEC.md §12.9).
+  const programRows = await tx.select().from(devicePrograms).where(and(eq(devicePrograms.kidId, kidId), inArray(devicePrograms.deviceId, ids)));
+  const programByPackage = new Map<string, typeof programRows>();
+  for (const r of programRows) {
+    programByPackage.set(r.package, [...(programByPackage.get(r.package) ?? []), r]);
+  }
+
+  // device_programs rows of any of the kid's devices, for a label when the report's devices have none.
+  const allProgramRows = await tx.select().from(devicePrograms).where(eq(devicePrograms.kidId, kidId));
+  const allProgramByPackage = new Map<string, typeof allProgramRows>();
+  for (const r of allProgramRows) {
+    allProgramByPackage.set(r.package, [...(allProgramByPackage.get(r.package) ?? []), r]);
+  }
+
   const deviceOrder = new Map(ids.map((id, i) => [id, i]));
   const apps: AppReportApp[] = [];
   for (const [pkg, entry] of byPackage) {
     if (entry.total <= 0) continue;
-    const label = labelOf(appByPackage.get(pkg), allByPackage.get(pkg), pkg);
+    const label = labelOf(appByPackage.get(pkg), programByPackage.get(pkg), allByPackage.get(pkg), allProgramByPackage.get(pkg), pkg);
     const { installedAt, removedAt } = datesOf(appByPackage.get(pkg) ?? []);
     const perDevice = [...entry.perDevice.entries()]
       .filter(([, sec]) => sec > 0)
@@ -310,17 +329,27 @@ async function reportApps(
   return apps.sort((a, b) => b.totalSec - a.totalSec || a.label.localeCompare(b.label) || a.package.localeCompare(b.package));
 }
 
-/** The label of a package on the report's devices (the most recently first-seen row), else on any of the kid's, else the package name. */
+/**
+ * The label of a package on the report's devices: the `device_apps` label (the most recently first-seen row), else the
+ * `device_programs` label (the latest `last_seen_at`), else the `device_apps` label on any of the kid's devices, else
+ * the `device_programs` label on any of the kid's devices, else the package name.
+ */
 function labelOf(
-  onReport: typeof deviceApps.$inferSelect[] | undefined,
-  onAny: typeof deviceApps.$inferSelect[] | undefined,
+  appsOnReport: typeof deviceApps.$inferSelect[] | undefined,
+  programsOnReport: typeof devicePrograms.$inferSelect[] | undefined,
+  appsOnAny: typeof deviceApps.$inferSelect[] | undefined,
+  programsOnAny: typeof devicePrograms.$inferSelect[] | undefined,
   pkg: string,
 ): string {
-  const pick = (rows: typeof deviceApps.$inferSelect[] | undefined) => {
+  const appLabel = (rows: typeof deviceApps.$inferSelect[] | undefined) => {
     if (!rows || rows.length === 0) return null;
     return [...rows].sort((a, b) => (b.firstSeenAt > a.firstSeenAt ? 1 : -1))[0]?.label ?? null;
   };
-  return pick(onReport) ?? pick(onAny) ?? pkg;
+  const programLabel = (rows: typeof devicePrograms.$inferSelect[] | undefined) => {
+    if (!rows || rows.length === 0) return null;
+    return [...rows].sort((a, b) => (b.lastSeenAt > a.lastSeenAt ? 1 : -1))[0]?.label ?? null;
+  };
+  return appLabel(appsOnReport) ?? programLabel(programsOnReport) ?? appLabel(appsOnAny) ?? programLabel(programsOnAny) ?? pkg;
 }
 
 /** The earliest installedAt and the removedAt (when every row has one) of a package on the report's devices. */

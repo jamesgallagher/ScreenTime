@@ -118,7 +118,8 @@ describe.skipIf(!url)('app limits', () => {
   });
 
   it('refuses a PC, a bad day and no token', async () => {
-    expect((await usage(pc, 100)).status).toBe(409);
+    // CARD-067: a PC's package must be a lower-case .exe name, so the default 'a.game' is now 422 (was 409, "Android only").
+    expect((await usage(pc, 100)).status).toBe(422);
     expect((await usage(phone, 100, 'yesterday')).status).toBe(422);
     expect((await usage(phone, -1)).status).toBe(422);
     expect((await api.post('/v1/device/app-usage', null, { days: [{ day: today(), apps: [] }] })).status).toBe(401);

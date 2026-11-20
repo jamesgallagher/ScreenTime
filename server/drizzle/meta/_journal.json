@@ -99,6 +99,13 @@
       "when": 1795067255000,
       "tag": "0013_kid_kind",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1795141292886,
+      "tag": "0014_device_programs",
+      "breakpoints": true
     }
   ]
 }

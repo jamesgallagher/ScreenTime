@@ -4,7 +4,7 @@ import { AlwaysAllowedPut, type AppRuleMode, AppRulePut, AppRuleSaved, DeviceApp
 import type { AppDeps } from '../app.js';
 import { requireFamilyParent } from '../auth/guards.js';
 import { withFamily } from '../db/family.js';
-import { appRules, appUsageDaily, deviceApps, devices, events, families, kids, parents } from '../db/schema.js';
+import { appRules, appUsageDaily, deviceApps, devicePrograms, devices, events, families, kids, parents } from '../db/schema.js';
 import { requireDevice } from '../devices/auth.js';
 import { ApiError } from '../errors.js';
 import { findKid } from '../kids/routes.js';
@@ -181,6 +181,38 @@ export function registerAppRoutes(app: Router, deps: AppDeps) {
     const { days } = c.req.valid('json');
     const limitedSent = await withFamily(db, familyId, async (tx) => {
       const [device] = await tx.select({ platform: devices.platform }).from(devices).where(eq(devices.id, deviceId));
+      if (device?.platform === 'windows') {
+        // A PC program is the exe's file name in lower case, ending in .exe (docs/SPEC.md §12.9).
+        for (const { apps } of days) {
+          for (const a of apps) {
+            if (!/^[a-z0-9][a-z0-9 ._()+\-]{0,250}\.exe$/.test(a.package)) {
+              throw new ApiError('validation_failed', 'A PC program must be the name of an .exe file.');
+            }
+          }
+        }
+        const now = new Date();
+        for (const { day, apps } of days) {
+          for (const a of apps) {
+            await tx
+              .insert(appUsageDaily)
+              .values({ familyId, kidId, deviceId, package: a.package, day, seconds: a.seconds })
+              .onConflictDoUpdate({
+                target: [appUsageDaily.deviceId, appUsageDaily.package, appUsageDaily.day],
+                set: { seconds: sql`greatest(${appUsageDaily.seconds}, excluded.seconds)` },
+              });
+            if (a.label !== undefined) {
+              await tx
+                .insert(devicePrograms)
+                .values({ familyId, kidId, deviceId, package: a.package, label: a.label, firstSeenAt: now, lastSeenAt: now })
+                .onConflictDoUpdate({
+                  target: [devicePrograms.deviceId, devicePrograms.package],
+                  set: { label: a.label, lastSeenAt: now },
+                });
+            }
+          }
+        }
+        return false;
+      }
       if (device?.platform !== 'android') throw new ApiError('conflict', 'Apps are only on Android devices.');
       const sent = new Set<string>();
       for (const { day, apps } of days) {
