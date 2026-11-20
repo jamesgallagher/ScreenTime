@@ -12,7 +12,7 @@ namespace ScreenTime.Core.Service;
 public sealed record PipeMessage(string Type, string? Id = null, string? Text = null, int? Pid = null,
     string? KidName = null, long? RemainingSec = null, [property: JsonPropertyName("locked")] bool? IsLocked = null, bool? Offline = null, TrayStatus? View = null,
     int? Minutes = null, string? Reason = null, string? PresetId = null, SendResult? Result = null, bool? Approved = null, IReadOnlyList<GameShortcut>? Games = null,
-    string? Program = null)
+    string? Program = null, string? Title = null)
 {
     /// <summary>Lock the PC now (service to tray).</summary>
     public static PipeMessage Lock(string id) => new("lock", Id: id);
@@ -72,8 +72,9 @@ public sealed record PipeMessage(string Type, string? Id = null, string? Text = 
     /// <summary>The games that get a desktop shortcut, after every sync and on hello; empty takes them all away (service to tray).</summary>
     public static PipeMessage GamesOf(IReadOnlyList<GameShortcut> games) => new("games", Games: games);
 
-    /// <summary>The program in front (tray to service); null program means nothing (docs/SPEC.md §12.9).</summary>
-    public static PipeMessage Front(string? program, string? label) => new("front", Text: label, Program: program);
+    /// <summary>The program in front (tray to service); null program means nothing (docs/SPEC.md §12.9). The title is the
+    /// browser window's title, cleaned, only for the four browsers (docs/SPEC.md §12.10); it is left out when null.</summary>
+    public static PipeMessage Front(string? program, string? label, string? title = null) => new("front", Text: label, Program: program, Title: title);
 
     /// <summary>One line, no newline at the end.</summary>
     public static string Encode(PipeMessage message) => JsonSerializer.Serialize(message, PipeJsonContext.Default.PipeMessage);

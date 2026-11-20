@@ -1,6 +1,8 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Security.AccessControl;
 using System.Security.Principal;
+using System.Text;
 using Microsoft.Win32;
 using System.Security.Cryptography;
 
@@ -185,6 +187,120 @@ internal static partial class Win
         finally
         {
             WTSFreeMemory(buffer);
+        }
+    }
+
+    // The DNS Client's operational log (docs/SPEC.md §12.10): the lookups, with the account and the process, are
+    // read by a subscription; the log is turned on at service start.
+    internal const string DnsChannel = "Microsoft-Windows-DNS-Client/Operational";
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    internal static partial nint OpenProcess(uint access, [MarshalAs(UnmanagedType.Bool)] bool inherit, uint pid);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool QueryFullProcessImageName(nint process, uint flags, nint name, ref uint size);
+
+    /// <summary>The program id (file name) of a process, or "unknown" when it is gone or cannot be opened
+    /// (docs/SPEC.md §12.10).</summary>
+    internal static string ProcessImageName(uint pid)
+    {
+        try
+        {
+            var handle = OpenProcess(0x1000 /* PROCESS_QUERY_LIMITED_INFORMATION */, false, pid);
+            if (handle == nint.Zero) return "unknown";
+            unsafe
+            {
+                try
+                {
+                    var buf = (char*)Marshal.AllocHGlobal(1024 * sizeof(char));
+                    try
+                    {
+                        var size = (uint)1024;
+                        if (!QueryFullProcessImageName(handle, 0, (nint)buf, ref size)) return "unknown";
+                        var path = new string(buf);
+                        return Path.GetFileName(path);
+                    }
+                    finally
+                    {
+                        Marshal.FreeHGlobal((nint)buf);
+                    }
+                }
+                finally
+                {
+                    CloseHandle(handle);
+                }
+            }
+        }
+        catch
+        {
+            return "unknown";
+        }
+    }
+
+    /// <summary>Turns on the DNS Client's operational log (docs/SPEC.md §12.10). True when wevtutil's exit code is 0.</summary>
+    internal static bool EnableDnsLog()
+    {
+        try
+        {
+            var systemDir = ReadValue(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion", "SystemDirectory") as string;
+            var wevtutil = systemDir is not null ? Path.Combine(systemDir, "wevtutil.exe") : @"C:\Windows\System32\wevtutil.exe";
+            var psi = new ProcessStartInfo(wevtutil, "sl " + DnsChannel + " /e:true")
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            };
+            using var p = Process.Start(psi);
+            if (p is null) return false;
+            p.WaitForExit();
+            return p.ExitCode == 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    internal delegate int EvtRecordHandler(nint pEventRecord, nint eventContext, nint evtCallbackContext);
+
+    [LibraryImport("advapi32.dll", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
+    internal static partial nint EvtSubscribe(nint eventHandle, string eventChannelPath, string eventQuery, nint evtContext, EvtRecordHandler handler, uint flags, nint parameter);
+
+    [LibraryImport("advapi32.dll")]
+    internal static partial void EvtClose(nint handle);
+
+    [LibraryImport("advapi32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool EvtRender(nint eventHandle, nint propertySet, uint renderContext, nint value, ref int valueSize, out int propertyCount);
+
+    /// <summary>The event's XML (an event 3008), or null when it cannot be rendered (docs/SPEC.md §12.10).</summary>
+    internal static string? RenderEventXml(nint pEventRecord)
+    {
+        unsafe
+        {
+            try
+            {
+                var probe = (char*)Marshal.AllocHGlobal(sizeof(char));
+                var size = 0;
+                EvtRender(pEventRecord, nint.Zero, 3 /* EvtRenderEventXml */, (nint)probe, ref size, out _);
+                Marshal.FreeHGlobal((nint)probe);
+                if (size <= 0) return null;
+                var value = (char*)Marshal.AllocHGlobal(size * sizeof(char));
+                try
+                {
+                    return EvtRender(pEventRecord, nint.Zero, 3, (nint)value, ref size, out _) ? new string(value) : null;
+                }
+                finally
+                {
+                    Marshal.FreeHGlobal((nint)value);
+                }
+            }
+            catch
+            {
+                return null;
+            }
         }
     }
 }

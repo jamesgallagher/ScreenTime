@@ -30,3 +30,30 @@ export type SiteLookupsUpload = z.infer<typeof SiteLookupsUpload>;
 export const SiteLookupsReceived = z.object({ received: z.int() }).meta({ id: 'SiteLookupsReceived' });
 
 export type SiteLookupsReceived = z.infer<typeof SiteLookupsReceived>;
+
+/** A browser title span as a PC sends it. */
+export const SiteTitleIn = z
+  .object({
+    /** When the span started. */
+    at: z.iso.datetime(),
+    sec: z.int().min(1).max(86_400),
+    /** The exe id of the browser that showed it. */
+    package: z.string().min(1).max(255),
+    /** The page title as Windows showed it, cleaned. */
+    title: z.string().min(1).max(300),
+  })
+  .meta({ id: 'SiteTitleIn' });
+
+export type SiteTitleIn = z.infer<typeof SiteTitleIn>;
+
+/** Body of POST /v1/device/site-titles. */
+export const SiteTitlesUpload = z
+  .object({ titles: z.array(SiteTitleIn).min(1).max(500) })
+  .meta({ id: 'SiteTitlesUpload' });
+
+export type SiteTitlesUpload = z.infer<typeof SiteTitlesUpload>;
+
+/** Answer of POST /v1/device/site-titles: how many rows were new. */
+export const SiteTitlesReceived = z.object({ received: z.int() }).meta({ id: 'SiteTitlesReceived' });
+
+export type SiteTitlesReceived = z.infer<typeof SiteTitlesReceived>;

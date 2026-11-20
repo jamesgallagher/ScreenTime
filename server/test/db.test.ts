@@ -55,6 +55,7 @@ describe.skipIf(!url)('database', () => {
       'schedule_versions',
       'site_daily',
       'site_lookups',
+      'site_titles',
       'sos_acks',
       'sos_incidents',
       'sos_locations',

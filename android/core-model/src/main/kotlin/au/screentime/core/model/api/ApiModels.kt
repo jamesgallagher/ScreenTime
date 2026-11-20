@@ -1125,6 +1125,24 @@ data class SiteLookupIn(
 )
 
 @Serializable
+data class SiteTitlesReceived(
+    val received: Int,
+)
+
+@Serializable
+data class SiteTitlesUpload(
+    val titles: List<SiteTitleIn>,
+)
+
+@Serializable
+data class SiteTitleIn(
+    val at: String,
+    val sec: Int,
+    val `package`: String,
+    val title: String,
+)
+
+@Serializable
 data class PushTokenPut(
     val fcmToken: String?,
 )

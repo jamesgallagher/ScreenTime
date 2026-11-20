@@ -79,6 +79,29 @@ CREATE TABLE IF NOT EXISTS program_days (
 );
 """;
 
+    private const string SiteLookupsSql = """
+CREATE TABLE IF NOT EXISTS site_lookups (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    sid       TEXT NOT NULL,
+    at_ms     INTEGER NOT NULL,
+    host      TEXT NOT NULL,
+    program   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS site_lookups_sid_at ON site_lookups (sid, at_ms, id);
+""";
+
+    private const string TitleSpansSql = """
+CREATE TABLE IF NOT EXISTS title_spans (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    sid       TEXT NOT NULL,
+    at_ms     INTEGER NOT NULL,
+    sec       INTEGER NOT NULL,
+    program   TEXT NOT NULL,
+    title     TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS title_spans_sid_at ON title_spans (sid, at_ms, id);
+""";
+
     private readonly SqliteConnection _connection;
     private readonly object _lock = new();
     private readonly int _schemaVersion;
@@ -124,6 +147,14 @@ CREATE TABLE IF NOT EXISTS program_days (
         using (var cmd = _connection.CreateCommand())
         {
             cmd.CommandText = ProgramDaysSql;
+            cmd.ExecuteNonQuery();
+        }
+        // Added in CARD-069 without a version bump: an older store gets them on its next open.
+        using (var cmd = _connection.CreateCommand())
+        {
+            cmd.CommandText = SiteLookupsSql;
+            cmd.ExecuteNonQuery();
+            cmd.CommandText = TitleSpansSql;
             cmd.ExecuteNonQuery();
         }
         _schemaVersion = version;
@@ -199,7 +230,7 @@ ON CONFLICT(sid) DO UPDATE SET device_id = $device_id, token = $token, kid_name 
         }
     }
 
-    /// <summary>Removes the account's rows from all four tables, in one transaction.</summary>
+    /// <summary>Removes the account's rows from all six tables, in one transaction.</summary>
     public void RemoveDevice(string sid)
     {
         lock (_lock)
@@ -217,6 +248,10 @@ ON CONFLICT(sid) DO UPDATE SET device_id = $device_id, token = $token, kid_name 
             cmd.CommandText = "DELETE FROM outbox WHERE sid = $sid";
             cmd.ExecuteNonQuery();
             cmd.CommandText = "DELETE FROM program_days WHERE sid = $sid";
+            cmd.ExecuteNonQuery();
+            cmd.CommandText = "DELETE FROM site_lookups WHERE sid = $sid";
+            cmd.ExecuteNonQuery();
+            cmd.CommandText = "DELETE FROM title_spans WHERE sid = $sid";
             cmd.ExecuteNonQuery();
             tx.Commit();
         }
@@ -550,6 +585,207 @@ ON CONFLICT (sid, day, id) DO UPDATE SET
             cmd.Parameters.AddWithValue("$before", beforeDate);
             cmd.ExecuteNonQuery();
         }
+    }
+
+    /// <summary>A website lookup waiting to be uploaded.</summary>
+    public sealed record LocalSiteLookup(long Id, string Sid, long AtMs, string Host, string Program);
+
+    /// <summary>A title span waiting to be uploaded.</summary>
+    public sealed record LocalTitleSpan(long Id, string Sid, long AtMs, int Sec, string Program, string Title);
+
+    /// <summary>Keeps a website lookup for an account (docs/SPEC.md §12.10). Beyond 50,000 for the account, the
+    /// oldest are removed so it holds at most 50,000.</summary>
+    public void AddSiteLookup(string sid, long atMs, string host, string program)
+    {
+        lock (_lock)
+        {
+            using var tx = _connection.BeginTransaction();
+            using var cmd = _connection.CreateCommand();
+            cmd.Transaction = tx;
+            cmd.CommandText = "INSERT INTO site_lookups (sid, at_ms, host, program) VALUES ($sid, $at, $host, $program)";
+            cmd.Parameters.AddWithValue("$sid", sid);
+            cmd.Parameters.AddWithValue("$at", atMs);
+            cmd.Parameters.AddWithValue("$host", host);
+            cmd.Parameters.AddWithValue("$program", program);
+            cmd.ExecuteNonQuery();
+            CapSiteLookups(sid, 50_000, tx);
+            tx.Commit();
+        }
+    }
+
+    /// <summary>Keeps a batch of website lookups for an account in one transaction, then applies the 50,000 cap.</summary>
+    public void AddSiteLookups(string sid, IReadOnlyList<(long AtMs, string Host, string Program)> rows)
+    {
+        if (rows.Count == 0) return;
+        lock (_lock)
+        {
+            using var tx = _connection.BeginTransaction();
+            using var cmd = _connection.CreateCommand();
+            cmd.Transaction = tx;
+            cmd.CommandText = "INSERT INTO site_lookups (sid, at_ms, host, program) VALUES ($sid, $at, $host, $program)";
+            cmd.Parameters.AddWithValue("$sid", sid);
+            cmd.Parameters.AddWithValue("$at", 0L);
+            cmd.Parameters.AddWithValue("$host", "");
+            cmd.Parameters.AddWithValue("$program", "");
+            foreach (var (atMs, host, program) in rows)
+            {
+                cmd.Parameters["$at"].Value = atMs;
+                cmd.Parameters["$host"].Value = host;
+                cmd.Parameters["$program"].Value = program;
+                cmd.ExecuteNonQuery();
+            }
+            CapSiteLookups(sid, 50_000, tx);
+            tx.Commit();
+        }
+    }
+
+    /// <summary>The account's website lookups, oldest first, at most <paramref name="limit"/>.</summary>
+    public IReadOnlyList<LocalSiteLookup> PeekSiteLookups(string sid, int limit)
+    {
+        lock (_lock)
+        {
+            using var cmd = _connection.CreateCommand();
+            cmd.CommandText = "SELECT id, sid, at_ms, host, program FROM site_lookups WHERE sid = $sid ORDER BY at_ms, id LIMIT $limit";
+            cmd.Parameters.AddWithValue("$sid", sid);
+            cmd.Parameters.AddWithValue("$limit", limit);
+            using var reader = cmd.ExecuteReader();
+            var list = new List<LocalSiteLookup>();
+            while (reader.Read())
+            {
+                list.Add(new LocalSiteLookup(reader.GetInt64(0), reader.GetString(1), reader.GetInt64(2), reader.GetString(3), reader.GetString(4)));
+            }
+            return list;
+        }
+    }
+
+    /// <summary>Removes the account's website lookups with these ids (the ones the server answered 200 for).</summary>
+    public void RemoveSiteLookups(long[] ids)
+    {
+        if (ids.Length == 0) return;
+        lock (_lock)
+        {
+            var names = ids.Select((id, i) => $"$id{i}").ToArray();
+            using var cmd = _connection.CreateCommand();
+            cmd.CommandText = $"DELETE FROM site_lookups WHERE id IN ({string.Join(", ", names)})";
+            for (var i = 0; i < ids.Length; i++) cmd.Parameters.AddWithValue(names[i], ids[i]);
+            cmd.ExecuteNonQuery();
+        }
+    }
+
+    /// <summary>Keeps a title span for an account (docs/SPEC.md §12.10). Beyond 20,000 for the account, the
+    /// oldest are removed so it holds at most 20,000.</summary>
+    public void AddTitleSpan(string sid, long atMs, int sec, string program, string title)
+    {
+        lock (_lock)
+        {
+            using var tx = _connection.BeginTransaction();
+            using var cmd = _connection.CreateCommand();
+            cmd.Transaction = tx;
+            cmd.CommandText = "INSERT INTO title_spans (sid, at_ms, sec, program, title) VALUES ($sid, $at, $sec, $program, $title)";
+            cmd.Parameters.AddWithValue("$sid", sid);
+            cmd.Parameters.AddWithValue("$at", atMs);
+            cmd.Parameters.AddWithValue("$sec", sec);
+            cmd.Parameters.AddWithValue("$program", program);
+            cmd.Parameters.AddWithValue("$title", title);
+            cmd.ExecuteNonQuery();
+            CapTitleSpans(sid, 20_000, tx);
+            tx.Commit();
+        }
+    }
+
+    /// <summary>Keeps a batch of title spans for an account in one transaction, then applies the 20,000 cap.</summary>
+    public void AddTitleSpans(string sid, IReadOnlyList<(long AtMs, int Sec, string Program, string Title)> rows)
+    {
+        if (rows.Count == 0) return;
+        lock (_lock)
+        {
+            using var tx = _connection.BeginTransaction();
+            using var cmd = _connection.CreateCommand();
+            cmd.Transaction = tx;
+            cmd.CommandText = "INSERT INTO title_spans (sid, at_ms, sec, program, title) VALUES ($sid, $at, $sec, $program, $title)";
+            cmd.Parameters.AddWithValue("$sid", sid);
+            cmd.Parameters.AddWithValue("$at", 0L);
+            cmd.Parameters.AddWithValue("$sec", 0);
+            cmd.Parameters.AddWithValue("$program", "");
+            cmd.Parameters.AddWithValue("$title", "");
+            foreach (var (atMs, sec, program, title) in rows)
+            {
+                cmd.Parameters["$at"].Value = atMs;
+                cmd.Parameters["$sec"].Value = sec;
+                cmd.Parameters["$program"].Value = program;
+                cmd.Parameters["$title"].Value = title;
+                cmd.ExecuteNonQuery();
+            }
+            CapTitleSpans(sid, 20_000, tx);
+            tx.Commit();
+        }
+    }
+
+    /// <summary>The account's title spans, oldest first, at most <paramref name="limit"/>.</summary>
+    public IReadOnlyList<LocalTitleSpan> PeekTitleSpans(string sid, int limit)
+    {
+        lock (_lock)
+        {
+            using var cmd = _connection.CreateCommand();
+            cmd.CommandText = "SELECT id, sid, at_ms, sec, program, title FROM title_spans WHERE sid = $sid ORDER BY at_ms, id LIMIT $limit";
+            cmd.Parameters.AddWithValue("$sid", sid);
+            cmd.Parameters.AddWithValue("$limit", limit);
+            using var reader = cmd.ExecuteReader();
+            var list = new List<LocalTitleSpan>();
+            while (reader.Read())
+            {
+                list.Add(new LocalTitleSpan(reader.GetInt64(0), reader.GetString(1), reader.GetInt64(2), reader.GetInt32(3), reader.GetString(4), reader.GetString(5)));
+            }
+            return list;
+        }
+    }
+
+    /// <summary>Removes the account's title spans with these ids (the ones the server answered 200 for).</summary>
+    public void RemoveTitleSpans(long[] ids)
+    {
+        if (ids.Length == 0) return;
+        lock (_lock)
+        {
+            var names = ids.Select((id, i) => $"$id{i}").ToArray();
+            using var cmd = _connection.CreateCommand();
+            cmd.CommandText = $"DELETE FROM title_spans WHERE id IN ({string.Join(", ", names)})";
+            for (var i = 0; i < ids.Length; i++) cmd.Parameters.AddWithValue(names[i], ids[i]);
+            cmd.ExecuteNonQuery();
+        }
+    }
+
+    private void CapSiteLookups(string sid, int max, SqliteTransaction tx)
+    {
+        var count = CountBySid(_connection, tx, "site_lookups", sid);
+        if (count <= max) return;
+        using var del = _connection.CreateCommand();
+        del.Transaction = tx;
+        del.CommandText = "DELETE FROM site_lookups WHERE id IN (SELECT id FROM site_lookups WHERE sid = $sid ORDER BY at_ms, id LIMIT $n)";
+        del.Parameters.AddWithValue("$sid", sid);
+        del.Parameters.AddWithValue("$n", count - max);
+        del.ExecuteNonQuery();
+    }
+
+    private void CapTitleSpans(string sid, int max, SqliteTransaction tx)
+    {
+        var count = CountBySid(_connection, tx, "title_spans", sid);
+        if (count <= max) return;
+        using var del = _connection.CreateCommand();
+        del.Transaction = tx;
+        del.CommandText = "DELETE FROM title_spans WHERE id IN (SELECT id FROM title_spans WHERE sid = $sid ORDER BY at_ms, id LIMIT $n)";
+        del.Parameters.AddWithValue("$sid", sid);
+        del.Parameters.AddWithValue("$n", count - max);
+        del.ExecuteNonQuery();
+    }
+
+    /// <summary>How many rows a table holds for one sid.</summary>
+    private static long CountBySid(SqliteConnection connection, SqliteTransaction tx, string table, string sid)
+    {
+        using var cmd = connection.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = $"SELECT COUNT(*) FROM {table} WHERE sid = $sid";
+        cmd.Parameters.AddWithValue("$sid", sid);
+        return (long)cmd.ExecuteScalar()!;
     }
 
     /// <summary>Closes the connection, releasing the file.</summary>

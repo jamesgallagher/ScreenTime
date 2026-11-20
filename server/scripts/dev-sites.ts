@@ -1,6 +1,6 @@
 // Prints the websites stored by the development database: the site_daily rows of a kid's devices for a day
-// (most lookups first), and the count of raw site_lookups for that day. It queries the database directly,
-// so no sign-in is needed.
+// (most lookups first), the count of raw site_lookups for that day, and the site_titles rows of that kid's
+// devices for that day, oldest first. It queries the database directly, so no sign-in is needed.
 // Usage (from the repo root, with DATABASE_URL set):
 //   pnpm --filter @screentime/server exec tsx scripts/dev-sites.ts <kid name> [YYYY-MM-DD]
 // Never run this against the production database.
@@ -45,6 +45,18 @@ try {
       and to_char(at at time zone ${family.timezone}, 'YYYY-MM-DD') = ${day}
   `)).rows;
   console.log(`raw site_lookups for ${day}: ${rawRow.count}`);
+  const titles = (await db.execute<{ time: string; sec: number; package: string; title: string }>(sql`
+    select to_char(site_titles.at at time zone ${family.timezone}, 'HH24:MI:SS') as time,
+           site_titles.sec, site_titles.package, site_titles.title
+    from site_titles
+    where device_id = any(${`{${deviceIds.join(',')}}`}::uuid[])
+      and to_char(site_titles.at at time zone ${family.timezone}, 'YYYY-MM-DD') = ${day}
+    order by site_titles.at
+  `)).rows;
+  console.log('titles:');
+  for (const r of titles) {
+    console.log(`${r.time} | ${r.sec} | ${r.package} | ${r.title}`);
+  }
 } finally {
   await pool.end();
 }

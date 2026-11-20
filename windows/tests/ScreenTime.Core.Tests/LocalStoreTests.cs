@@ -276,4 +276,91 @@ public sealed class LocalStoreTests : IDisposable
         Assert.Empty(store.ProgramDays(Alex));
         Assert.Single(store.ProgramDays(Sam));
     }
+
+    // CARD-069: site_lookups and title_spans tables.
+    [Fact]
+    public void SiteLookupsAreKeptPerAccountOldestFirstAndRemovedById()
+    {
+        using var store = LocalStore.Open(DbPath);
+        store.AddSiteLookup(Alex, 3_000, "c.example.com", "msedge.exe");
+        store.AddSiteLookup(Alex, 1_000, "a.example.com", "msedge.exe");
+        store.AddSiteLookup(Alex, 2_000, "b.example.com", "firefox.exe");
+        store.AddSiteLookup(Sam, 1_500, "s.example.com", "chrome.exe");
+
+        var alex = store.PeekSiteLookups(Alex, 3);
+        Assert.Equal(new[] { "a.example.com", "b.example.com", "c.example.com" }, alex.Select(l => l.Host).ToArray());
+
+        var oldest2 = store.PeekSiteLookups(Alex, 2);
+        store.RemoveSiteLookups(oldest2.Select(l => l.Id).ToArray());
+
+        var left = store.PeekSiteLookups(Alex, 10);
+        Assert.Single(left);
+        Assert.Equal("c.example.com", left[0].Host);
+        Assert.Single(store.PeekSiteLookups(Sam, 10));
+    }
+
+    [Fact]
+    public void SiteLookupsBeyond50000KeepOnlyTheNewest50000()
+    {
+        using var store = LocalStore.Open(DbPath);
+        var rows = Enumerable.Range(0, 50_000).Select(i => ((long)i, $"h{i}.example.com", "msedge.exe")).ToList();
+        store.AddSiteLookups(Alex, rows);
+        store.AddSiteLookup(Alex, 50_000, "new.example.com", "msedge.exe");
+
+        var all = store.PeekSiteLookups(Alex, 50_001);
+        Assert.Equal(50_000, all.Count);
+        // The oldest (h0) is gone; the newest is the last.
+        Assert.Equal("h1.example.com", all[0].Host);
+        Assert.Equal("new.example.com", all[^1].Host);
+    }
+
+    [Fact]
+    public void TitleSpansAreKeptPerAccountOldestFirstAndRemovedById()
+    {
+        using var store = LocalStore.Open(DbPath);
+        store.AddTitleSpan(Alex, 2_000, 5, "msedge.exe", "B");
+        store.AddTitleSpan(Alex, 1_000, 7, "msedge.exe", "A");
+        store.AddTitleSpan(Sam, 1_500, 7, "firefox.exe", "S");
+
+        var alex = store.PeekTitleSpans(Alex, 2);
+        Assert.Equal(new[] { "A", "B" }, alex.Select(t => t.Title).ToArray());
+
+        var oldest1 = store.PeekTitleSpans(Alex, 1);
+        store.RemoveTitleSpans([oldest1[0].Id]);
+
+        var left = store.PeekTitleSpans(Alex, 10);
+        Assert.Single(left);
+        Assert.Equal("B", left[0].Title);
+        Assert.Single(store.PeekTitleSpans(Sam, 10));
+    }
+
+    [Fact]
+    public void TitleSpansBeyond20000KeepOnlyTheNewest20000()
+    {
+        using var store = LocalStore.Open(DbPath);
+        var rows = Enumerable.Range(0, 20_000).Select(i => ((long)i, 5, "msedge.exe", "T")).ToList();
+        store.AddTitleSpans(Alex, rows);
+        store.AddTitleSpan(Alex, 20_000, 5, "msedge.exe", "N");
+
+        var all = store.PeekTitleSpans(Alex, 20_001);
+        Assert.Equal(20_000, all.Count);
+        Assert.Equal("N", all[^1].Title);
+    }
+
+    [Fact]
+    public void RemovingADeviceForgetsSiteLookupsAndTitleSpans()
+    {
+        using var store = LocalStore.Open(DbPath);
+        store.AddSiteLookup(Alex, 1_000, "a.example.com", "msedge.exe");
+        store.AddSiteLookup(Sam, 1_500, "s.example.com", "chrome.exe");
+        store.AddTitleSpan(Alex, 1_000, 5, "msedge.exe", "A");
+        store.AddTitleSpan(Sam, 1_500, 7, "firefox.exe", "S");
+
+        store.RemoveDevice(Alex);
+
+        Assert.Empty(store.PeekSiteLookups(Alex, 10));
+        Assert.Empty(store.PeekTitleSpans(Alex, 10));
+        Assert.Single(store.PeekSiteLookups(Sam, 10));
+        Assert.Single(store.PeekTitleSpans(Sam, 10));
+    }
 }

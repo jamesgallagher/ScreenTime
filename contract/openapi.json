@@ -3438,6 +3438,63 @@
           "package"
         ]
       },
+      "SiteTitlesReceived": {
+        "type": "object",
+        "properties": {
+          "received": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "received"
+        ]
+      },
+      "SiteTitlesUpload": {
+        "type": "object",
+        "properties": {
+          "titles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SiteTitleIn"
+            },
+            "minItems": 1,
+            "maxItems": 500
+          }
+        },
+        "required": [
+          "titles"
+        ]
+      },
+      "SiteTitleIn": {
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "sec": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 86400
+          },
+          "package": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          }
+        },
+        "required": [
+          "at",
+          "sec",
+          "package",
+          "title"
+        ]
+      },
       "PushTokenPut": {
         "type": "object",
         "properties": {
@@ -9241,6 +9298,62 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SiteLookupsReceived"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the code or token is wrong or expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/device/site-titles": {
+      "post": {
+        "tags": [
+          "device"
+        ],
+        "summary": "Upload browser titles",
+        "description": "The page titles this device's browser windows were showing. A title more than 30 days old or more than 1 day ahead is skipped; a repeat adds nothing.",
+        "security": [
+          {
+            "deviceAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SiteTitlesUpload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Stored.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteTitlesReceived"
                 }
               }
             }

@@ -479,6 +479,18 @@ public sealed record SiteLookupIn(
     [property: JsonPropertyName("host")] string Host,
     [property: JsonPropertyName("package")] string Package);
 
+public sealed record SiteTitlesReceived(
+    [property: JsonPropertyName("received")] int Received);
+
+public sealed record SiteTitlesUpload(
+    [property: JsonPropertyName("titles")] IReadOnlyList<SiteTitleIn> Titles);
+
+public sealed record SiteTitleIn(
+    [property: JsonPropertyName("at")] string At,
+    [property: JsonPropertyName("sec")] int Sec,
+    [property: JsonPropertyName("package")] string Package,
+    [property: JsonPropertyName("title")] string Title);
+
 public sealed record PushTokenPut(
     [property: JsonPropertyName("fcmToken")] string? FcmToken);
 
@@ -559,6 +571,9 @@ public sealed record PushTokenPut(
 [JsonSerializable(typeof(SiteLookupsReceived))]
 [JsonSerializable(typeof(SiteLookupsUpload))]
 [JsonSerializable(typeof(SiteLookupIn))]
+[JsonSerializable(typeof(SiteTitlesReceived))]
+[JsonSerializable(typeof(SiteTitlesUpload))]
+[JsonSerializable(typeof(SiteTitleIn))]
 [JsonSerializable(typeof(PushTokenPut))]
 public partial class ApiJsonContext : JsonSerializerContext
 {

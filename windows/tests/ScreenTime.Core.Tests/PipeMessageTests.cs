@@ -52,4 +52,18 @@ public class PipeMessageTests
         Assert.Equal("notepad.exe", msg.Program);
         Assert.Equal("Notepad", msg.Text);
     }
+
+    // CARD-069: the title on the front line (docs/SPEC.md §12.10).
+    [Fact]
+    public void FrontCarriesAnOptionalTitle()
+    {
+        Assert.Equal("""{"type":"front","text":"Microsoft Edge","program":"msedge.exe","title":"how to draw - Search"}""",
+            PipeMessage.Encode(PipeMessage.Front("msedge.exe", "Microsoft Edge", "how to draw - Search")));
+        // A front line without a title (as an old tray sends it) parses with the title null.
+        var old = PipeMessage.Decode("""{"type":"front","text":"Microsoft Edge","program":"msedge.exe"}""");
+        Assert.NotNull(old);
+        Assert.Null(old!.Title);
+        // Nothing in front has no title field.
+        Assert.Equal("""{"type":"front"}""", PipeMessage.Encode(PipeMessage.Front(null, null)));
+    }
 }
