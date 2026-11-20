@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { eq, sql } from 'drizzle-orm';
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { signAccessToken } from '../src/auth/tokens.js';
 import { createDb } from '../src/db/client.js';
 import { devices, families, kids, parentSessions, parents, scheduleVersions, siteDaily, siteLookups } from '../src/db/schema.js';
@@ -64,11 +64,19 @@ describe.skipIf(!url)('website lookups', () => {
     return signAccessToken(TEST_SECRET, { sessionId: session.id, parentId, familyId, roles: ['parent'] });
   }
 
+  /** The card's dates are in November 2026; the route skips anything more than 30 days before its clock, so fix "now". */
+  const FIXED_NOW = new Date('2026-11-12T00:00:00Z');
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   afterAll(async () => {
     await pool.end();
   });
 
   beforeEach(async () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: FIXED_NOW });
     await resetDatabase(db, pool);
     sent.length = 0;
     const [a] = await db.insert(families).values({ name: 'A', timezone: 'Australia/Sydney', parentCodeSecret: 'A'.repeat(32) }).returning();
@@ -177,6 +185,7 @@ describe.skipIf(!url)('website lookups', () => {
   });
 
   it('skips a lookup more than 30 days old or more than 1 day ahead', async () => {
+    vi.useRealTimers();
     const now = Date.now();
     const iso = (ms: number) => new Date(ms).toISOString();
     const res = await upload(phone.token, [
@@ -188,6 +197,19 @@ describe.skipIf(!url)('website lookups', () => {
     expect(res.body).toEqual({ received: 1 });
     const hosts = (await db.select().from(siteLookups).where(eq(siteLookups.deviceId, phone.id))).map((r) => r.host);
     expect(hosts).toEqual(['recent.example.com']);
+  });
+
+  it('answers 0 and stores nothing when every lookup is out of range (a phone offline for a month)', async () => {
+    vi.useRealTimers();
+    const now = Date.now();
+    const res = await upload(phone.token, [
+      { at: new Date(now - 40 * 86_400_000).toISOString(), host: 'old.example.com', package: 'com.android.chrome' },
+      { at: new Date(now - 35 * 86_400_000).toISOString(), host: 'older.example.com', package: 'com.android.chrome' },
+    ]);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ received: 0 });
+    expect(await rawCount(phone.id)).toBe(0);
+    expect(await dailyRows(phone.id)).toEqual([]);
   });
 
   it('refuses an invalid host, too many lookups, an empty list or an empty package, storing nothing', async () => {
@@ -224,6 +246,7 @@ describe.skipIf(!url)('website lookups', () => {
 
   it('the sweep deletes raw lookups older than 90 days and keeps the daily totals', async () => {
     // The API only stores lookups within 30 days (criterion 7), so the test seeds the 89- and 91-day-old rows directly.
+    vi.useRealTimers();
     const now = Date.now();
     const dayFor = async (at: Date) =>
       (await db.execute<{ day: string }>(sql`select to_char(${at} at time zone 'Australia/Sydney', 'YYYY-MM-DD') as day`)).rows[0]?.day ?? '';

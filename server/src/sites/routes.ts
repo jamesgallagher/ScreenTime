@@ -42,6 +42,9 @@ export function registerSiteRoutes(app: Router, deps: AppDeps) {
       const at = new Date(l.at);
       return at >= new Date(now.getTime() - 30 * 86_400_000) && at <= new Date(now.getTime() + 86_400_000);
     });
+    // Nothing in range (say a phone that was offline for a month): nothing to store. Answering 200 lets the device
+    // delete them; an error would make it send the same batch again at every sync, for ever.
+    if (inRange.length === 0) return c.json({ received: 0 }, 200);
     const received = await withFamily(db, familyId, async (tx) => {
       const timezone = await timezoneOf(tx, familyId);
       const rows = await tx
