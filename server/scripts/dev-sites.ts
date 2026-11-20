@@ -4,7 +4,7 @@
 // Usage (from the repo root, with DATABASE_URL set):
 //   pnpm --filter @screentime/server exec tsx scripts/dev-sites.ts <kid name> [YYYY-MM-DD]
 // Never run this against the production database.
-import { and, asc, desc, eq, in_, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import { createDb } from '../src/db/client.js';
 import { devices, families, kids, siteDaily } from '../src/db/schema.js';
 
@@ -23,8 +23,8 @@ try {
   const [family] = await db.select().from(families).where(eq(families.id, kid.familyId)).limit(1);
   if (!family) throw new Error(`no family for ${kid.name}`);
   // The day is the local date in the family time zone; default to today.
-  const [dayRow] = await db.execute<{ day: string }>(sql`select coalesce(${date}, to_char(now() at time zone ${family.timezone}, 'YYYY-MM-DD')) as day`);
-  const day = dayRow.rows[0].day;
+  const [dayRow] = (await db.execute<{ day: string }>(sql`select coalesce(${date}, to_char(now() at time zone ${family.timezone}, 'YYYY-MM-DD')) as day`)).rows;
+  const day = dayRow.day;
   const deviceIds = (await db.select({ id: devices.id }).from(devices).where(eq(devices.kidId, kid.id))).map((d) => d.id);
   const rows =
     deviceIds.length === 0
@@ -32,19 +32,19 @@ try {
       : await db
           .select({ site: siteDaily.site, package: siteDaily.package, lookups: siteDaily.lookups, firstAt: siteDaily.firstAt, lastAt: siteDaily.lastAt })
           .from(siteDaily)
-          .where(and(in_(siteDaily.deviceId, deviceIds), eq(siteDaily.day, day)))
+          .where(and(inArray(siteDaily.deviceId, deviceIds), eq(siteDaily.day, day)))
           .orderBy(desc(siteDaily.lookups), asc(siteDaily.site));
   console.log(`kid: ${kid.name}   day: ${day}`);
   console.log('site | package | lookups | first..last');
   for (const r of rows) {
     console.log(`${r.site} | ${r.package} | ${r.lookups} | ${r.firstAt.toISOString()}..${r.lastAt.toISOString()}`);
   }
-  const [rawRow] = await db.execute<{ count: number }>(sql`
+  const [rawRow] = (await db.execute<{ count: number }>(sql`
     select count(*) as count from site_lookups
-    where device_id = any(${deviceIds})
+    where device_id in (${sql.join(deviceIds.map((id) => sql`${id}`), sql`,`)})
       and to_char(at at time zone ${family.timezone}, 'YYYY-MM-DD') = ${day}
-  `);
-  console.log(`raw site_lookups for ${day}: ${rawRow.rows[0].count}`);
+  `)).rows;
+  console.log(`raw site_lookups for ${day}: ${rawRow.count}`);
 } finally {
   await pool.end();
 }
