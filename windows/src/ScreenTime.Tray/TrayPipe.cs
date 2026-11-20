@@ -18,6 +18,7 @@ internal sealed partial class TrayPipe(string pipeName, bool dryLock, TrayModel 
     private readonly SemaphoreSlim _write = new(1, 1);
     private readonly ConcurrentDictionary<string, TaskCompletionSource<SendResult>> _waiting = new();
     private StreamWriter? _writer;
+    private FrontWatcher? _frontWatcher;
 
     [LibraryImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -39,6 +40,8 @@ internal sealed partial class TrayPipe(string pipeName, bool dryLock, TrayModel 
                 using var writer = new StreamWriter(pipe, Utf8, bufferSize: 1024, leaveOpen: true);
                 _writer = writer;
                 await SendAsync(PipeMessage.Hello(Environment.ProcessId));
+                _frontWatcher = new FrontWatcher(m => _ = SendAsync(m), log);
+                _frontWatcher.Start();
                 while (await reader.ReadLineAsync() is { } line)
                 {
                     var message = PipeMessage.Decode(line);
@@ -180,6 +183,8 @@ internal sealed partial class TrayPipe(string pipeName, bool dryLock, TrayModel 
     private void Disconnected()
     {
         _writer = null;
+        _frontWatcher?.Stop();
+        _frontWatcher = null;
         foreach (var id in _waiting.Keys) if (_waiting.TryRemove(id, out var waiting)) waiting.TrySetResult(SendResult.Offline);
     }
 }

@@ -1,9 +1,11 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Channels;
 using ScreenTime.Core.Api;
 using ScreenTime.Core.Games;
+using ScreenTime.Core.Programs;
 using ScreenTime.Core.Service;
 using ScreenTime.Core.Store;
 using ScreenTime.Core.Sync;
@@ -67,7 +69,7 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
     /// <summary>What the server was last told this PC has, per account, so it is only told again when that changes.</summary>
     private readonly Dictionary<string, string> _gamesSent = new();
 
-    private sealed class KidSession(uint sessionId, string sid, TrayHost tray, CancellationTokenSource cts)
+    private sealed class KidSession(uint sessionId, string sid, TrayHost tray, CancellationTokenSource cts, ProgramClock programs)
     {
         public uint SessionId { get; } = sessionId;
         public string Sid { get; } = sid;
@@ -82,6 +84,7 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
         public long? CodeOkAt { get; set; }
         public TrayKillWatch TrayKills { get; } = new();
         public bool CaughtPending { get; set; }
+        public ProgramClock Programs { get; } = programs;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -168,6 +171,11 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
                     try
                     {
                         tracker.Tick(clock.NowMs());
+                        var now = clock.NowMs();
+                        foreach (var s in _sessions.Values)
+                        {
+                            foreach (var p in s.Programs.Flush(now)) _store.AddProgramDay(s.Sid, p.Day, p.Id, p.Label, p.Ms);
+                        }
                         foreach (var device in store.Devices()) await SyncAccount(device.Sid, stoppingToken);
                         StartLiveChannels();
                         await UpdateTick(stoppingToken);
@@ -274,6 +282,7 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
                     s.Unlocked = false;
                     s.InParentMode = false;
                     s.Keeper.OnLocked();
+                    foreach (var p in s.Programs.Counting(false, now)) _store.AddProgramDay(s.Sid, p.Day, p.Id, p.Label, p.Ms);
                     if (e.Change == SessionChange.Logoff)
                     {
                         s.Cts.Cancel();
@@ -304,7 +313,8 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
         if (_store.GetDevice(sid) is null) return null;
         var cts = CancellationTokenSource.CreateLinkedTokenSource(_stopping);
         var tray = new TrayHost(sessionId, sid, options.TrayExe, options.DryLock, options.AsService, m => OnTrayMessage(sessionId, m), logger, options.TrayOpen, () => OnTrayExit(sessionId), () => _shuttingDown, options.AsService ? () => Win.SessionActive(sessionId) : null, () => _updateInProgress);
-        var s = new KidSession(sessionId, sid, tray, cts);
+        var programs = new ProgramClock(TimeZoneInfo.FindSystemTimeZoneById(_store.GetDevice(sid)!.Timezone));
+        var s = new KidSession(sessionId, sid, tray, cts, programs);
         _sessions[sessionId] = s;
         _ = tray.RunAsync(cts.Token);
         return s;
@@ -317,9 +327,11 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
         if (ParentModeOn(s.Sid, now))
         {
             s.InParentMode = true;
+            foreach (var p in s.Programs.Counting(false, now)) _store.AddProgramDay(s.Sid, p.Day, p.Id, p.Label, p.Ms);
             return;
         }
         s.Unlocked = true;
+        foreach (var p in s.Programs.Counting(true, now)) _store.AddProgramDay(s.Sid, p.Day, p.Id, p.Label, p.Ms);
         // Only StartCounting or Toast: neither waits on the pipe for long.
         _ = Apply(s, s.Keeper.OnUnlock(OutOfTime(s.Sid, now), now), now);
     }
@@ -330,6 +342,7 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
         s.Unlocked = false;
         s.InParentMode = true;
         s.Keeper.OnLocked();
+        foreach (var p in s.Programs.Counting(false, now)) _store.AddProgramDay(s.Sid, p.Day, p.Id, p.Label, p.Ms);
         logger.LogInformation("{Kid}: parent mode on, not counting", KidName(s.Sid));
         foreach (var sid in _tracker.OnChange(SessionChange.Lock, s.Sid, true, now)) _syncRequests.Writer.TryWrite(sid);
     }
@@ -338,6 +351,8 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
     private void LeaveParentMode(KidSession s)
     {
         s.InParentMode = false;
+        var now = _clock.NowMs();
+        foreach (var p in s.Programs.Counting(true, now)) _store.AddProgramDay(s.Sid, p.Day, p.Id, p.Label, p.Ms);
         logger.LogInformation("{Kid}: parent mode over", KidName(s.Sid));
         if (Win.SessionUnlocked(s.SessionId)) Unlock(s);
     }
@@ -531,6 +546,14 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
                     s.Keeper.OnLockConfirmed();
                     logger.LogInformation("tray {Session}: locked", sessionId);
                     break;
+                case "front":
+                    {
+                        var now = _clock.NowMs();
+                        var pieces = s.Programs.Front(m.Program, m.Text, now);
+                        foreach (var p in pieces) _store.AddProgramDay(s.Sid, p.Day, p.Id, p.Label, p.Ms);
+                        logger.LogInformation("tray {Session}: front {Program} {Label}", sessionId, m.Program ?? "nothing", m.Text);
+                        break;
+                    }
             }
         }
         finally
@@ -742,6 +765,7 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
         await ReportParentMode(sid, api, ct);
         await ReportEvents(sid, api, ct);
         await ReportGames(sid, api, ct);
+        await ReportPrograms(sid, api, ct);
         var synced = await syncer.SyncAsync(ct);
         if (synced && !_versionSent.Contains(sid)) await ReportVersion(sid, api, ct);
         if (!synced) _tracker.MarkOffline(sid);
@@ -768,6 +792,44 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
                 await SendGames(s);
             }
         }
+    }
+
+    /// <summary>
+    /// Sends the stored program time to the server (docs/SPEC.md §12.9), once per account per sync, and again only
+    /// when the body changes. Prunes program_days older than 31 days after sending.
+    /// </summary>
+    private async Task ReportPrograms(string sid, ApiClient api, CancellationToken ct)
+    {
+        var device = _store.GetDevice(sid);
+        if (device is null) return;
+        var rows = _store.ProgramDays(sid).Select(r => new ProgramUpload.ProgramDay(r.Day, r.Id, r.Label, r.Ms)).ToList();
+        var body = ProgramUpload.Build(rows, device.Timezone, _clock.NowMs());
+        if (body is null) return;
+        var key = "program-usage-sent";
+        var json = JsonSerializer.Serialize(body, ApiJsonContext.Default.DeviceAppUsageUpload);
+        if (_store.GetValue(sid, key) == json) return;
+        try
+        {
+            await api.PostDeviceAppUsageAsync(body, ct);
+            _store.SetValue(sid, key, json);
+            var days = body.Days.Count;
+            var first = body.Days[0].Day;
+            var last = body.Days[body.Days.Count - 1].Day;
+            logger.LogInformation("{Kid}: programs: sent {Days} days ({First}..{Last})", KidName(sid), days, first, last);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception e)
+        {
+            logger.LogWarning("{Kid}: could not report programs ({Message})", KidName(sid), e.Message);
+        }
+        // Prune program_days older than 31 days.
+        var tz = TimeZoneInfo.FindSystemTimeZoneById(device.Timezone);
+        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.FromUnixTimeMilliseconds(_clock.NowMs()), tz).DateTime);
+        var before = today.AddDays(-31).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+        _store.PruneProgramDays(sid, before);
     }
 
     /// <summary>
