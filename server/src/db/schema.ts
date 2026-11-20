@@ -525,6 +525,28 @@ export const deviceGames = pgTable(
   (t) => [primaryKey({ columns: [t.deviceId, t.game] }), check('device_games_source', sql`${t.source} in ('found', 'custom')`)],
 );
 
+/**
+ * A program on one Windows PC account (docs/SPEC.md §12.9): the latest label the PC sent for it, and when it was
+ * first and last seen. PC programs never reach the Apps page, rules, limits or new-app approval (Windows only).
+ */
+export const devicePrograms = pgTable(
+  'device_programs',
+  {
+    familyId: familyId(),
+    kidId: uuid('kid_id')
+      .notNull()
+      .references(() => kids.id),
+    deviceId: uuid('device_id')
+      .notNull()
+      .references(() => devices.id),
+    package: text('package').notNull(),
+    label: text('label').notNull(),
+    firstSeenAt: ts('first_seen_at').notNull().defaultNow(),
+    lastSeenAt: ts('last_seen_at').notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.deviceId, t.package] })],
+);
+
 /** One later bedtime per kid per day (docs/SPEC.md §6.1, §7.5). */
 export const bedtimeExtensions = pgTable(
   'bedtime_extensions',

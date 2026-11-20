@@ -37,6 +37,7 @@ describe.skipIf(!url)('database', () => {
       'bedtime_extensions',
       'device_apps',
       'device_games',
+      'device_programs',
       'devices',
       'enrolment_codes',
       'events',

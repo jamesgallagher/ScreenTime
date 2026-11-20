@@ -858,6 +858,7 @@ data class DeviceAppUsageUploadDaysItem(
 data class DeviceAppUsageUploadDaysItemAppsItem(
     val `package`: String,
     val seconds: Int,
+    val label: String? = null,
 )
 
 @Serializable
