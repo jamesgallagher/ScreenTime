@@ -7,6 +7,15 @@ export interface SmtpConfig {
   fromName: string;
 }
 
+/** The family's local LLM, which sorts each site once (docs/SPEC.md §12.10, CARD-070). */
+export interface ClassifierConfig {
+  /** The OpenAI API base, without a trailing slash (`http://192.168.0.148:8686/v1`). */
+  url: string;
+  model: string;
+  /** Cloudflare's family resolver, asked only about unknown sites; null turns the check off. */
+  familyDns: string | null;
+}
+
 export interface Config {
   port: number;
   databaseUrl: string;
@@ -22,6 +31,23 @@ export interface Config {
   webDir: string | null;
   /** The folder with `kid.json` and the kid app's APK. Null when RELEASES_DIR is unset: no self-updates. */
   releasesDir: string | null;
+  /** Null when CLASSIFIER_URL is unset or empty: the classifier is off (tests, development). */
+  classifier: ClassifierConfig | null;
+}
+
+/**
+ * The classifier's settings from CLASSIFIER_URL, CLASSIFIER_MODEL and CLASSIFIER_FAMILY_DNS (docs/SPEC.md §12.10).
+ * Null when CLASSIFIER_URL is unset or empty. A trailing slash comes off the URL; FAMILY_DNS unset means the default
+ * resolver, set but empty turns the check off.
+ */
+export function classifierFromEnv(env: NodeJS.ProcessEnv = process.env): ClassifierConfig | null {
+  const url = env.CLASSIFIER_URL?.trim();
+  if (!url) return null;
+  return {
+    url: url.replace(/\/+$/, ''),
+    model: env.CLASSIFIER_MODEL?.trim() || 'Qwen3.8-27B',
+    familyDns: env.CLASSIFIER_FAMILY_DNS === undefined ? '1.1.1.3' : env.CLASSIFIER_FAMILY_DNS.trim() || null,
+  };
 }
 
 /** Reads settings from environment variables. Throws if a required one is missing. Empty values count as unset. */
@@ -61,6 +87,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     firebaseServiceAccountJson: firebase,
     webDir: env.WEB_DIR?.trim() || null,
     releasesDir: env.RELEASES_DIR?.trim() || null,
+    classifier: classifierFromEnv(env),
   };
 }
 

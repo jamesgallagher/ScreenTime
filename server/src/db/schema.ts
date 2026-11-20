@@ -9,6 +9,7 @@ import {
   jsonb,
   pgTable,
   primaryKey,
+  real,
   smallint,
   text,
   timestamp,
@@ -581,6 +582,8 @@ export const siteLookups = pgTable(
       .references(() => devices.id),
     at: ts('at').notNull(),
     host: text('host').notNull(),
+    /** The registrable domain of `host` (`khanacademy.org`), filled by CARD-070's backfill on older rows. */
+    site: text('site'),
     package: text('package').notNull(),
     receivedAt: ts('received_at').notNull().defaultNow(),
   },
@@ -609,6 +612,8 @@ export const siteDaily = pgTable(
     site: text('site').notNull(),
     package: text('package').notNull(),
     lookups: integer('lookups').notNull(),
+    /** Active minutes: the distinct minutes of this day in which the site was looked up (CARD-070). */
+    minutes: integer('minutes').notNull().default(0),
     firstAt: ts('first_at').notNull(),
     lastAt: ts('last_at').notNull(),
   },
@@ -641,4 +646,38 @@ export const siteTitles = pgTable(
     index('site_titles_kid_at_idx').on(t.kidId, t.at),
     index('site_titles_at_idx').on(t.at),
   ],
+);
+
+/**
+ * Each site's kind and category from the classifier (docs/SPEC.md §12.10, CARD-070). Shared by every family: a
+ * domain's kind says nothing about a family, so this table has no `family_id` and no row-level security.
+ */
+export const siteClasses = pgTable('site_classes', {
+  site: text('site').primaryKey(),
+  /** Null until sorted. */
+  kind: text('kind'),
+  category: text('category'),
+  /** For a CDN or app service: the site or company it serves. */
+  owner: text('owner'),
+  label: text('label'),
+  confidence: real('confidence'),
+  /** Cloudflare's family resolver answered `0.0.0.0`: adult or unsafe. */
+  familyDnsBlocked: boolean('family_dns_blocked').notNull().default(false),
+  model: text('model'),
+  attempts: integer('attempts').notNull().default(0),
+  classifiedAt: ts('classified_at'),
+});
+
+/** A parent's own kind and category for a site, for the whole family (docs/SPEC.md §12.10, CARD-070). */
+export const siteOverrides = pgTable(
+  'site_overrides',
+  {
+    familyId: familyId(),
+    site: text('site').notNull(),
+    kind: text('kind').notNull(),
+    category: text('category').notNull(),
+    parentId: uuid('parent_id').references(() => parents.id),
+    setAt: ts('set_at').notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.familyId, t.site] })],
 );

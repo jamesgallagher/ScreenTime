@@ -394,6 +394,20 @@ class ApiClient(
     }
 
     /**
+     * The websites report of a kid or shared device.
+     *
+     * `GET /v1/reports/sites`
+     */
+    suspend fun getReportsSites(
+        kidId: String,
+        period: ReportPeriod,
+        date: String? = null,
+        deviceId: String? = null,
+    ): SiteReport {
+        return call(HttpMethod.Get, "/v1/reports/sites", auth = true, query = listOf("kidId" to kidId, "period" to period, "date" to date, "deviceId" to deviceId)).body()
+    }
+
+    /**
      * A kid's time adjustments for one day.
      *
      * `GET /v1/kids/{kidId}/grants`
@@ -912,6 +926,29 @@ class ApiClient(
         body: SiteTitlesUpload,
     ): SiteTitlesReceived {
         return call(HttpMethod.Post, "/v1/device/site-titles", auth = true, body = body, bodyType = typeInfo<SiteTitlesUpload>()).body()
+    }
+
+    /**
+     * A family's own kind and category for a site.
+     *
+     * `PUT /v1/sites/{site}/class`
+     */
+    suspend fun putSitesClass(
+        site: String,
+        body: SiteClassOverride,
+    ): SiteClassSaved {
+        return call(HttpMethod.Put, "/v1/sites/${segment(site)}/class", auth = true, body = body, bodyType = typeInfo<SiteClassOverride>()).body()
+    }
+
+    /**
+     * Back to the classifier for a site.
+     *
+     * `DELETE /v1/sites/{site}/class`
+     */
+    suspend fun deleteSitesClass(
+        site: String,
+    ) {
+        call(HttpMethod.Delete, "/v1/sites/${segment(site)}/class", auth = true)
     }
 
     /**

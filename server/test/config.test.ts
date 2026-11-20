@@ -15,7 +15,20 @@ describe('loadConfig', () => {
       firebaseServiceAccountJson: null,
       webDir: null,
       releasesDir: null,
+      classifier: null,
     });
+  });
+
+  it('reads the classifier settings, and is off without a URL', () => {
+    expect(loadConfig(base).classifier).toBeNull();
+    expect(loadConfig({ ...base, CLASSIFIER_URL: '' }).classifier).toBeNull();
+    expect(loadConfig({ ...base, CLASSIFIER_URL: ' http://x/v1/ ' }).classifier).toEqual({
+      url: 'http://x/v1',
+      model: 'Qwen3.8-27B',
+      familyDns: '1.1.1.3',
+    });
+    expect(loadConfig({ ...base, CLASSIFIER_URL: 'http://x/v1', CLASSIFIER_MODEL: 'other-model' }).classifier?.model).toBe('other-model');
+    expect(loadConfig({ ...base, CLASSIFIER_URL: 'http://x/v1', CLASSIFIER_FAMILY_DNS: '' }).classifier?.familyDns).toBeNull();
   });
 
   it('reads WEB_DIR', () => {

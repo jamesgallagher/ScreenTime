@@ -629,6 +629,132 @@ data class AppReportAppDevice(
 )
 
 @Serializable
+data class SiteReport(
+    val kidId: String,
+    val period: ReportPeriod,
+    val from: String,
+    val to: String,
+    val today: String,
+    val deviceId: String?,
+    val devices: List<SiteReportDevice>,
+    val categories: List<SiteReportCategory>,
+    val sites: List<SiteReportSite>,
+    val behindTheScenes: List<SiteReportSite>,
+    val browserSec: Int,
+    val privateSec: Int,
+    val searches: List<SiteReportSearch>,
+    val pages: List<SiteReportPage>,
+    val titlesKeptFrom: String,
+)
+
+@Serializable
+data class SiteReportDevice(
+    val deviceId: String,
+    val name: String,
+    val form: DeviceForm,
+    val platform: Platform,
+    val removedAt: String?,
+    val sitesRecorded: Boolean,
+)
+
+@Serializable
+data class SiteReportCategory(
+    val category: SiteCategory?,
+    val minutes: Int,
+    val sites: Int,
+)
+
+@Serializable
+enum class SiteCategory(override val wire: String) : ApiEnum {
+    @SerialName("social") SOCIAL("social"),
+    @SerialName("video") VIDEO("video"),
+    @SerialName("games") GAMES("games"),
+    @SerialName("chat") CHAT("chat"),
+    @SerialName("search") SEARCH("search"),
+    @SerialName("education") EDUCATION("education"),
+    @SerialName("shopping") SHOPPING("shopping"),
+    @SerialName("news") NEWS("news"),
+    @SerialName("adult") ADULT("adult"),
+    @SerialName("gambling") GAMBLING("gambling"),
+    @SerialName("violence_weapons") VIOLENCE_WEAPONS("violence_weapons"),
+    @SerialName("drugs") DRUGS("drugs"),
+    @SerialName("self_harm") SELF_HARM("self_harm"),
+    @SerialName("other") OTHER("other");
+}
+
+@Serializable
+data class SiteReportSite(
+    val site: String,
+    val label: String?,
+    val kind: SiteKind?,
+    val category: SiteCategory?,
+    val source: SiteClassSource?,
+    val owner: String?,
+    val minutes: Int,
+    val lookups: Int,
+    val days: Int,
+    val firstAt: String,
+    val lastAt: String,
+    val apps: List<SiteReportApp>,
+    val devices: List<SiteReportSiteDevicesItem>,
+)
+
+@Serializable
+data class SiteReportSiteDevicesItem(
+    val deviceId: String,
+    val minutes: Int,
+)
+
+@Serializable
+enum class SiteKind(override val wire: String) : ApiEnum {
+    @SerialName("website") WEBSITE("website"),
+    @SerialName("cdn") CDN("cdn"),
+    @SerialName("ads_tracking") ADS_TRACKING("ads_tracking"),
+    @SerialName("app_service") APP_SERVICE("app_service"),
+    @SerialName("unknown") UNKNOWN("unknown");
+}
+
+@Serializable
+enum class SiteClassSource(override val wire: String) : ApiEnum {
+    @SerialName("classifier") CLASSIFIER("classifier"),
+    @SerialName("family_dns") FAMILY_DNS("family_dns"),
+    @SerialName("parent") PARENT("parent");
+}
+
+@Serializable
+data class SiteReportApp(
+    val `package`: String,
+    val label: String,
+    val browser: Boolean,
+    val minutes: Int,
+)
+
+@Serializable
+data class SiteReportSearch(
+    val engine: SearchEngine,
+    val query: String,
+    val sec: Int,
+    val private: Boolean,
+    val firstAt: String,
+    val deviceId: String,
+)
+
+@Serializable
+enum class SearchEngine(override val wire: String) : ApiEnum {
+    @SerialName("google") GOOGLE("google"),
+    @SerialName("bing") BING("bing"),
+    @SerialName("duckduckgo") DUCKDUCKGO("duckduckgo");
+}
+
+@Serializable
+data class SiteReportPage(
+    val page: String,
+    val `package`: String,
+    val sec: Int,
+    val private: Boolean,
+)
+
+@Serializable
 data class Grant(
     val id: String,
     val pool: Pool,
@@ -1141,6 +1267,35 @@ data class SiteTitleIn(
     val `package`: String,
     val title: String,
 )
+
+@Serializable
+data class SiteClassSaved(
+    val site: String,
+    val kind: SiteClassSavedKind,
+    val category: SiteCategory?,
+)
+
+@Serializable
+enum class SiteClassSavedKind(override val wire: String) : ApiEnum {
+    @SerialName("website") WEBSITE("website"),
+    @SerialName("cdn") CDN("cdn"),
+    @SerialName("ads_tracking") ADS_TRACKING("ads_tracking"),
+    @SerialName("app_service") APP_SERVICE("app_service");
+}
+
+@Serializable
+data class SiteClassOverride(
+    val kind: SiteClassOverrideKind,
+    val category: SiteCategory?,
+)
+
+@Serializable
+enum class SiteClassOverrideKind(override val wire: String) : ApiEnum {
+    @SerialName("website") WEBSITE("website"),
+    @SerialName("cdn") CDN("cdn"),
+    @SerialName("ads_tracking") ADS_TRACKING("ads_tracking"),
+    @SerialName("app_service") APP_SERVICE("app_service");
+}
 
 @Serializable
 data class PushTokenPut(

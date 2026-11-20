@@ -77,29 +77,29 @@ export async function buildAppReport(
 }
 
 /** The kid, or 404. An archived kid still answers. Row-level security hides other families. */
-async function findKid(tx: FamilyTx, kidId: string) {
+export async function findKid(tx: FamilyTx, kidId: string) {
   const [row] = await tx.select().from(kids).where(eq(kids.id, kidId));
   if (!row) throw new ApiError('not_found', 'No such kid in your family.');
   return row;
 }
 
-/** The family's today, YYYY-MM-DD. */
-async function familyToday(tx: FamilyTx, timezone: string): Promise<string> {
-  const result = await tx.execute<{ date: string }>(sql`
-    select to_char((now() at time zone ${timezone})::date, 'YYYY-MM-DD') as date
-  `);
-  return result.rows[0]?.date ?? '';
+/**
+ * The family's today, YYYY-MM-DD, from the server's clock (the trusted time, docs/SPEC.md §8.5) in the family's
+ * zone. The clock is the process's, so a test's fake `Date` reaches it too.
+ */
+export async function familyToday(_tx: FamilyTx, timezone: string): Promise<string> {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 }
 
 /** True when `date` is a real YYYY-MM-DD date. */
-function isRealDate(date: string): boolean {
+export function isRealDate(date: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
   const d = new Date(`${date}T00:00:00Z`);
   return d.toISOString().slice(0, 10) === date;
 }
 
 /** The first and last day of the period holding `date`: the day itself, Monday to Sunday, or the calendar month. */
-function periodRange(period: ReportPeriod, date: string): { from: string; to: string } {
+export function periodRange(period: ReportPeriod, date: string): { from: string; to: string } {
   if (period === 'day') return { from: date, to: date };
   if (period === 'week') {
     const weekday = (new Date(`${date}T00:00:00Z`).getUTCDay() + 6) % 7; // Monday 0 … Sunday 6
@@ -113,7 +113,7 @@ function periodRange(period: ReportPeriod, date: string): { from: string; to: st
 }
 
 /** `date` plus `days`, YYYY-MM-DD. */
-function addDays(date: string, days: number): string {
+export function addDays(date: string, days: number): string {
   const d = new Date(`${date}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
@@ -123,12 +123,23 @@ function addDays(date: string, days: number): string {
  * The instants of local midnight at the start of `from` and of the day after `to`, through the time zone
  * (daylight saving makes some days 23 or 25 hours).
  */
-async function periodInstants(tx: FamilyTx, timezone: string, from: string, to: string): Promise<{ start: Date; end: Date }> {
+export async function periodInstants(tx: FamilyTx, timezone: string, from: string, to: string): Promise<{ start: Date; end: Date }> {
   const result = await tx.execute<{ start: string; end: string }>(sql`
     select to_json(${from}::date::timestamp at time zone ${timezone}) #>> '{}' as start,
            to_json((${to}::date + 1)::timestamp at time zone ${timezone}) #>> '{}' as end
   `);
   return { start: new Date(result.rows[0]?.start ?? ''), end: new Date(result.rows[0]?.end ?? '') };
+}
+
+/**
+ * The devices of a report: every one not removed, then each removed one whose id is in `removedWithData` (it has
+ * data of the kind the report shows in the period).
+ */
+export function reportDeviceList(allDevices: typeof devices.$inferSelect[], removedWithData: ReadonlySet<string>) {
+  return [
+    ...allDevices.filter((d) => d.revokedAt === null),
+    ...allDevices.filter((d) => d.revokedAt !== null && removedWithData.has(d.id)),
+  ];
 }
 
 /**
@@ -175,7 +186,7 @@ async function reportDevices(
     ).map((r) => r.deviceId),
   );
 
-  return [...active, ...removed.filter((d) => withAppTime.has(d.id) || withSegment.has(d.id))];
+  return reportDeviceList(allDevices, new Set([...withAppTime, ...withSegment]));
 }
 
 /**
@@ -334,7 +345,7 @@ async function reportApps(
  * `device_programs` label (the latest `last_seen_at`), else the `device_apps` label on any of the kid's devices, else
  * the `device_programs` label on any of the kid's devices, else the package name.
  */
-function labelOf(
+export function labelOf(
   appsOnReport: typeof deviceApps.$inferSelect[] | undefined,
   programsOnReport: typeof devicePrograms.$inferSelect[] | undefined,
   appsOnAny: typeof deviceApps.$inferSelect[] | undefined,
