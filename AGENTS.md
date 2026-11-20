@@ -15,6 +15,7 @@ The repo has about 750 files (1.5 MB of text). **You cannot hold it all, and try
 3. **Find, don't browse.** Use search (grep/glob) for a name, a route path or a table, and open the hit. Read a part of a long file (`Worker.cs` is 1,100 lines), not all of it.
 4. **Keep the card open in your mind.** Before each commit, re-read the card's acceptance criteria and check the work against them, not against your memory of them.
 5. **While working, run only the tests you touch** (commands below). Run the full suite once at the end, before pushing.
+6. **Run a slow command once, save its output, then search the file.** `pnpm test`, the server suite, Gradle and `dotnet test` take minutes. Never run one again just to see its output another way (a different filter, the totals, the colours stripped): run it once with all its output going to a file, then read and search that file as often as you like. Run it again only after you change code. See "Saving test output" under Commands.
 
 **Never read** (they are big, generated or irrelevant, and the card never needs them):
 
@@ -113,6 +114,17 @@ The test database (once per terminal):
 docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --wait db
 $pw = (Select-String -Path deploy\.env -Pattern '^POSTGRES_PASSWORD=(.*)').Matches[0].Groups[1].Value
 $env:TEST_DATABASE_URL = "postgres://screentime:$pw@localhost:5432/screentime_test"
+```
+
+Saving test output (any slow run: run once, then search the file, never re-run to filter):
+
+```powershell
+New-Item -ItemType Directory -Force C:\Users\james\OpenCode\Testing\temp | Out-Null
+$out = 'C:\Users\james\OpenCode\Testing\temp\test-output.txt'
+pnpm test *> $out; "exit code: $LASTEXITCODE"
+(Get-Content $out) -replace '\x1B\[[0-9;]*m', '' | Set-Content $out   # strip colour codes once
+Select-String -Path $out -Pattern 'Test Files|Tests |FAIL|failed'     # vitest totals and failures
+Select-String -Path $out -Pattern 'BUILD (SUCCESSFUL|FAILED)|tests completed|Passed!|Failed!' # Gradle, dotnet test
 ```
 
 Just the tests you are working on (fast; use these while working):

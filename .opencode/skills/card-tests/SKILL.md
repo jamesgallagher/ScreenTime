@@ -14,4 +14,5 @@ Claude re-runs every test, breaks lines of the code on purpose, and checks the d
 - **Break it yourself.** For each line the card names, change it, run the test, see it fail, paste the failing test's name, and restore with `git checkout -- <file>`. If nothing fails, the test is too weak: fix the test, not the code.
 - **Existing tests are the card's too.** Changing what an existing test checks is a deviation: list it in the handback.
 - **Run what you touched** while working (single-file commands in AGENTS.md), the full suite once before pushing, and paste the totals exactly as the runner prints them.
+- **Slow runs: once, to a file.** Send the output of `pnpm test`, Gradle or `dotnet test` to a file in `C:\Users\james\OpenCode\Testing\temp\` (`*> $out`, see AGENTS.md "Saving test output") and search that file for the totals and failures. Never re-run a passing suite only to filter its output differently; re-run only after changing code.
 - **Server tests skip without `TEST_DATABASE_URL`** (`describe.skipIf(!url)`): check that yours ran.
