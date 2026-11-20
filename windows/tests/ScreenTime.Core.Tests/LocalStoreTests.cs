@@ -224,4 +224,56 @@ public sealed class LocalStoreTests : IDisposable
         using var store = LocalStore.Open(DbPath);
         Assert.Equal(1, store.SchemaVersion);
     }
+
+    // CARD-067: program_days table.
+    [Fact]
+    public void ProgramDaysAreKeptPerAccountAndAddToExistingRows()
+    {
+        using var store = LocalStore.Open(DbPath);
+        Assert.Empty(store.ProgramDays(Alex));
+
+        store.AddProgramDay(Alex, "2026-11-10", "notepad.exe", "Notepad", 60_000);
+        store.AddProgramDay(Alex, "2026-11-10", "notepad.exe", "Notepad", 120_000);
+        store.AddProgramDay(Alex, "2026-11-11", "notepad.exe", "Notepad", 30_000);
+        store.AddProgramDay(Sam, "2026-11-10", "notepad.exe", "Notepad", 90_000);
+
+        var alex = store.ProgramDays(Alex);
+        Assert.Equal(2, alex.Count);
+        Assert.Equal("2026-11-10", alex[0].Day);
+        Assert.Equal("notepad.exe", alex[0].Id);
+        Assert.Equal("Notepad", alex[0].Label);
+        Assert.Equal(180_000, alex[0].Ms);
+        Assert.Equal("2026-11-11", alex[1].Day);
+        Assert.Equal(30_000, alex[1].Ms);
+
+        var sam = store.ProgramDays(Sam);
+        Assert.Single(sam);
+        Assert.Equal(90_000, sam[0].Ms);
+
+        // A label change replaces the old one.
+        store.AddProgramDay(Alex, "2026-11-10", "notepad.exe", "Notepad 2", 0);
+        alex = store.ProgramDays(Alex);
+        Assert.Equal("Notepad 2", alex[0].Label);
+        Assert.Equal(180_000, alex[0].Ms);
+
+        // Prune removes days older than the given date.
+        store.PruneProgramDays(Alex, "2026-11-11");
+        alex = store.ProgramDays(Alex);
+        Assert.Single(alex);
+        Assert.Equal("2026-11-11", alex[0].Day);
+        Assert.Single(store.ProgramDays(Sam));
+    }
+
+    [Fact]
+    public void RemovingADeviceForgetsProgramDays()
+    {
+        using var store = LocalStore.Open(DbPath);
+        store.AddProgramDay(Alex, "2026-11-10", "notepad.exe", "Notepad", 60_000);
+        store.AddProgramDay(Sam, "2026-11-10", "notepad.exe", "Notepad", 60_000);
+
+        store.RemoveDevice(Alex);
+
+        Assert.Empty(store.ProgramDays(Alex));
+        Assert.Single(store.ProgramDays(Sam));
+    }
 }

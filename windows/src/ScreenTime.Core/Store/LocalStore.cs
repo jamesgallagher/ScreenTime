@@ -68,6 +68,17 @@ CREATE TABLE IF NOT EXISTS kv (
 );
 """;
 
+    private const string ProgramDaysSql = """
+CREATE TABLE IF NOT EXISTS program_days (
+    sid       TEXT NOT NULL,
+    day       TEXT NOT NULL,
+    id        TEXT NOT NULL,
+    label     TEXT NOT NULL,
+    ms        INTEGER NOT NULL,
+    PRIMARY KEY (sid, day, id)
+);
+""";
+
     private readonly SqliteConnection _connection;
     private readonly object _lock = new();
     private readonly int _schemaVersion;
@@ -107,6 +118,12 @@ CREATE TABLE IF NOT EXISTS kv (
         using (var cmd = _connection.CreateCommand())
         {
             cmd.CommandText = KvSql;
+            cmd.ExecuteNonQuery();
+        }
+        // Added in CARD-067 without a version bump: an older store gets it on its next open.
+        using (var cmd = _connection.CreateCommand())
+        {
+            cmd.CommandText = ProgramDaysSql;
             cmd.ExecuteNonQuery();
         }
         _schemaVersion = version;
@@ -198,6 +215,8 @@ ON CONFLICT(sid) DO UPDATE SET device_id = $device_id, token = $token, kid_name 
             cmd.CommandText = "DELETE FROM segments WHERE sid = $sid";
             cmd.ExecuteNonQuery();
             cmd.CommandText = "DELETE FROM outbox WHERE sid = $sid";
+            cmd.ExecuteNonQuery();
+            cmd.CommandText = "DELETE FROM program_days WHERE sid = $sid";
             cmd.ExecuteNonQuery();
             tx.Commit();
         }
@@ -474,6 +493,62 @@ ON CONFLICT(id) DO UPDATE SET
                 cmd.Parameters.AddWithValue("$value", value);
                 cmd.ExecuteNonQuery();
             }
+        }
+    }
+
+    /// <summary>One row of program time: the local day, the program id and its label, and its milliseconds.</summary>
+    public sealed record ProgramDay(string Sid, string Day, string Id, string Label, long Ms);
+
+    /// <summary>Adds program time for an account, adding to any existing row for the same day and id (docs/SPEC.md §12.9).</summary>
+    public void AddProgramDay(string sid, string day, string id, string label, long ms)
+    {
+        lock (_lock)
+        {
+            using var cmd = _connection.CreateCommand();
+            cmd.CommandText = """
+INSERT INTO program_days (sid, day, id, label, ms)
+VALUES ($sid, $day, $id, $label, $ms)
+ON CONFLICT (sid, day, id) DO UPDATE SET
+    label = excluded.label,
+    ms = program_days.ms + excluded.ms
+""";
+            cmd.Parameters.AddWithValue("$sid", sid);
+            cmd.Parameters.AddWithValue("$day", day);
+            cmd.Parameters.AddWithValue("$id", id);
+            cmd.Parameters.AddWithValue("$label", label);
+            cmd.Parameters.AddWithValue("$ms", ms);
+            cmd.ExecuteNonQuery();
+        }
+    }
+
+    /// <summary>The account's program days, oldest first.</summary>
+    public IReadOnlyList<ProgramDay> ProgramDays(string sid)
+    {
+        lock (_lock)
+        {
+            using var cmd = _connection.CreateCommand();
+            cmd.CommandText = "SELECT sid, day, id, label, ms FROM program_days WHERE sid = $sid ORDER BY day";
+            cmd.Parameters.AddWithValue("$sid", sid);
+            using var reader = cmd.ExecuteReader();
+            var list = new List<ProgramDay>();
+            while (reader.Read())
+            {
+                list.Add(new ProgramDay(reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.GetInt64(4)));
+            }
+            return list;
+        }
+    }
+
+    /// <summary>Removes the account's program days older than <paramref name="beforeDate"/> (a local date, YYYY-MM-DD).</summary>
+    public void PruneProgramDays(string sid, string beforeDate)
+    {
+        lock (_lock)
+        {
+            using var cmd = _connection.CreateCommand();
+            cmd.CommandText = "DELETE FROM program_days WHERE sid = $sid AND day < $before";
+            cmd.Parameters.AddWithValue("$sid", sid);
+            cmd.Parameters.AddWithValue("$before", beforeDate);
+            cmd.ExecuteNonQuery();
         }
     }
 
