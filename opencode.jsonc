@@ -1,0 +1,60 @@
+{
+  // Project settings for OpenCode (V1 format, OpenCode 1.18). They turn the hard rules of AGENTS.md into limits an
+  // agent cannot forget. For each tool the LAST matching rule wins, so "*" comes first and the exceptions after it.
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    // Big generated files and build output: never worth reading (AGENTS.md "Never read").
+    // To see one generated type, search for its name instead (grep shows the line).
+    "read": {
+      "*": "allow",
+      "*.env": "ask",
+      "*.env.*": "ask",
+      "*.env.example": "allow",
+      "*node_modules*": "deny",
+      "*/bin/*": "deny",
+      "*/obj/*": "deny",
+      "*/build/*": "deny",
+      "*/dist/*": "deny",
+      "*/.gradle/*": "deny",
+      "*TestResults*": "deny",
+      "*contract/openapi.json": "deny",
+      "*core/model/api/ApiModels.kt": "deny",
+      "*core/model/api/ApiClient.kt": "deny",
+      "*ScreenTime.Core/Api/*.g.cs": "deny",
+      "*server/drizzle/meta/*": "deny",
+      "*server/drizzle/meta/_journal.json": "allow",
+      "*pnpm-lock.yaml": "deny"
+    },
+    // Generated files change only through `pnpm contract`; secrets and keys are never edited.
+    "edit": {
+      "*": "allow",
+      "*contract/openapi.json": "deny",
+      "*core/model/api/ApiModels.kt": "deny",
+      "*core/model/api/ApiClient.kt": "deny",
+      "*ScreenTime.Core/Api/*.g.cs": "deny",
+      "*server/drizzle/meta/*": "deny",
+      "*server/drizzle/meta/_journal.json": "allow",
+      "*.env": "deny",
+      "*keystore*": "deny",
+      "*google-services.json": "deny"
+    },
+    // Commands: everything as before, except what AGENTS.md forbids.
+    "bash": {
+      "*": "allow",
+      "git push origin main*": "deny",
+      "git push * main": "deny",
+      "git push *:main*": "deny",
+      "git push *:refs/heads/main*": "deny",
+      "git push *--force*": "deny",
+      "git push -f*": "deny",
+      "git push * -f*": "deny",
+      "gh pr merge*": "deny",
+      "Stop-Process*-Name*": "deny",
+      "Stop-Process -ProcessName*": "deny",
+      "taskkill*/IM*": "deny",
+      "taskkill*/im*": "deny",
+      "git reset --hard*": "ask",
+      "git clean*": "ask"
+    }
+  }
+}
