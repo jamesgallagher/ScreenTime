@@ -164,18 +164,34 @@ if ($dns) {
             $xml = [xml]$e.ToXml()
             $user = $xml.Event.System.Security.UserID
             $proc = $xml.Event.System.Execution.ProcessID
-            $query = ($xml.Event.EventData.Data | Where-Object { $_.Name -eq 'QueryName' }).Value
+            $query = ($xml.Event.EventData.Data | Where-Object { $_.Name -eq 'QueryName' }).'#text'
             $kept += "  $($e.TimeCreated.ToString('HH:mm:ss')) user=$user proc=$proc query=$query"
         }
     }
     if ($kept.Count -eq 0) { Say "  (no 3008 events)" } else { $kept | ForEach-Object { Say $_ } }
 } else { Say "  (could not read the dns log)" }
+# Bring the service's local store out of the Sandbox (one copy right after Edge is
+# closed; a later copy is taken just before the uninstall, in step 6). state.db is in WAL mode, so the -wal and
+# -shm side files go too, or the copied db looks empty.
+$db = "C:\ProgramData\ScreenTime\state.db"
+if (Test-Path $db) {
+    Copy-Item $db "C:\out\state4.db"
+    Copy-Item "$db-wal" "C:\out\state4.db-wal" -ErrorAction SilentlyContinue
+    Copy-Item "$db-shm" "C:\out\state4.db-shm" -ErrorAction SilentlyContinue
+}
+Say "  state.db copied: $(Test-Path C:\out\state4.db)"
 Say "=== 5. waiting for the host"
 $waited = 0
 while (-not (Test-Path "C:\in\stop.txt") -and $waited -lt 240) { Start-Sleep 5; $waited += 5 }
 if (-not (Test-Path "C:\in\stop.txt")) { Check $false "no go-ahead from the host after 240 s" }
 
 Say "=== 6. uninstall and check the policies are gone"
+$db = "C:\ProgramData\ScreenTime\state.db"
+if (Test-Path $db) {
+    Copy-Item $db "C:\out\state6.db"
+    Copy-Item "$db-wal" "C:\out\state6.db-wal" -ErrorAction SilentlyContinue
+    Copy-Item "$db-shm" "C:\out\state6.db-shm" -ErrorAction SilentlyContinue
+}
 $code = (Start-Process msiexec.exe -ArgumentList @("/x", "C:\in\ScreenTime.msi", "/qn", "/l*v", "C:\out\uninstall.log") -Wait -PassThru).ExitCode
 Check ($code -eq 0) "msiexec uninstall exit $code"
 $left = @()

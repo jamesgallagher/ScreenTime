@@ -25,7 +25,18 @@ docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build
 $env:DATABASE_URL = "postgres://screentime:local-dev-only@localhost:5432/screentime"
 $env:JWT_SECRET = "local-dev-only-secret-at-least-32-characters"
 pnpm --filter @screentime/server exec tsx scripts/seed-dev.ts dad@example.com
-pnpm --silent --filter @screentime/server exec tsx scripts/dev-bedtime.ts Sam 120 25
+# Sam's schedule gets a 25-minute allowance; the bedtime is "minutes from now", but must not cross midnight in the
+# family's time zone (dev-bedtime throws if now + minutes + 1 reaches midnight). Pick the largest value that is
+# safe at any hour of the day; skip the call if the night is too close to midnight (Sam then keeps the seed
+# schedule, which is also valid, so counting still runs through the ~3-minute Edge test).
+$sydney = [System.TimeZoneInfo]::ConvertTime([DateTime]::Now, [System.TimeZoneInfo]::FindSystemTimeZoneById("Australia/Sydney"))
+$minsUntilMidnight = 24 * 60 - ($sydney.Hour * 60 + $sydney.Minute)
+$bedtimeMinutes = [Math]::Min(120, $minsUntilMidnight - 2)
+if ($bedtimeMinutes -ge 5) {
+    pnpm --silent --filter @screentime/server exec tsx scripts/dev-bedtime.ts Sam $bedtimeMinutes 25
+} else {
+    "dev-bedtime skipped (too close to midnight): Sam keeps the seed schedule"
+}
 $code = (pnpm --silent --filter @screentime/server exec tsx scripts/dev-enrol-code.ts Sam pc | Select-String '\d{6}').Matches[0].Value
 Set-Content (Join-Path $in "code.txt") $code
 
