@@ -25,7 +25,16 @@ import {
 } from '../db/schema.js';
 import { ApiError } from '../errors.js';
 import { ECHO_PACKAGES, isBrowser } from '../sites/packages.js';
-import { addDays, familyToday, findKid, isRealDate, labelOf, periodInstants, periodRange } from './apps.js';
+import {
+  addDays,
+  familyToday,
+  findKid,
+  isRealDate,
+  labelOf,
+  periodInstants,
+  periodRange,
+  reportDeviceList,
+} from './apps.js';
 import { parseTitle } from './titles.js';
 
 type DeviceRow = typeof devices.$inferSelect;
@@ -237,7 +246,7 @@ async function siteReportDevices(
         )
     ).map((r) => r.deviceId),
   );
-  return [...active, ...removed.filter((d) => withDaily.has(d.id) || withTitles.has(d.id))];
+  return reportDeviceList(allDevices, new Set([...withDaily, ...withTitles]));
 }
 
 /** The `site_daily` rows of the report's devices in `from..to`, echo packages left out, added up per site. */

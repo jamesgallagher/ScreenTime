@@ -163,6 +163,13 @@ describe.skipIf(!url)('site active minutes', () => {
       ['W', '2026-11-11', 'khanacademy.org', 'msedge.exe', 1, 1],
       ['W', '2026-11-11', 'sportsbet.com.au', 'msedge.exe', 1, 1],
     ]);
+
+    // Every raw row of fixture S has its site, on every device.
+    const raw = await db.select().from(siteLookups);
+    expect(raw).toHaveLength(13);
+    expect(raw.every((r) => r.site !== null)).toBe(true);
+    expect(raw.find((r) => r.host === 'www.roblox.com')?.site).toBe('roblox.com');
+    expect(raw.find((r) => r.host === 'www.sportsbet.com.au')?.site).toBe('sportsbet.com.au');
   });
 
   it('backfill fills site and recounts minutes, then changes nothing the second time', async () => {
@@ -180,6 +187,7 @@ describe.skipIf(!url)('site active minutes', () => {
 
     const first = await backfillSites(db);
     expect(first.filled).toBe(4);
+    expect(first.recounted).toBe(1);
     const raw = await db.select().from(siteLookups).where(eq(siteLookups.deviceId, phone.id));
     expect(raw.every((r) => r.site === 'khanacademy.org')).toBe(true);
     const rows = await dailyRows(phone.id);
@@ -188,6 +196,7 @@ describe.skipIf(!url)('site active minutes', () => {
 
     const second = await backfillSites(db);
     expect(second.filled).toBe(0);
+    expect(second.recounted).toBe(1);
     const again = await dailyRows(phone.id);
     expect(again.find((r) => r.day === '2026-11-10')?.minutes).toBe(3);
     expect(again.find((r) => r.day === '2026-08-01')?.minutes).toBe(0);

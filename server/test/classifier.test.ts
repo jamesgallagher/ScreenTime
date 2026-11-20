@@ -167,16 +167,7 @@ describe.skipIf(!url)('the website classifier', () => {
 
     expect(calls).toHaveLength(1);
     expect(calls[0]?.url).toBe('http://llm.test/v1/chat/completions');
-    expect(calls[0]?.body).toMatchObject({
-      model: 'Qwen3.8-27B',
-      temperature: 0,
-      max_tokens: 8192,
-      chat_template_kwargs: { enable_thinking: false },
-      response_format: { type: 'json_schema', json_schema: { name: 'site_classes', strict: true } },
-    });
-    expect(calls[0]?.body.messages[0]?.content).toBe(CLASSIFIER_PROMPT);
-    const items = JSON.parse(calls[0]?.body.messages[1]?.content ?? '[]') as { site: string; hosts: string[]; apps: string[] }[];
-    expect(items).toEqual([
+    const items = [
       { site: 'khanacademy.org', hosts: ['www.khanacademy.org', 'khanacademy.org'], apps: ['com.android.chrome', 'msedge.exe'] },
       { site: 'youtube.com', hosts: ['www.youtube.com'], apps: ['com.google.android.youtube'] },
       { site: 'abc.net.au', hosts: ['www.abc.net.au'], apps: ['com.android.chrome'] },
@@ -184,7 +175,64 @@ describe.skipIf(!url)('the website classifier', () => {
       { site: 'kastatic.org', hosts: ['cdn.kastatic.org'], apps: ['com.android.chrome'] },
       { site: 'roblox.com', hosts: ['www.roblox.com'], apps: ['com.roblox.client'] },
       { site: 'sportsbet.com.au', hosts: ['www.sportsbet.com.au'], apps: ['msedge.exe'] },
-    ]);
+    ];
+    expect(calls[0]?.body).toEqual({
+      model: 'Qwen3.8-27B',
+      temperature: 0,
+      max_tokens: 8192,
+      chat_template_kwargs: { enable_thinking: false },
+      response_format: {
+        type: 'json_schema',
+        json_schema: {
+          name: 'site_classes',
+          strict: true,
+          schema: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['sites'],
+            properties: {
+              sites: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  required: ['site', 'kind', 'category', 'owner', 'label', 'confidence'],
+                  properties: {
+                    site: { type: 'string' },
+                    kind: { enum: ['website', 'cdn', 'ads_tracking', 'app_service', 'unknown'] },
+                    category: {
+                      enum: [
+                        'social',
+                        'video',
+                        'games',
+                        'chat',
+                        'search',
+                        'education',
+                        'shopping',
+                        'news',
+                        'adult',
+                        'gambling',
+                        'violence_weapons',
+                        'drugs',
+                        'self_harm',
+                        'other',
+                      ],
+                    },
+                    owner: { type: ['string', 'null'] },
+                    label: { type: ['string', 'null'] },
+                    confidence: { type: 'number', minimum: 0, maximum: 1 },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      messages: [
+        { role: 'system', content: CLASSIFIER_PROMPT },
+        { role: 'user', content: JSON.stringify(items) },
+      ],
+    });
   });
 
   it('stores every asked result, ignores an unasked one and asks the resolver only about the unsure site', async () => {

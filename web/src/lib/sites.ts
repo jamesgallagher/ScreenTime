@@ -59,7 +59,7 @@ export async function clearSiteClass(site: string): Promise<void> {
   await api.delete(`/v1/sites/${encodeURIComponent(site)}/class`);
 }
 
-/** What the server works out for `categories`; the fake uses it too. */
+/** What the server works out for `categories`. */
 export function categoryTotals(sites: SiteReportSite[]): SiteReportCategory[] {
   const totals = new Map<SiteCategory | null, SiteReportCategory>();
   for (const s of sites) {

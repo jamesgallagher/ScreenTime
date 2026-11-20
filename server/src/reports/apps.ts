@@ -132,6 +132,17 @@ export async function periodInstants(tx: FamilyTx, timezone: string, from: strin
 }
 
 /**
+ * The devices of a report: every one not removed, then each removed one whose id is in `removedWithData` (it has
+ * data of the kind the report shows in the period).
+ */
+export function reportDeviceList(allDevices: typeof devices.$inferSelect[], removedWithData: ReadonlySet<string>) {
+  return [
+    ...allDevices.filter((d) => d.revokedAt === null),
+    ...allDevices.filter((d) => d.revokedAt !== null && removedWithData.has(d.id)),
+  ];
+}
+
+/**
  * The devices in the report when `deviceId` is not given: every one not removed, plus each removed one with any
  * app time in the period or any segment overlapping it.
  */
@@ -175,7 +186,7 @@ async function reportDevices(
     ).map((r) => r.deviceId),
   );
 
-  return [...active, ...removed.filter((d) => withAppTime.has(d.id) || withSegment.has(d.id))];
+  return reportDeviceList(allDevices, new Set([...withAppTime, ...withSegment]));
 }
 
 /**
