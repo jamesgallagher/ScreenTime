@@ -128,7 +128,7 @@ class AppWatcher(context: Context, private val api: ApiClient, private val now: 
         dayStart: Long,
         now: Long,
     ): LimitsNow {
-        val usage = appUsage(today, dayStart, now, notCounted(parentMode, dayStart, now))
+        val usage = appUsage(today, dayStart, now, notCounted(parentMode, dayStart, now, state.family.timezone))
         val minutes = state.apps.rules
             .filter { it.mode == AppRuleMode.LIMIT && it.dailyMinutes != null }
             .associate { it.`package` to it.dailyMinutes!! }
@@ -145,9 +145,12 @@ class AppWatcher(context: Context, private val api: ApiClient, private val now: 
         return news.messages
     }
 
-    /** Parent mode's spans today, with this one up to now. Older ones are forgotten; a new day starts clean. */
-    private fun notCounted(parentMode: Boolean, dayStart: Long, now: Long): List<Span> {
-        val spans = parseSpans(prefs.getString(SPANS, null).orEmpty()).filter { it.toMs > dayStart }.toMutableList()
+    /** Parent mode's spans for the 8 days of the upload, with this one up to now. Older ones are forgotten. */
+    private fun notCounted(parentMode: Boolean, dayStart: Long, now: Long, timezone: String): List<Span> {
+        val zone = ZoneId.of(timezone)
+        val days = uploadDays(zone, now)
+        val oldestStart = days.first().startMs
+        val spans = parseSpans(prefs.getString(SPANS, null).orEmpty()).filter { it.toMs > oldestStart }.toMutableList()
         val started = prefs.getLong(PARENT_FROM, -1).takeIf { it >= 0 }
         val edit = prefs.edit()
         if (parentMode && started == null) edit.putLong(PARENT_FROM, now)
@@ -180,32 +183,34 @@ class AppWatcher(context: Context, private val api: ApiClient, private val now: 
         return out
     }
 
-    /** Sends today's and yesterday's seconds per app when they changed, so a parent sees them and other devices count them. */
+    /** Sends the last 8 days' seconds per app when they changed, so a parent sees them and other devices count them. */
     suspend fun sendUsage(state: DeviceState) {
         if (!hasUsageAccess()) return
         val now = this.now()
         val zone = ZoneId.of(state.family.timezone)
-        val today = dayStartMs(state, now)
-        val yesterday = Instant.ofEpochMilli(today).atZone(zone).minusDays(1).toInstant().toEpochMilli()
         // Parent mode may just have ended without the service having looked yet: an upload can never be taken back.
         val open = prefs.getLong(PARENT_FROM, -1).takeIf { it >= 0 }?.let { Span(it, now) }
         val spans = parseSpans(prefs.getString(SPANS, null).orEmpty()) + listOfNotNull(open)
-        fun day(from: Long, to: Long): DeviceAppUsageUploadDaysItem {
-            val seconds = usageBetween(from, to, spans).seconds
+        val days = uploadDays(zone, now)
+        val oldestStart = days.first().startMs
+        val pruned = pruneSpans(spans, oldestStart)
+        fun day(d: UploadDay): DeviceAppUsageUploadDaysItem {
+            val seconds = usageBetween(d.startMs, d.endMs, pruned).seconds
                 .filter { it.value > 0 && it.key != context.packageName }
                 .toSortedMap()
             return DeviceAppUsageUploadDaysItem(
-                Instant.ofEpochMilli(from).atZone(zone).toLocalDate().toString(),
+                d.date,
                 seconds.entries.take(500).map { DeviceAppUsageUploadDaysItemAppsItem(it.key, it.value.toInt().coerceAtMost(86400)) },
             )
         }
-        val body = DeviceAppUsageUpload(listOf(day(yesterday, today), day(today, now)).filter { it.apps.isNotEmpty() })
+        val body = DeviceAppUsageUpload(days.map(::day).filter { it.apps.isNotEmpty() })
         if (body.days.isEmpty()) return
         val text = ApiJson.encodeToString(DeviceAppUsageUpload.serializer(), body)
         if (text == prefs.getString(USAGE_SENT, null)) return
         try {
             api.postDeviceAppUsage(body)
             prefs.edit().putString(USAGE_SENT, text).commit()
+            Log.i(TAG, "apps: usage sent for ${body.days.size} days (${body.days.first().day}..${body.days.last().day})")
         } catch (e: CancellationException) {
             throw e
         } catch (e: ApiException) {
