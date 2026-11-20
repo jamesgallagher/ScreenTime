@@ -120,6 +120,13 @@
       "when": 1795165783970,
       "tag": "0016_site_titles",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1795213030689,
+      "tag": "0017_site_classes",
+      "breakpoints": true
     }
   ]
 }

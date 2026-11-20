@@ -1800,6 +1800,384 @@
           "sec"
         ]
       },
+      "SiteReport": {
+        "type": "object",
+        "properties": {
+          "kidId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "period": {
+            "$ref": "#/components/schemas/ReportPeriod"
+          },
+          "from": {
+            "$ref": "#/components/schemas/LocalDate"
+          },
+          "to": {
+            "$ref": "#/components/schemas/LocalDate"
+          },
+          "today": {
+            "$ref": "#/components/schemas/LocalDate"
+          },
+          "deviceId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "devices": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SiteReportDevice"
+            }
+          },
+          "categories": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SiteReportCategory"
+            }
+          },
+          "sites": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SiteReportSite"
+            }
+          },
+          "behindTheScenes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SiteReportSite"
+            }
+          },
+          "browserSec": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "privateSec": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "searches": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SiteReportSearch"
+            }
+          },
+          "pages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SiteReportPage"
+            }
+          },
+          "titlesKeptFrom": {
+            "$ref": "#/components/schemas/LocalDate"
+          }
+        },
+        "required": [
+          "kidId",
+          "period",
+          "from",
+          "to",
+          "today",
+          "deviceId",
+          "devices",
+          "categories",
+          "sites",
+          "behindTheScenes",
+          "browserSec",
+          "privateSec",
+          "searches",
+          "pages",
+          "titlesKeptFrom"
+        ]
+      },
+      "SiteReportDevice": {
+        "type": "object",
+        "properties": {
+          "deviceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "form": {
+            "$ref": "#/components/schemas/DeviceForm"
+          },
+          "platform": {
+            "$ref": "#/components/schemas/Platform"
+          },
+          "removedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "sitesRecorded": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "deviceId",
+          "name",
+          "form",
+          "platform",
+          "removedAt",
+          "sitesRecorded"
+        ]
+      },
+      "SiteReportCategory": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "$ref": "#/components/schemas/SiteCategory"
+          },
+          "minutes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "sites": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "category",
+          "minutes",
+          "sites"
+        ]
+      },
+      "SiteCategory": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "enum": [
+          "social",
+          "video",
+          "games",
+          "chat",
+          "search",
+          "education",
+          "shopping",
+          "news",
+          "adult",
+          "gambling",
+          "violence_weapons",
+          "drugs",
+          "self_harm",
+          "other",
+          null
+        ]
+      },
+      "SiteReportSite": {
+        "type": "object",
+        "properties": {
+          "site": {
+            "type": "string"
+          },
+          "label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kind": {
+            "$ref": "#/components/schemas/SiteKind"
+          },
+          "category": {
+            "$ref": "#/components/schemas/SiteCategory"
+          },
+          "source": {
+            "$ref": "#/components/schemas/SiteClassSource"
+          },
+          "owner": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "minutes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "lookups": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "days": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "firstAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "apps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SiteReportApp"
+            }
+          },
+          "devices": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "deviceId": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "minutes": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "deviceId",
+                "minutes"
+              ]
+            }
+          }
+        },
+        "required": [
+          "site",
+          "label",
+          "kind",
+          "category",
+          "source",
+          "owner",
+          "minutes",
+          "lookups",
+          "days",
+          "firstAt",
+          "lastAt",
+          "apps",
+          "devices"
+        ]
+      },
+      "SiteKind": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "enum": [
+          "website",
+          "cdn",
+          "ads_tracking",
+          "app_service",
+          "unknown",
+          null
+        ]
+      },
+      "SiteClassSource": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "enum": [
+          "classifier",
+          "family_dns",
+          "parent",
+          null
+        ]
+      },
+      "SiteReportApp": {
+        "type": "object",
+        "properties": {
+          "package": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "browser": {
+            "type": "boolean"
+          },
+          "minutes": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "package",
+          "label",
+          "browser",
+          "minutes"
+        ]
+      },
+      "SiteReportSearch": {
+        "type": "object",
+        "properties": {
+          "engine": {
+            "$ref": "#/components/schemas/SearchEngine"
+          },
+          "query": {
+            "type": "string"
+          },
+          "sec": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "private": {
+            "type": "boolean"
+          },
+          "firstAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "deviceId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "engine",
+          "query",
+          "sec",
+          "private",
+          "firstAt",
+          "deviceId"
+        ]
+      },
+      "SearchEngine": {
+        "type": "string",
+        "enum": [
+          "google",
+          "bing",
+          "duckduckgo"
+        ]
+      },
+      "SiteReportPage": {
+        "type": "object",
+        "properties": {
+          "page": {
+            "type": "string"
+          },
+          "package": {
+            "type": "string"
+          },
+          "sec": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "private": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "page",
+          "package",
+          "sec",
+          "private"
+        ]
+      },
       "Grant": {
         "type": "object",
         "properties": {
@@ -3493,6 +3871,52 @@
           "sec",
           "package",
           "title"
+        ]
+      },
+      "SiteClassSaved": {
+        "type": "object",
+        "properties": {
+          "site": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "website",
+              "cdn",
+              "ads_tracking",
+              "app_service"
+            ]
+          },
+          "category": {
+            "$ref": "#/components/schemas/SiteCategory"
+          }
+        },
+        "required": [
+          "site",
+          "kind",
+          "category"
+        ]
+      },
+      "SiteClassOverride": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "website",
+              "cdn",
+              "ads_tracking",
+              "app_service"
+            ]
+          },
+          "category": {
+            "$ref": "#/components/schemas/SiteCategory"
+          }
+        },
+        "required": [
+          "kind",
+          "category"
         ]
       },
       "PushTokenPut": {
@@ -5860,6 +6284,108 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AppReport"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the code or token is wrong or expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Signed in, but not allowed to do this.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/reports/sites": {
+      "get": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "The websites report of a kid or shared device",
+        "description": "Which sites the devices looked up and for how long, sorted by the family's local LLM, by day, week (Monday to Sunday) or calendar month, on all devices or one. Removed devices still show. `date` defaults to the family's today; one after it, or not a real date, is 422.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "kidId",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "$ref": "#/components/schemas/ReportPeriod"
+            },
+            "required": true,
+            "name": "period",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "$ref": "#/components/schemas/LocalDate"
+            },
+            "required": false,
+            "name": "date",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": false,
+            "name": "deviceId",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The report.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteReport"
                 }
               }
             }
@@ -9360,6 +9886,119 @@
           },
           "401": {
             "description": "Not signed in, or the code or token is wrong or expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/sites/{site}/class": {
+      "put": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "A family's own kind and category for a site",
+        "description": "Replaces the classifier's kind and category for the whole family. `site` must be a host name.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SiteClassOverride"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Saved.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteClassSaved"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the code or token is wrong or expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Signed in, but not allowed to do this.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "Back to the classifier for a site",
+        "description": "Removes the family's own kind and category, so the classifier's answer shows again. 204 also when there was none.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Cleared."
+          },
+          "401": {
+            "description": "Not signed in, or the code or token is wrong or expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Signed in, but not allowed to do this.",
             "content": {
               "application/json": {
                 "schema": {

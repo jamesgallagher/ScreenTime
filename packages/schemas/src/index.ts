@@ -129,7 +129,28 @@ export {
   StateGame,
 } from './games.js';
 export { DownloadApp, DownloadFile, Downloads } from './downloads.js';
-export { SiteLookupIn, SiteLookupsReceived, SiteLookupsUpload, SiteTitleIn, SiteTitlesReceived, SiteTitlesUpload } from './sites.js';
+export {
+  SearchEngine,
+  SiteCategory,
+  SiteClassOverride,
+  SiteClassSaved,
+  SiteClassSource,
+  SiteKind,
+  SiteLookupIn,
+  SiteLookupsReceived,
+  SiteLookupsUpload,
+  SiteReport,
+  SiteReportApp,
+  SiteReportCategory,
+  SiteReportDevice,
+  SiteReportPage,
+  SiteReportQuery,
+  SiteReportSearch,
+  SiteReportSite,
+  SiteTitleIn,
+  SiteTitlesReceived,
+  SiteTitlesUpload,
+} from './sites.js';
 export {
   AppReport,
   AppReportApp,
