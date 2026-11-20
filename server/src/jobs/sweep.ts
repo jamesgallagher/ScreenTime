@@ -1,7 +1,7 @@
 import { and, desc, eq, isNotNull, isNull, lt, sql } from 'drizzle-orm';
 import type { AppDeps } from '../app.js';
 import { type FamilyTx, withFamily } from '../db/family.js';
-import { devices, events, families, kids, sosIncidents } from '../db/schema.js';
+import { devices, events, families, kids, siteLookups, sosIncidents } from '../db/schema.js';
 import { familyToday } from '../grants/routes.js';
 import { notifyParents } from '../notify/dispatch.js';
 import { scheduleDay, scheduleWithTonightBedtime } from '../sync/day.js';
@@ -108,10 +108,14 @@ export async function sweep(deps: AppDeps): Promise<SweepResult> {
   const result: SweepResult = { sosStopped: 0, offline: 0 };
   const rows = await deps.db.select({ id: families.id }).from(families).where(isNull(families.disabledAt));
   for (const { id: familyId } of rows) {
-    const found = await withFamily(deps.db, familyId, async (tx) => ({
-      sos: await stopExpiredSos(tx, familyId),
-      offline: await reportOfflineDevices(tx, familyId),
-    }));
+    const found = await withFamily(deps.db, familyId, async (tx) => {
+      // Raw website lookups are kept 90 days (docs/SPEC.md §12.10); the daily totals are kept forever.
+      await tx.delete(siteLookups).where(lt(siteLookups.at, sql`now() - interval '90 days'`));
+      return {
+        sos: await stopExpiredSos(tx, familyId),
+        offline: await reportOfflineDevices(tx, familyId),
+      };
+    });
     result.sosStopped += found.sos.length;
     result.offline += found.offline.length;
     await notifyParents(deps, familyId, [...found.sos, ...found.offline].map((e) => e.id));
