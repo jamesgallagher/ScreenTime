@@ -1,13 +1,11 @@
-import type { Kid } from '@screentime/schemas';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { BarChart3, ChevronDown, ChevronLeft, ChevronRight, Monitor, Smartphone, Tablet } from 'lucide-react';
+import { BarChart3, ChevronDown } from 'lucide-react';
 import { useState } from 'react';
 import { PageHeader } from '@/components/page-header';
+import { DeviceChips, PeriodControls, ReportSwitch } from '@/components/report-controls';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Select } from '@/components/ui/select';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { formatDuration } from '@/lib/format';
@@ -16,33 +14,19 @@ import {
   type AppReportApp,
   type AppReportDevice,
   barPercent,
-  currentLabel,
   deviceSplit,
   fetchAppReport,
   hasUnrecorded,
-  isCurrentPeriod,
   localToday,
-  periodDates,
-  periodLabel,
-  type ReportPeriod,
   type ReportSearch,
   removedLine,
   screenTimeLabel,
   shortDuration,
-  shiftPeriod,
   splitOther,
 } from '@/lib/reports';
 import { isShared, splitByKind } from '@/lib/shared';
 import { cn } from '@/lib/utils';
 import { useKids } from '@/pages/kids';
-
-const PERIODS: { value: ReportPeriod; label: string }[] = [
-  { value: 'day', label: 'Day' },
-  { value: 'week', label: 'Week' },
-  { value: 'month', label: 'Month' },
-];
-
-const FORM_ICONS = { phone: Smartphone, tablet: Tablet, pc: Monitor };
 
 function messageOf(err: unknown): string {
   return err instanceof ApiError ? err.message : 'Something went wrong. Try again.';
@@ -96,42 +80,12 @@ export function ReportsPage({ search }: { search: ReportSearch }) {
     );
   }
 
-  const current = isCurrentPeriod(period, date, today);
   const shared = isShared(kid);
   return (
     <>
       <PageHeader title="Reports" description="Which apps were used, and for how long." />
-      <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <KidPicker kids={list} value={kid.id} onChange={(id) => go({ kid: id, device: undefined })} />
-        <Tabs value={period} onValueChange={(v) => go({ period: v as ReportPeriod })}>
-          <TabsList aria-label="Period">
-            {PERIODS.map((p) => (
-              <TabsTrigger key={p.value} value={p.value}>
-                {p.label}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
-      </div>
-      <div className="mb-4 flex items-center gap-2">
-        <Button variant="ghost" size="icon" aria-label="Before" onClick={() => go({ date: shiftPeriod(period, date, -1) })}>
-          <ChevronLeft />
-        </Button>
-        <div className="min-w-0 flex-1 text-center">
-          <p className="text-lg font-semibold">{periodLabel(period, date, today)}</p>
-          <p className="text-sm text-muted">{periodDates(period, date)}</p>
-        </div>
-        <Button variant="ghost" size="icon" aria-label="After" disabled={current} onClick={() => go({ date: shiftPeriod(period, date, 1) })}>
-          <ChevronRight />
-        </Button>
-      </div>
-      {!current && (
-        <div className="-mt-2 mb-4 flex justify-center">
-          <Button variant="link" onClick={() => go({ date: today })}>
-            {currentLabel(period)}
-          </Button>
-        </div>
-      )}
+      <ReportSwitch active="apps" search={{ kid: kid.id, device: deviceId ?? undefined, period, date }} />
+      <PeriodControls kids={list} kidId={kid.id} period={period} date={date} today={today} go={go} />
       {report.error ? (
         <Card>
           <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
@@ -148,65 +102,12 @@ export function ReportsPage({ search }: { search: ReportSearch }) {
         </div>
       ) : (
         <div className={cn('flex flex-col gap-4 transition-opacity', report.isPlaceholderData && 'opacity-60')}>
-          {!shared && <DeviceChips report={report.data} onChange={(id) => go({ device: id ?? undefined })} />}
+          {!shared && <DeviceChips devices={report.data.devices} deviceId={report.data.deviceId} onChange={(id) => go({ device: id ?? undefined })} />}
           <ScreenTimeCard report={report.data} shared={shared} />
           <AppsCard report={report.data} timeZone={timeZone} />
         </div>
       )}
     </>
-  );
-}
-
-function KidPicker({ kids, value, onChange }: { kids: Kid[]; value: string; onChange: (id: string) => void }) {
-  const split = splitByKind(kids);
-  return (
-    <Select className="w-full lg:w-64" aria-label="Kid or shared device" value={value} onChange={(e) => onChange(e.target.value)}>
-      {split.kids.length > 0 && (
-        <optgroup label="Kids">
-          {split.kids.map((k) => (
-            <option key={k.id} value={k.id}>
-              {k.name}
-            </option>
-          ))}
-        </optgroup>
-      )}
-      {split.shared.length > 0 && (
-        <optgroup label="Shared devices">
-          {split.shared.map((k) => (
-            <option key={k.id} value={k.id}>
-              {k.name}
-            </option>
-          ))}
-        </optgroup>
-      )}
-    </Select>
-  );
-}
-
-function DeviceChips({ report, onChange }: { report: AppReport; onChange: (deviceId: string | null) => void }) {
-  if (report.devices.length < 2) return null;
-  const chip = (selected: boolean) =>
-    cn(
-      'inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3 text-sm font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-primary',
-      selected ? 'border-primary bg-primary/10 text-primary' : 'border-outline bg-surface text-on-surface hover:bg-surface-variant',
-    );
-  return (
-    <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none]" role="group" aria-label="Devices">
-      <button type="button" className={chip(report.deviceId === null)} aria-pressed={report.deviceId === null} onClick={() => onChange(null)}>
-        All devices
-      </button>
-      {report.devices.map((d) => {
-        const Icon = FORM_ICONS[d.form];
-        const selected = report.deviceId === d.deviceId;
-        return (
-          <button key={d.deviceId} type="button" className={chip(selected)} aria-pressed={selected} onClick={() => onChange(d.deviceId)}>
-            <Icon className="size-4" />
-            {d.name}
-            {d.removedAt && <span className="text-xs font-normal text-muted">· removed</span>}
-          </button>
-        );
-      })}
-    </div>
   );
 }
 
