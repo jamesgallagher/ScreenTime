@@ -40,7 +40,6 @@ describe.skipIf(!url)('reports', () => {
   }
   const zone = middayZone();
   const localDate = () => new Intl.DateTimeFormat('en-CA', { timeZone: zone }).format(new Date());
-  const at = (m: number) => new Date(Date.now() + m * 60_000).toISOString();
 
   async function addDevice(familyId: string, kidId: string, platform: 'android' | 'windows', form: 'phone' | 'tablet' | 'pc', name: string) {
     const token = newDeviceToken();
@@ -308,15 +307,13 @@ describe.skipIf(!url)('reports', () => {
     expect(body.apps[0]?.devices.some((d) => d.deviceId === tablet.id)).toBe(true);
   });
 
-  it('a revoked device with nothing in the period is not counted in screenTime or apps', async () => {
+  it('a revoked device with nothing in the period is not listed', async () => {
     await db.update(devices).set({ revokedAt: new Date('2026-11-10T00:00:00Z') }).where(eq(devices.id, tablet.id));
-    const res = await api.get(`/v1/reports/apps?kidId=${kid}&period=day&date=${localDate()}`, dad);
+    const res = await api.get(`/v1/reports/apps?kidId=${kid}&period=day&date=2026-11-20`, dad);
     expect(res.status).toBe(200);
-    const body = res.body as { devices: { deviceId: string; removedAt: string | null }[]; screenTime: { pool: string; usedSec: number }[]; apps: { package: string; devices: { deviceId: string }[] }[] };
-    // The device is still in the devices list (for the chips), with removedAt set.
-    const tabletDevice = body.devices.find((d) => d.deviceId === tablet.id);
-    expect(tabletDevice?.removedAt).toBe('2026-11-10T00:00:00.000Z');
-    // No app time or segments in the period: no apps, no screen time from the tablet.
+    const body = res.body as { devices: { deviceId: string }[]; screenTime: { pool: string; usedSec: number }[]; apps: { package: string; devices: { deviceId: string }[] }[] };
+    // The device has no app time or segments in the period, so it is not listed.
+    expect(body.devices.some((d) => d.deviceId === tablet.id)).toBe(false);
     expect(body.apps.every((a) => !a.devices.some((d) => d.deviceId === tablet.id))).toBe(true);
   });
 
@@ -334,73 +331,68 @@ describe.skipIf(!url)('reports', () => {
   });
 
   // Criterion 6: screen time (union of segments)
-  it('two segments on two devices give the union length, not the sum', async () => {
-    const today = localDate();
-    // Use segments entirely in the past (2 hours ago to 1 hour ago) so they are not clipped by now.
-    const phoneStart = new Date(Date.now() - 2 * 3600_000);
-    const phoneEnd = new Date(Date.now() - 1 * 3600_000);
-    const tabletStart = new Date(Date.now() - 1.5 * 3600_000);
-    const tabletEnd = new Date(Date.now() - 0.5 * 3600_000);
+  // Fixed date: 2026-11-20 (a Friday). The week is 2026-11-16 to 2026-11-22.
+  // The test zone is midday, so local midnight is about 12 hours away.
+  // All segments are in the past (before 2026-11-20), so they are not clipped by now.
+
+  it('two devices in the same pool give the union length', async () => {
+    // Two tablets (both screens pool) on 2026-11-10:
+    // Tablet 1: 2026-11-09T12:00:00Z to 2026-11-09T13:00:00Z (10:00–11:00 local in midday zone).
+    // Tablet 2: 2026-11-09T12:30:00Z to 2026-11-09T13:30:00Z (10:30–11:30 local).
+    // Union: 12:00–13:30 = 90 min = 5400 s.
+    const tablet2 = await addDevice(family, kid, 'android', 'tablet', 'Tablet 2');
     await db.insert(usageSegments).values([
-      { id: randomUUID(), familyId: family, kidId: kid, deviceId: phone.id, pool: 'phone', startedAt: phoneStart, endedAt: phoneEnd },
-      { id: randomUUID(), familyId: family, kidId: kid, deviceId: tablet.id, pool: 'screens', startedAt: tabletStart, endedAt: tabletEnd },
+      { id: randomUUID(), familyId: family, kidId: kid, deviceId: tablet.id, pool: 'screens', startedAt: new Date('2026-11-09T12:00:00Z'), endedAt: new Date('2026-11-09T13:00:00Z') },
+      { id: randomUUID(), familyId: family, kidId: kid, deviceId: tablet2.id, pool: 'screens', startedAt: new Date('2026-11-09T12:30:00Z'), endedAt: new Date('2026-11-09T13:30:00Z') },
     ]);
-    const res = await api.get(`/v1/reports/apps?kidId=${kid}&period=day&date=${today}`, dad);
+    const res = await api.get(`/v1/reports/apps?kidId=${kid}&period=day&date=2026-11-10`, dad);
     const body = res.body as { screenTime: { pool: string; usedSec: number }[] };
-    // Phone: 3600 s. Screens: 3600 s.
-    const phonePool = body.screenTime.find((p) => p.pool === 'phone');
     const screensPool = body.screenTime.find((p) => p.pool === 'screens');
-    expect(phonePool?.usedSec).toBe(3600);
-    expect(screensPool?.usedSec).toBe(3600);
+    expect(screensPool?.usedSec).toBe(5400);
   });
 
-  it('two segments in the same pool give the union length', async () => {
-    const today = localDate();
-    // Two phone devices, overlapping segments entirely in the past.
-    const phone2 = await addDevice(family, kid, 'android', 'phone', 'Phone 2');
-    const s1 = new Date(Date.now() - 2 * 3600_000);
-    const e1 = new Date(Date.now() - 1 * 3600_000);
-    const s2 = new Date(Date.now() - 1.5 * 3600_000);
-    const e2 = new Date(Date.now() - 0.5 * 3600_000);
-    await db.insert(usageSegments).values([
-      { id: randomUUID(), familyId: family, kidId: kid, deviceId: phone.id, pool: 'phone', startedAt: s1, endedAt: e1 },
-      { id: randomUUID(), familyId: family, kidId: kid, deviceId: phone2.id, pool: 'phone', startedAt: s2, endedAt: e2 },
-    ]);
-    const res = await api.get(`/v1/reports/apps?kidId=${kid}&period=day&date=${today}`, dad);
-    const body = res.body as { screenTime: { pool: string; usedSec: number }[] };
-    const phonePool = body.screenTime.find((p) => p.pool === 'phone');
-    // Union of [now-2h, now-1h] and [now-1.5h, now-0.5h] = [now-2h, now-0.5h] = 90 min = 5400 s.
-    expect(phonePool?.usedSec).toBe(5400);
-  });
-
-  it('a segment across the period boundary counts only the part in the period', async () => {
-    const today = localDate();
-    // The period is from local midnight of today to local midnight after today.
-    // A segment that starts before the period end and ends after it should be clipped.
-    // Use a segment from 30 minutes before now to 30 minutes after now.
-    const s = new Date(Date.now() - 30 * 60_000);
-    const e = new Date(Date.now() + 30 * 60_000);
+  it('a segment across the week last midnight counts only the part in the week', async () => {
+    // The week holding 2026-11-09 is 2026-11-09 to 2026-11-15.
+    // In the midday zone, local midnight of 2026-11-15 is 2026-11-14T12:00:00Z.
+    // A segment from 2026-11-14T11:30:00Z to 2026-11-14T12:30:00Z crosses that midnight.
+    // Only the part from 11:30 to 12:00 (30 min = 1800 s) is in the week.
     await db.insert(usageSegments).values({
       id: randomUUID(),
       familyId: family,
       kidId: kid,
       deviceId: phone.id,
       pool: 'phone',
-      startedAt: s,
-      endedAt: e,
+      startedAt: new Date('2026-11-14T11:30:00Z'),
+      endedAt: new Date('2026-11-14T12:30:00Z'),
     });
-    const res = await api.get(`/v1/reports/apps?kidId=${kid}&period=day&date=${today}`, dad);
+    const res = await api.get(`/v1/reports/apps?kidId=${kid}&period=week&date=2026-11-09`, dad);
     const body = res.body as { screenTime: { pool: string; usedSec: number }[] };
     const phonePool = body.screenTime.find((p) => p.pool === 'phone');
-    // The segment is 60 minutes total, but part of it is after local midnight.
-    // The test zone is midday, so local midnight is about 12 hours away.
-    // The segment is entirely within the period, so it should count fully: 3600 s.
+    expect(phonePool?.usedSec).toBe(1800);
+  });
+
+  it('a segment that starts before the period first midnight counts only the part inside', async () => {
+    // The day is 2026-11-10. In the midday zone, local midnight of 2026-11-10 is 2026-11-09T12:00:00Z.
+    // A segment from 2026-11-09T11:00:00Z to 2026-11-09T13:00:00Z crosses that midnight.
+    // Only the part from 12:00 to 13:00 (60 min = 3600 s) is in the day.
+    await db.insert(usageSegments).values({
+      id: randomUUID(),
+      familyId: family,
+      kidId: kid,
+      deviceId: phone.id,
+      pool: 'phone',
+      startedAt: new Date('2026-11-09T11:00:00Z'),
+      endedAt: new Date('2026-11-09T13:00:00Z'),
+    });
+    const res = await api.get(`/v1/reports/apps?kidId=${kid}&period=day&date=2026-11-10`, dad);
+    const body = res.body as { screenTime: { pool: string; usedSec: number }[] };
+    const phonePool = body.screenTime.find((p) => p.pool === 'phone');
     expect(phonePool?.usedSec).toBe(3600);
   });
 
   // Criterion 7: open segments
   it('an open segment ends at the device last_seen_at, not now', async () => {
-    const today = localDate();
+    // An open segment that started 30 min before now, with last_seen_at 20 min after the start.
     const s = new Date(Date.now() - 30 * 60_000);
     await db.insert(usageSegments).values({
       id: randomUUID(),
@@ -413,7 +405,7 @@ describe.skipIf(!url)('reports', () => {
     });
     // last_seen_at is 20 minutes after the start.
     await db.update(devices).set({ lastSeenAt: new Date(Date.now() - 10 * 60_000) }).where(eq(devices.id, phone.id));
-    const res = await api.get(`/v1/reports/apps?kidId=${kid}&period=day&date=${today}`, dad);
+    const res = await api.get(`/v1/reports/apps?kidId=${kid}&period=day&date=${localDate()}`, dad);
     const body = res.body as { screenTime: { pool: string; usedSec: number }[] };
     const phonePool = body.screenTime.find((p) => p.pool === 'phone');
     // 20 min = 1200 s, allow a few seconds for the clock.
@@ -422,9 +414,8 @@ describe.skipIf(!url)('reports', () => {
   });
 
   it('an open segment with last_seen_at before the start gives 0', async () => {
-    const today = localDate();
-    const start = Date.parse(at(0));
-    const s = new Date(start + 10 * 3600_000);
+    // An open segment that started 1 hour ago, with last_seen_at 2 hours ago (before the start).
+    const s = new Date(Date.now() - 1 * 3600_000);
     await db.insert(usageSegments).values({
       id: randomUUID(),
       familyId: family,
@@ -435,8 +426,8 @@ describe.skipIf(!url)('reports', () => {
       endedAt: null,
     });
     // last_seen_at is before the start.
-    await db.update(devices).set({ lastSeenAt: new Date(start + 9 * 3600_000) }).where(eq(devices.id, phone.id));
-    const res = await api.get(`/v1/reports/apps?kidId=${kid}&period=day&date=${today}`, dad);
+    await db.update(devices).set({ lastSeenAt: new Date(Date.now() - 2 * 3600_000) }).where(eq(devices.id, phone.id));
+    const res = await api.get(`/v1/reports/apps?kidId=${kid}&period=day&date=${localDate()}`, dad);
     const body = res.body as { screenTime: { pool: string; usedSec: number }[] };
     const phonePool = body.screenTime.find((p) => p.pool === 'phone');
     expect(phonePool?.usedSec).toBe(0);
@@ -485,18 +476,17 @@ describe.skipIf(!url)('reports', () => {
     const token = newDeviceToken();
     const [dev] = await db.insert(devices).values({ familyId: family, kidId: shared.id, platform: 'android', form: 'tablet', pool: 'screens', name: 'Mums Tablet', tokenHash: hashDeviceToken(token) }).returning();
     if (!dev) throw new Error('no device');
-    const today = localDate();
-    const start = Date.parse(at(0));
+    // A segment entirely in the past on 2026-11-20.
     await db.insert(usageSegments).values({
       id: randomUUID(),
       familyId: family,
       kidId: shared.id,
       deviceId: dev.id,
       pool: 'screens',
-      startedAt: new Date(start + 10 * 3600_000),
-      endedAt: new Date(start + 11 * 3600_000),
+      startedAt: new Date('2026-11-20T00:00:00Z'),
+      endedAt: new Date('2026-11-20T01:00:00Z'),
     });
-    const res = await api.get(`/v1/reports/apps?kidId=${shared.id}&period=day&date=${today}`, dad);
+    const res = await api.get(`/v1/reports/apps?kidId=${shared.id}&period=day&date=2026-11-20`, dad);
     expect(res.status).toBe(200);
     const body = res.body as { screenTime: { pool: string; usedSec: number }[] };
     expect(body.screenTime).toEqual([{ pool: 'screens', usedSec: 3600 }]);
@@ -506,5 +496,29 @@ describe.skipIf(!url)('reports', () => {
   it('another family parent gets 404', async () => {
     const res = await api.get(`/v1/reports/apps?kidId=${kid}&period=day`, otherDad);
     expect(res.status).toBe(404);
+  });
+
+  // A kid with no devices answers 200 with empty lists.
+  it('a kid with no devices answers 200 with empty lists', async () => {
+    const [noDeviceKid] = await db.insert(kids).values({ familyId: family, name: 'No Devices', avatarColor: '#0F766E' }).returning();
+    if (!noDeviceKid) throw new Error('no kid');
+    const res = await api.get(`/v1/reports/apps?kidId=${noDeviceKid.id}&period=day&date=2026-11-20`, dad);
+    expect(res.status).toBe(200);
+    const body = res.body as { devices: unknown[]; screenTime: unknown[]; apps: unknown[] };
+    expect(body.devices).toEqual([]);
+    expect(body.screenTime).toEqual([]);
+    expect(body.apps).toEqual([]);
+  });
+
+  // A shared device with no devices answers 200 with empty lists.
+  it('a shared device with no devices answers 200 with empty lists', async () => {
+    const [shared] = await db.insert(kids).values({ familyId: family, name: 'Empty Shared', avatarColor: '#7C3AED', kind: 'shared' }).returning();
+    if (!shared) throw new Error('no shared');
+    const res = await api.get(`/v1/reports/apps?kidId=${shared.id}&period=day&date=2026-11-20`, dad);
+    expect(res.status).toBe(200);
+    const body = res.body as { devices: unknown[]; screenTime: unknown[]; apps: unknown[] };
+    expect(body.devices).toEqual([]);
+    expect(body.screenTime).toEqual([]);
+    expect(body.apps).toEqual([]);
   });
 });

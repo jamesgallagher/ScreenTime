@@ -28,7 +28,6 @@ export async function buildAppReport(
     .from(devices)
     .where(eq(devices.kidId, kid.id))
     .orderBy(asc(devices.enrolledAt), asc(devices.id));
-  if (allDevices.length === 0) throw new ApiError('not_found', 'No such kid in your family.');
 
   // A given deviceId must be one of the kid's devices, removed ones too.
   if (query.deviceId !== null && !allDevices.some((d) => d.id === query.deviceId)) {
@@ -41,14 +40,16 @@ export async function buildAppReport(
 
   // The devices in the report: with a deviceId, just it; without, every not-removed one, plus each removed one
   // that has app time or a segment in the period.
-  const inReport = query.deviceId !== null ? allDevices.filter((d) => d.id === query.deviceId) : await reportDevices(tx, kid.id, allDevices, start, end, from, to);
-  const inReportIds = new Set(inReport.map((d) => d.id));
+  const inReport = query.deviceId !== null ? allDevices.filter((d) => d.id === query.deviceId) : allDevices.length === 0 ? [] : await reportDevices(tx, kid.id, allDevices, start, end, from, to);
 
   // screenTime: one entry per pool a device in the report belongs to, Screens first, each the union length.
   const screenTime = await poolScreenTime(tx, kid.id, inReport, family.timezone, start, end, now);
 
   // apps: app_usage_daily rows of the report's devices with day in from..to, summed per package.
   const apps = await reportApps(tx, kid.id, inReport, from, to);
+
+  // The devices list: every not-removed device, plus each removed one with app time or a segment in the period.
+  const deviceList = allDevices.length === 0 ? [] : await reportDevices(tx, kid.id, allDevices, start, end, from, to);
 
   return AppReportSchema.parse({
     kidId: kid.id,
@@ -57,7 +58,7 @@ export async function buildAppReport(
     to,
     today,
     deviceId: query.deviceId,
-    devices: allDevices.map((d) => ({
+    devices: deviceList.map((d) => ({
       deviceId: d.id,
       name: d.name,
       form: d.form as AppReportDevice['form'],
@@ -212,9 +213,11 @@ async function poolScreenTime(
   // Merge the clipped segments per pool into the union length.
   const byPool = new Map<Pool, { start: Date; end: Date }[]>();
   for (const r of rows) {
-    // Clip to the period.
+    // Clip to the period and to now.
     const s = r.startedAt < start ? start : r.startedAt;
-    const e = r.endedAt !== null && r.endedAt > end ? end : r.endedAt;
+    let e = r.endedAt !== null ? r.endedAt : now;
+    if (e > end) e = end;
+    if (e > now) e = now;
     if (e <= s) continue;
     byPool.set(r.pool as Pool, [...(byPool.get(r.pool as Pool) ?? []), { start: s, end: e }]);
   }
