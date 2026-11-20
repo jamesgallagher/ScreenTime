@@ -247,7 +247,7 @@ function AppsCard({ report, timeZone }: { report: AppReport; timeZone: string })
     <Card>
       <CardHeader>
         <CardTitle>Apps</CardTitle>
-        <CardDescription>Most used first. App time and screen time can differ a little: the home screen and lock screen count only as screen time.</CardDescription>
+        <CardDescription>Most used first. App time and screen time can differ a little: the Screen Time app itself counts only as screen time, and always-allowed apps only as app time.</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-1">
         {unrecorded && (

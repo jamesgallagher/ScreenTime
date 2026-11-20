@@ -3,7 +3,7 @@
 // Usage (from the repo root, with DATABASE_URL set):
 //   pnpm --filter @screentime/server exec tsx scripts/dev-report-perf.ts
 // Never run this against the production database.
-import { eq, inArray, sql } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { createDb } from '../src/db/client.js';
 import { withFamily } from '../src/db/family.js';
 import { buildAppReport } from '../src/reports/apps.js';
@@ -17,6 +17,7 @@ if (!databaseUrl) {
 }
 
 const { db, pool } = createDb(databaseUrl);
+const created: string[] = [];
 
 try {
   // Find the first family and kid.
@@ -25,35 +26,30 @@ try {
   const [kid] = await db.select().from(kids).where(eq(kids.familyId, family.id)).limit(1);
   if (!kid) throw new Error(`no kid in family ${family.id}`);
 
-  // Find or create 3 devices for the kid.
-  const existing = await db.select().from(devices).where(eq(devices.kidId, kid.id));
-  let deviceIds = existing.map((d) => d.id);
-  while (deviceIds.length < 3) {
-    const token = `perf-${deviceIds.length + 1}-token`;
+  // Three devices of its own, removed again at the end, so the development database keeps no perf rows.
+  const deviceIds: string[] = [];
+  for (let n = 1; n <= 3; n++) {
     const [d] = await db
       .insert(devices)
       .values({
         familyId: family.id,
         kidId: kid.id,
-        name: `Perf device ${deviceIds.length + 1}`,
+        name: `Perf device ${n}`,
         platform: 'android',
         form: 'phone',
         pool: 'screens',
-        tokenHash: hashDeviceToken(token),
+        tokenHash: hashDeviceToken(`perf-${n}-${Date.now()}`),
       })
       .returning({ id: devices.id });
+    if (!d) throw new Error('no device');
     deviceIds.push(d.id);
   }
+  created.push(...deviceIds);
 
   // Insert one year of app_usage_daily: 365 days × 3 devices × 60 packages = 65,700 rows.
   const packages = Array.from({ length: 60 }, (_, i) => `com.perf.app${i}`);
   const now = new Date();
   const today = now.toISOString().slice(0, 10);
-
-  // Clear any existing perf rows.
-  await db
-    .delete(appUsageDaily)
-    .where(sql`(${inArray(appUsageDaily.deviceId, deviceIds)}) and ${appUsageDaily.package} like 'com.perf.app%'`);
 
   const batchSize = 1000;
   const rows: { familyId: string; kidId: string; deviceId: string; day: string; package: string; seconds: number }[] = [];
@@ -88,5 +84,10 @@ try {
   const max = Math.max(...timings);
   console.log(`\nMax: ${max.toFixed(1)} ms ${max < 200 ? 'PASS' : 'FAIL'} (target: <200 ms)`);
 } finally {
+  if (created.length > 0) {
+    await db.delete(appUsageDaily).where(inArray(appUsageDaily.deviceId, created));
+    await db.delete(devices).where(inArray(devices.id, created));
+    console.log(`Removed the ${created.length} perf devices and their rows.`);
+  }
   await pool.end();
 }
