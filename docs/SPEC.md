@@ -15,7 +15,7 @@ Markers used below:
 
 1. Product summary
 2. Household and devices (v1)
-3. Requirements decisions (interview log Q1 to Q41)
+3. Requirements decisions (interview log Q1 to Q42)
 4. System architecture
 5. Repository layout
 6. Data model
@@ -104,6 +104,7 @@ These are James's answers from the requirements interview (22 Oct 2026). Section
 | Q39 | (18 Nov 2026) A parent can **extend bedtime** for one kid, tonight only, without giving time. Until the new bedtime the kid keeps any time that is left; with none left, the device stays locked as out of time, so the always-allowed apps keep working (homework, for example). Adding time after bedtime still unlocks everything, as before. | 7.5 |
 | Q40 | (19 Nov 2026) A **shared device** belongs to no kid, for example Mum's tablet that the kids borrow. It has its own time (0 by default), bedtime, app blocks, always-allowed apps and new-app approval (on by default), and kids ask for time on it like on their own device. Time on it never comes off a kid. A parent who wants to use it uses parent mode, which on a shared device ends when the screen goes off. Shown in its own **Shared devices** section in the web and parent apps. | 12.8 |
 | Q41 | (20 Nov 2026; PC programs added the same day) **Reports**: per kid or shared device, then all devices or one, which apps were used and for how long, by day, week (Monday to Sunday) and calendar month, kept forever, screen time on top, removed apps and devices still shown. No alerts. Windows programs, websites (a separate report), the parent app and emails come in later phases. | 12.9 |
+| Q42 | (20 Nov 2026) **Websites**: which sites a kid or shared device visited, in any browser and in private windows, as a separate report; system level only (Android Device Owner network logging so Bark keeps its VPN, the Windows DNS log, browser policies and window titles), no extensions; classified by the family's local LLM; raw lookups 90 days, daily per-site totals forever; no alerts or blocking yet. | 12.10 |
 | Future | School-hours blocks, a cooldown between time requests, app allowlists. | 18 |
 
 Also decided in research (22 Oct 2026): the tech stack in section 4, the sync design in section 8, Device Owner with Lock Task for Android, and a LocalSystem service plus tray helper for Windows.
@@ -258,6 +259,8 @@ A Windows device row is one PC **plus** one Windows user account (Q10). Pools an
 **app_usage_daily** (one row per device, package and day): `family_id`, `kid_id`, `device_id`, `package`, `day`, `seconds`. Upsert keeps the larger value, so a repeat or an older upload never lowers it.
 
 **device_programs** (one row per PC account and program, CARD-067): `family_id`, `kid_id`, `device_id`, `package` (the exe file name in lower case), `label`, `first_seen_at`, `last_seen_at`. Only the name of a program a PC has reported (section 12.9); its time is in `app_usage_daily` like an Android app's.
+
+**site_lookups** and **site_daily** (websites, section 12.10, CARD-068): the raw lookups of each device, kept 90 days, and the daily lookups per device, site and app, kept forever.
 
 **Games on a PC (Windows only, section 12.6).**
 
@@ -544,6 +547,7 @@ Extend bedtime tonight (section 7.5):
 | POST | `/v1/device/sos/{id}/end` | kid held "I'm safe" → 204, writes `sos.ended`. Already ended is fine |
 | PUT | `/v1/device/apps` | `{ apps: [{ package, label, source, installer, blockable, installedAt, firstUsedAt }] }` (`installer` and `firstUsedAt` may be null) 1 to 500, the device's **whole** list → 204. Android only (a PC → 409). What it stores and raises is in 12.4 |
 | POST | `/v1/device/app-usage` | `{ days: [{ day, apps: [{ package, seconds, label? }] }] }` at most 8 days and 500 apps a day → 204. Upsert keeps the larger value. From a PC (CARD-067) each `package` is a lower-case `….exe` file name (422 otherwise) and `label` (1 to 80 characters) is kept in `device_programs` (section 12.9); Android ignores `label` |
+| POST | `/v1/device/site-lookups` | `{ lookups: [{ at, host, package }] }` 1 to 1,000 → `{ received }` (new rows). Any device kind. Stored in `site_lookups` (90 days) and added up in `site_daily` (section 12.10, CARD-068). A lookup more than 30 days old or more than 1 day ahead is skipped |
 | PUT | `/v1/device/games` | `{ games: [{ id, label, exePath }] }` 0 to 50, every known game the PC finds now → 204. Windows only (an Android device → 409). A game left out is marked removed; programs a parent added are not touched; no `custom-` ids (422). See 12.6 |
 | POST | `/v1/device/app-update/check` | `{ versionCode, versionName }` → `{ offer: { versionCode, versionName, sha256, sizeBytes } \| null }`. Stores the version. `offer` is null when nothing newer is published for this device. An Android device is offered `kid.json`, a PC `windows.json` (CARD-061) |
 | GET | `/v1/device/app-update/apk` | The published APK as plain bytes, not in the contract. 404 when there is none for this device |
@@ -947,7 +951,36 @@ A parent can see, for each kid or shared device, **which apps were used and for 
 - **Upload.** At every sync, after the usage segments, the service sends **the last 8 days** with `POST /v1/device/app-usage`, now also taken from a PC, each app with its `label`; only when the body changed since the last success. The server keeps the larger value per device, program and day, as for Android, and keeps each PC program's latest label in `device_programs` (`family_id`, `kid_id`, `device_id`, `package`, `label`, `first_seen_at`, `last_seen_at`). PC programs never reach the Apps page, rules, limits or new-app approval, which stay Android only.
 - **In the report.** A program's name comes from `device_apps` (Android) or `device_programs` (PC) of the report's devices, else of any of the kid's devices, else the id. `installedAt` and `removedAt` are null for a PC program (Windows says nothing about installs). A PC has `appsRecorded: true` once it has sent any program (a PC on an older version still says "Apps on a PC aren't recorded yet").
 
-**Later phases.** Websites from Device Owner network logging on Android (so Bark keeps its VPN; spike passed on the Redmi, 20 Nov 2026) and the Windows DNS log with window titles, classified by the family's local LLM, as a separate **Websites** report; the Android parent app; daily and weekly emails.
+**Later phases.** Websites (section 12.10), the Android parent app, daily and weekly emails.
+
+### 12.10 Websites (Q42, James, 20 Nov 2026; CARD-068 onwards)
+
+A parent can see **which websites a kid or shared device visited**, in any browser and **in private / incognito windows too**, as a **separate Websites report** next to Apps (12.9). For now it only gathers and classifies: **no alerts and no blocking** (later phases may add both, and a real-time "is this site appropriate?" check). Everything is done at system level, **with no browser extension** (kids turn extensions off).
+
+**Decided with James (20 Nov 2026):**
+
+- Android: **Device Owner network logging**, not a VPN of our own. Bark (bark.us) is on every kid's Android device for message monitoring and uses Android's one always-on VPN slot; a VPN of ours would switch Bark's off. James does not use Bark for web filtering.
+- Windows: the **DNS Client's operational log** in the service, the **browser's window title** in the tray, and **browser policies** written by the service (CARD-069).
+- Classification by the family's **local LLM** (vLLM on Unraid, OpenAI API), hourly, each host classified once (CARD-070). Categories: social, video, games, chat, search, education, shopping, news, adult, gambling, violence_weapons, drugs, self_harm, other; kinds: website, cdn, ads_tracking, app_service, unknown. Fetching unknown sites is decided later.
+- Keep the **raw lookups 90 days** and the **daily totals per site forever**.
+
+**What the spikes proved.**
+
+- **Android** (Redmi 14C, Android 16 / HyperOS 3, ST Kid as Device Owner, Bark 7.27 with its VPN connected, 20 Nov 2026): `DevicePolicyManager.setNetworkLoggingEnabled(admin, true)` works; the `DeviceAdminReceiver` gets `onNetworkLogsAvailable` with a batch token, and `retrieveNetworkLogs` gives `DnsEvent`s with the **hostname, the app's package and the time** (`com.android.chrome www.khanacademy.org`). It works **while Bark's VPN is connected** and **in Chrome's incognito tabs** (`www.crazygames.com`). Batches came every few minutes, 135 to 570 lookups each; `adb shell dpm force-network-logs` delivers one at once. Android shows the kid a notice, "Device is managed: your organisation manages this device and may monitor network traffic", that cannot be hidden. Bark resolves every host Chrome opens a moment later (`com.pt.bark`), which is noise for the report. A reinstall of ST Kid drops USB debugging on a real device, even in parent mode.
+- **Windows** (Windows Sandbox, Edge 157, 20 Nov 2026): event 3008 of `Microsoft-Windows-DNS-Client/Operational` (turned on with `wevtutil sl Microsoft-Windows-DNS-Client/Operational /e:true`) has the query name and, in its header, the process id. **With Edge's default settings its lookups never reach that log** (it resolves names itself). With the policies `DnsOverHttpsMode = off` and `BuiltInDnsClientEnabled = 0` (`HKLM\SOFTWARE\Policies\Microsoft\Edge`; Chrome has the same names), **every Edge lookup is logged as `msedge`, InPrivate included**. The window title gives the page and any search, and marks private windows: `minecraft cheats - Search and 1 more page - [InPrivate] - Microsoft Edge` (only the tab in front).
+- **Classifier** (`Qwen3.8-27B`, JSON-schema output, thinking off): the 58 real hostnames of the Android spike in 13 s in one call; all 10 real sites found with the right category, 18 ads/tracking, 14 CDNs tied to their site, 15 app services, 1 unknown.
+- **A lookup is not a visit**: `www.facebook.com` and `connect.facebook.net` appeared because other pages embed Facebook. The report (CARD-070) has to weigh this; the raw data keeps everything.
+
+**Data (6.1).**
+
+- **site_lookups** (raw, kept 90 days by the sweep): `family_id`, `kid_id`, `device_id`, `at` (the device's time of the lookup), `host` (lower case, no trailing dot), `package` (the app or program that asked: an Android package, or a PC program's exe id), `received_at`. Primary key (`device_id`, `at`, `host`, `package`), so a repeat upload adds nothing. Indexes on (`kid_id`, `at`) and (`at`).
+- **site_daily** (kept forever): `family_id`, `kid_id`, `device_id`, `day` (the family's local date of `at`), `site` (the registrable domain of `host`, from the public suffix list: `www.khanacademy.org` → `khanacademy.org`, `www.abc.net.au` → `abc.net.au`; the host itself when it has none), `package`, `lookups`, `first_at`, `last_at`. Primary key (`device_id`, `day`, `site`, `package`); index on (`kid_id`, `day`). Updated in the same transaction as each new raw row.
+
+**Upload (9.3).** `POST /v1/device/site-lookups` `{ lookups: [{ at, host, package }] }`, 1 to 1,000 per call → `{ received }` (rows that were new). From any device kind (Windows uses it from CARD-069). A body that breaks the schema → 422 and nothing stored. A lookup with `at` more than 30 days ago or more than 1 day ahead is skipped (not counted in `received`).
+
+**Android collection (CARD-068).** The kid service turns network logging on whenever it starts as Device Owner. The admin receiver keeps each batch's `DnsEvent`s in `kid.db` (`site_lookups`): the host lower-cased without a trailing dot, the package, the time; it drops lookups by the kid app itself, bare IP addresses, empty hosts, and those inside parent mode's spans (the 8 days kept for app usage, 12.9). At each sync, after app usage, it uploads the oldest 1,000 at a time and deletes what the server took. At most 50,000 wait on the device; beyond that the oldest go. It also gives Chrome the managed configuration `DnsOverHttpsMode = "off"` (`setApplicationRestrictions` for `com.android.chrome`), so Chrome's Secure DNS can never hide lookups; incognito stays allowed.
+
+**Later (not CARD-068):** Windows collection (CARD-069), the classifier and the Websites report (CARD-070), blocking and alerts.
 
 ## 13. Notifications
 
