@@ -14,6 +14,10 @@ public sealed record BrowserPolicyValue(string KeyPath, string Name, BrowserPoli
 {
     /// <summary>The value as it is written to the registry.</summary>
     public string Value => Kind == BrowserPolicyKind.String ? Text ?? "" : (Dword ?? 0).ToString();
+
+    /// <summary>The path as passed to <c>Registry.LocalMachine</c> (relative to the hive): <see cref="KeyPath"/>
+    /// without its <c>HKLM\</c> prefix, so it never creates a key literally named "HKLM" under HKLM.</summary>
+    public string RegistryPath => BrowserPolicies.RelativePath(KeyPath);
 }
 
 /// <summary>
@@ -26,6 +30,12 @@ public static class BrowserPolicies
     private const string Chrome = @"HKLM\SOFTWARE\Policies\Google\Chrome";
     private const string Brave = @"HKLM\SOFTWARE\Policies\BraveSoftware\Brave";
     private const string Firefox = @"HKLM\SOFTWARE\Policies\Mozilla\Firefox";
+
+    /// <summary>A policy path relative to <c>Registry.LocalMachine</c>: the full <c>HKLM\</c> path with the
+    /// prefix stripped. Passing the full path would create a key literally named "HKLM" under HKLM, not the
+    /// intended subkey.</summary>
+    public static string RelativePath(string fullPath) =>
+        fullPath.StartsWith("HKLM\\", StringComparison.OrdinalIgnoreCase) ? fullPath[5..] : fullPath;
 
     /// <summary>The 13 values of SPEC §12.10 "Browser policies".</summary>
     public static readonly IReadOnlyList<BrowserPolicyValue> All =
@@ -45,22 +55,23 @@ public static class BrowserPolicies
         new(Firefox, "ExtensionSettings", BrowserPolicyKind.String, """{"*":{"installation_mode":"blocked"}}""", null),
     ];
 
-    /// <summary>Writes every value; returns the ones that could not be written (the service names them in its log).</summary>
-    public static IReadOnlyList<BrowserPolicyValue> WriteAll()
+    /// <summary>Writes every value; returns the ones that could not be written, each with the error it raised
+    /// (the service names them in its log).</summary>
+    public static IReadOnlyList<(BrowserPolicyValue Value, string Error)> WriteAll()
     {
         if (!OperatingSystem.IsWindows()) return [];
-        var failed = new List<BrowserPolicyValue>();
+        var failed = new List<(BrowserPolicyValue, string)>();
         foreach (var value in All)
         {
             try
             {
-                using var key = Registry.LocalMachine.CreateSubKey(value.KeyPath);
+                using var key = Registry.LocalMachine.CreateSubKey(value.RegistryPath);
                 if (value.Kind == BrowserPolicyKind.String) key.SetValue(value.Name, value.Text!, RegistryValueKind.String);
                 else key.SetValue(value.Name, value.Dword!, RegistryValueKind.DWord);
             }
-            catch
+            catch (Exception e)
             {
-                failed.Add(value);
+                failed.Add((value, $"{e.GetType().Name}: {e.Message}"));
             }
         }
         return failed;
@@ -78,7 +89,7 @@ public static class BrowserPolicies
         {
             try
             {
-                using var key = Registry.LocalMachine.OpenSubKey(value.KeyPath);
+                using var key = Registry.LocalMachine.OpenSubKey(value.RegistryPath);
                 if (key is null) continue;
                 if (key.GetValue(value.Name) is not null)
                 {
@@ -107,7 +118,7 @@ public static class BrowserPolicies
         {
             try
             {
-                using var key = Registry.LocalMachine.OpenSubKey(value.KeyPath);
+                using var key = Registry.LocalMachine.OpenSubKey(value.RegistryPath);
                 if (key?.GetValue(value.Name) is null) missing.Add($"{value.KeyPath} {value.Name}");
             }
             catch
@@ -118,11 +129,12 @@ public static class BrowserPolicies
         return missing;
     }
 
-    private static void RemoveSubkeyIfEmpty(string path)
+    private static void RemoveSubkeyIfEmpty(string fullPath)
     {
         if (!OperatingSystem.IsWindows()) return;
         try
         {
+            var path = RelativePath(fullPath);
             using var parent = Registry.LocalMachine.OpenSubKey(Path.GetDirectoryName(path) ?? "");
             var name = Path.GetFileName(path);
             if (parent is null) return;

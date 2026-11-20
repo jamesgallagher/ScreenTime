@@ -54,7 +54,10 @@ $stable = 0
 $t = 0
 while ($t -lt 240) {
     $now = (pnpm --silent --filter @screentime/server exec tsx scripts/dev-sites.ts Sam 2>&1 | Out-String).Trim()
-    if ($now -eq $last) { $stable++ } else { $stable = 0; $last = $now }
+    # A site row is "<site> | <package> | <lookups> | first..last". Two equal runs only count once at least one
+    # site row is there (two empty runs must not be taken as the uploads being done).
+    $siteRows = (($now -split "(?m)^titles:" | Select-Object -First 1) -split "`n") | Where-Object { $_ -match '^\S+ \| \S+ \| \d+ \|' }
+    if ($now -eq $last -and ($siteRows | Measure-Object).Count -ge 1) { $stable++ } else { $stable = 0; $last = $now }
     if ($stable -ge 1) { break }
     Start-Sleep 10
     $t += 10

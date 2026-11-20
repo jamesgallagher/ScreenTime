@@ -158,6 +158,20 @@ public sealed class SitesTests
     }
 
     [Fact]
+    public void TheRegistryPathsAreRelativeNeverHklm()
+    {
+        // Registry.LocalMachine is the HKLM hive, so a full "HKLM\..." path would create a key literally named
+        // "HKLM" under HKLM, not the intended subkey. The path passed to it must never carry the prefix.
+        foreach (var v in BrowserPolicies.All)
+        {
+            Assert.False(v.RegistryPath.StartsWith("HKLM", StringComparison.OrdinalIgnoreCase),
+                $"{v.KeyPath} must not be passed to Registry.LocalMachine with its HKLM prefix (got {v.RegistryPath})");
+            Assert.Equal(BrowserPolicies.RelativePath(v.KeyPath), v.RegistryPath);
+            Assert.StartsWith(@"HKLM\", v.KeyPath);
+        }
+    }
+
+    [Fact]
     public void ATitleSpanClosesOnChangeOfProgramTitleCountingOffOrTrayGone()
     {
         var clock = new TitleClock();
