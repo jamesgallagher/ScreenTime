@@ -129,3 +129,12 @@ export {
   StateGame,
 } from './games.js';
 export { DownloadApp, DownloadFile, Downloads } from './downloads.js';
+export {
+  AppReport,
+  AppReportApp,
+  AppReportAppDevice,
+  AppReportDevice,
+  AppReportPool,
+  AppReportQuery,
+  ReportPeriod,
+} from './reports.js';

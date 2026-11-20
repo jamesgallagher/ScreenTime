@@ -2,49 +2,13 @@
  * Reports (docs/SPEC.md §12.9): which apps a kid or shared device used and for how long, by day, week (Monday to
  * Sunday) or calendar month, on all devices or one. Dates here are the family's local dates as `YYYY-MM-DD`.
  */
-import type { Device, DeviceForm, Family, Platform, Pool } from '@screentime/schemas';
+import type { AppReport, AppReportApp, AppReportDevice, Pool, ReportPeriod } from '@screentime/schemas';
 import { api } from '@/lib/auth';
 import { formatDuration } from '@/lib/format';
 
-export type ReportPeriod = 'day' | 'week' | 'month';
+// ---- The seam: the AppReport types and GET /v1/reports/apps. ----
 
-// ---- The seam: the AppReport types and GET /v1/reports/apps. Until the server has the route, a fake built from the
-// kid's real devices answers, so the page can be seen. CARD-066 swaps the types for @screentime/schemas and the fake
-// for the call. ----
-
-export interface AppReportDevice {
-  deviceId: string;
-  name: string;
-  form: DeviceForm;
-  platform: Platform;
-  /** The device's `revoked_at`: removed from the family. */
-  removedAt: string | null;
-  /** False for a PC: its programs are not recorded yet. */
-  appsRecorded: boolean;
-}
-
-export interface AppReportApp {
-  package: string;
-  label: string;
-  totalSec: number;
-  /** Each device with time, in the order of the report's devices. */
-  devices: { deviceId: string; sec: number }[];
-  installedAt: string | null;
-  /** Removed from every device of the report that listed it; null while any still has it. */
-  removedAt: string | null;
-}
-
-export interface AppReport {
-  kidId: string;
-  period: ReportPeriod;
-  from: string;
-  to: string;
-  today: string;
-  deviceId: string | null;
-  devices: AppReportDevice[];
-  screenTime: { pool: Pool; usedSec: number }[];
-  apps: AppReportApp[];
-}
+export type { AppReportDevice, AppReportApp, AppReport, ReportPeriod };
 
 export interface AppReportQuery {
   kidId: string;
@@ -55,96 +19,9 @@ export interface AppReportQuery {
 
 /** GET /v1/reports/apps (docs/SPEC.md §12.9). */
 export async function fetchAppReport(query: AppReportQuery): Promise<AppReport> {
-  const [devices, family] = await Promise.all([api.get<Device[]>('/v1/devices'), api.get<Family>('/v1/family')]);
-  return fakeReport(query, family.timezone, devices);
-}
-
-const FAKE_APPS: { package: string; label: string; perDay: number }[] = [
-  { package: 'com.google.android.youtube', label: 'YouTube', perDay: 3100 },
-  { package: 'com.roblox.client', label: 'Roblox', perDay: 2400 },
-  { package: 'com.android.chrome', label: 'Chrome', perDay: 1500 },
-  { package: 'com.mojang.minecraftpe', label: 'Minecraft', perDay: 1100 },
-  { package: 'com.duolingo', label: 'Duolingo', perDay: 600 },
-  { package: 'com.spotify.music', label: 'Spotify', perDay: 420 },
-  { package: 'com.google.android.apps.messaging', label: 'Messages', perDay: 300 },
-  { package: 'com.google.android.deskclock', label: 'Clock', perDay: 40 },
-  { package: 'com.google.android.permissioncontroller', label: 'com.google.android.permissioncontroller', perDay: 20 },
-];
-
-/** A made-up but steady report: the same query always gives the same numbers. */
-function fakeReport(query: AppReportQuery, timeZone: string, all: Device[]): AppReport {
-  const today = localToday(timeZone);
-  const { from, to } = periodRange(query.period, query.date);
-  const real: AppReportDevice[] = all
-    .filter((d) => d.kidId === query.kidId)
-    .map((d) => ({
-      deviceId: d.id,
-      name: d.name,
-      form: d.form,
-      platform: d.platform,
-      removedAt: null,
-      appsRecorded: d.platform === 'android',
-    }));
-  const devices = [...(real.length > 0 ? real : FAKE_DEVICES), FAKE_REMOVED];
-  const inReport = devices.filter((d) => query.deviceId === null || d.deviceId === query.deviceId);
-  const days = Math.max(0, daysBetween(from, minDate(to, today)) + 1);
-  const seed = hash(`${query.kidId}${from}`);
-  const apps: AppReportApp[] = [];
-  FAKE_APPS.forEach((a, i) => {
-    const per = inReport
-      .filter((d) => d.appsRecorded)
-      .map((d, j) => ({ deviceId: d.deviceId, sec: Math.round(a.perDay * days * (0.4 + ((seed >> (i + j)) % 7) / 10) / (j + 1)) }))
-      .filter((d) => d.sec > 0);
-    const totalSec = per.reduce((s, d) => s + d.sec, 0);
-    if (totalSec > 0) apps.push({ package: a.package, label: a.label, totalSec, devices: per, installedAt: '2026-09-01T00:00:00.000Z', removedAt: null });
-  });
-  if (inReport.some((d) => d.appsRecorded) && days > 0) {
-    const on = inReport.find((d) => d.appsRecorded)!;
-    apps.push({
-      package: 'com.example.secretchat',
-      label: 'Secret Chat',
-      totalSec: 2700,
-      devices: [{ deviceId: on.deviceId, sec: 2700 }],
-      installedAt: `${from}T05:12:00.000Z`,
-      removedAt: `${from}T06:01:00.000Z`,
-    });
-  }
-  apps.sort((a, b) => b.totalSec - a.totalSec || a.label.localeCompare(b.label));
-  const pools = [...new Set(inReport.map((d) => (d.form === 'phone' ? 'phone' : 'screens')))] as Pool[];
-  pools.sort((a, b) => (a === 'screens' ? 0 : 1) - (b === 'screens' ? 0 : 1));
-  const appSec = apps.reduce((s, a) => s + a.totalSec, 0);
-  return {
-    kidId: query.kidId,
-    period: query.period,
-    from,
-    to,
-    today,
-    deviceId: query.deviceId,
-    devices,
-    screenTime: pools.map((pool, i) => ({ pool, usedSec: Math.round((appSec * (i === 0 ? 0.7 : 0.45)) + days * 900) })),
-    apps,
-  };
-}
-
-/** For a kid with no device yet, so the fake still shows something. */
-const FAKE_DEVICES: AppReportDevice[] = [
-  { deviceId: '00000000-0000-4000-8000-000000000001', name: 'Pixel', form: 'phone', platform: 'android', removedAt: null, appsRecorded: true },
-  { deviceId: '00000000-0000-4000-8000-000000000002', name: 'Desk PC', form: 'pc', platform: 'windows', removedAt: null, appsRecorded: false },
-];
-
-const FAKE_REMOVED: AppReportDevice = {
-  deviceId: '00000000-0000-4000-8000-00000000dead',
-  name: 'Old tablet',
-  form: 'tablet',
-  platform: 'android',
-  removedAt: '2026-10-20T00:00:00.000Z',
-  appsRecorded: true,
-};
-
-function hash(text: string): number {
-  let h = 7;
-  for (const c of text) h = (h * 31 + c.charCodeAt(0)) >>> 0;
-  return h;
+  const params = new URLSearchParams({ kidId: query.kidId, period: query.period, date: query.date });
+  if (query.deviceId !== null) params.set('deviceId', query.deviceId);
+  return api.get<AppReport>(`/v1/reports/apps?${params}`);
 }
 
 // ---- Pure helpers. ----

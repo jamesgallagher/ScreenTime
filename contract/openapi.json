@@ -1619,6 +1619,187 @@
           "earliest"
         ]
       },
+      "AppReport": {
+        "type": "object",
+        "properties": {
+          "kidId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "period": {
+            "$ref": "#/components/schemas/ReportPeriod"
+          },
+          "from": {
+            "$ref": "#/components/schemas/LocalDate"
+          },
+          "to": {
+            "$ref": "#/components/schemas/LocalDate"
+          },
+          "today": {
+            "$ref": "#/components/schemas/LocalDate"
+          },
+          "deviceId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "devices": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AppReportDevice"
+            }
+          },
+          "screenTime": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AppReportPool"
+            }
+          },
+          "apps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AppReportApp"
+            }
+          }
+        },
+        "required": [
+          "kidId",
+          "period",
+          "from",
+          "to",
+          "today",
+          "deviceId",
+          "devices",
+          "screenTime",
+          "apps"
+        ]
+      },
+      "ReportPeriod": {
+        "type": "string",
+        "enum": [
+          "day",
+          "week",
+          "month"
+        ]
+      },
+      "LocalDate": {
+        "type": "string",
+        "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+      },
+      "AppReportDevice": {
+        "type": "object",
+        "properties": {
+          "deviceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "form": {
+            "$ref": "#/components/schemas/DeviceForm"
+          },
+          "platform": {
+            "$ref": "#/components/schemas/Platform"
+          },
+          "removedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "appsRecorded": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "deviceId",
+          "name",
+          "form",
+          "platform",
+          "removedAt",
+          "appsRecorded"
+        ]
+      },
+      "AppReportPool": {
+        "type": "object",
+        "properties": {
+          "pool": {
+            "$ref": "#/components/schemas/Pool"
+          },
+          "usedSec": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "pool",
+          "usedSec"
+        ]
+      },
+      "AppReportApp": {
+        "type": "object",
+        "properties": {
+          "package": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "totalSec": {
+            "type": "integer",
+            "exclusiveMinimum": 0
+          },
+          "devices": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AppReportAppDevice"
+            }
+          },
+          "installedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "removedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "package",
+          "label",
+          "totalSec",
+          "devices",
+          "installedAt",
+          "removedAt"
+        ]
+      },
+      "AppReportAppDevice": {
+        "type": "object",
+        "properties": {
+          "deviceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sec": {
+            "type": "integer",
+            "exclusiveMinimum": 0
+          }
+        },
+        "required": [
+          "deviceId",
+          "sec"
+        ]
+      },
       "Grant": {
         "type": "object",
         "properties": {
@@ -1666,10 +1847,6 @@
           "note",
           "requestId"
         ]
-      },
-      "LocalDate": {
-        "type": "string",
-        "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
       },
       "GrantCreate": {
         "type": "object",
@@ -5503,6 +5680,108 @@
           },
           "403": {
             "description": "Signed in, but not allowed to do this.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/reports/apps": {
+      "get": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "The apps report of a kid or shared device",
+        "description": "Which apps were used and for how long, by day, week (Monday to Sunday) or calendar month, on all devices or one. Removed apps and devices still show. `date` defaults to the family's today; one after it, or not a real date, is 422.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "kidId",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "$ref": "#/components/schemas/ReportPeriod"
+            },
+            "required": true,
+            "name": "period",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "$ref": "#/components/schemas/LocalDate"
+            },
+            "required": false,
+            "name": "date",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": false,
+            "name": "deviceId",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The report.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppReport"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the code or token is wrong or expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Signed in, but not allowed to do this.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is not valid.",
             "content": {
               "application/json": {
                 "schema": {

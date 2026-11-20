@@ -5,6 +5,7 @@ import au.screentime.core.model.api.AppSource
 import au.screentime.core.model.api.DeviceAppIn
 import au.screentime.core.model.api.DeviceAppsPut
 import java.time.Instant
+import java.time.ZoneId
 
 /** What Android says about one app with a launcher icon. */
 data class InstalledApp(
@@ -212,3 +213,31 @@ fun parseSpans(text: String): List<Span> = text.split(",").mapNotNull { part ->
     val to = numbers.getOrNull(1)?.toLongOrNull()
     if (from != null && to != null) Span(from, to) else null
 }
+
+/** One day of an upload: its local date and its start and end instants in the family time zone. */
+data class UploadDay(val date: String, val startMs: Long, val endMs: Long)
+
+/**
+ * The 8 days of an upload: today and the 7 before it, oldest first, each from local midnight to the next local
+ * midnight (today to [nowMs]), in the family time zone [zoneId]. Day boundaries come from the family time zone,
+ * so a daylight-saving day is 23 or 25 hours, not 24.
+ */
+fun uploadDays(zoneId: ZoneId, nowMs: Long): List<UploadDay> {
+    val now = Instant.ofEpochMilli(nowMs)
+    val today = now.atZone(zoneId).toLocalDate()
+    val out = mutableListOf<UploadDay>()
+    for (i in 7 downTo 0) {
+        val date = today.minusDays(i.toLong())
+        val start = date.atStartOfDay(zoneId).toInstant().toEpochMilli()
+        val end = if (i == 0) nowMs else date.plusDays(1).atStartOfDay(zoneId).toInstant().toEpochMilli()
+        out += UploadDay(date.toString(), start, end)
+    }
+    return out
+}
+
+/**
+ * Keeps every span that ends after the start of the oldest day, dropping the older ones. An open span (one whose
+ * end is in the future) is always kept.
+ */
+fun pruneSpans(spans: List<Span>, oldestStartMs: Long): List<Span> =
+    spans.filter { it.toMs > oldestStartMs }

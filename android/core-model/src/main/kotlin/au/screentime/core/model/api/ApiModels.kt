@@ -577,6 +577,58 @@ data class TodayBedtime(
 )
 
 @Serializable
+data class AppReport(
+    val kidId: String,
+    val period: ReportPeriod,
+    val from: String,
+    val to: String,
+    val today: String,
+    val deviceId: String?,
+    val devices: List<AppReportDevice>,
+    val screenTime: List<AppReportPool>,
+    val apps: List<AppReportApp>,
+)
+
+@Serializable
+enum class ReportPeriod(override val wire: String) : ApiEnum {
+    @SerialName("day") DAY("day"),
+    @SerialName("week") WEEK("week"),
+    @SerialName("month") MONTH("month");
+}
+
+@Serializable
+data class AppReportDevice(
+    val deviceId: String,
+    val name: String,
+    val form: DeviceForm,
+    val platform: Platform,
+    val removedAt: String?,
+    val appsRecorded: Boolean,
+)
+
+@Serializable
+data class AppReportPool(
+    val pool: Pool,
+    val usedSec: Int,
+)
+
+@Serializable
+data class AppReportApp(
+    val `package`: String,
+    val label: String,
+    val totalSec: Int,
+    val devices: List<AppReportAppDevice>,
+    val installedAt: String?,
+    val removedAt: String?,
+)
+
+@Serializable
+data class AppReportAppDevice(
+    val deviceId: String,
+    val sec: Int,
+)
+
+@Serializable
 data class Grant(
     val id: String,
     val pool: Pool,
