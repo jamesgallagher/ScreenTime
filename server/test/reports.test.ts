@@ -468,6 +468,7 @@ describe.skipIf(!url)('reports', () => {
 
   // Criterion 9: shared device
   it('a shared device answers with only a screens entry', async () => {
+    await familyInUtc();
     const [shared] = await db.insert(kids).values({ familyId: family, name: 'Mums Tablet', avatarColor: '#7C3AED', kind: 'shared' }).returning();
     if (!shared) throw new Error('no shared');
     const token = newDeviceToken();
