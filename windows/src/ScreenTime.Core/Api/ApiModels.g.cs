@@ -468,6 +468,17 @@ public enum SosLocationInVia
 public sealed record SosLocationsUpload(
     [property: JsonPropertyName("locations")] IReadOnlyList<SosLocationIn?> Locations);
 
+public sealed record SiteLookupsReceived(
+    [property: JsonPropertyName("received")] int Received);
+
+public sealed record SiteLookupsUpload(
+    [property: JsonPropertyName("lookups")] IReadOnlyList<SiteLookupIn> Lookups);
+
+public sealed record SiteLookupIn(
+    [property: JsonPropertyName("at")] string At,
+    [property: JsonPropertyName("host")] string Host,
+    [property: JsonPropertyName("package")] string Package);
+
 public sealed record PushTokenPut(
     [property: JsonPropertyName("fcmToken")] string? FcmToken);
 
@@ -545,6 +556,9 @@ public sealed record PushTokenPut(
 [JsonSerializable(typeof(SosLocationIn))]
 [JsonSerializable(typeof(SosLocationInVia))]
 [JsonSerializable(typeof(SosLocationsUpload))]
+[JsonSerializable(typeof(SiteLookupsReceived))]
+[JsonSerializable(typeof(SiteLookupsUpload))]
+[JsonSerializable(typeof(SiteLookupIn))]
 [JsonSerializable(typeof(PushTokenPut))]
 public partial class ApiJsonContext : JsonSerializerContext
 {

@@ -1108,6 +1108,23 @@ enum class SosDetailEndedBy(override val wire: String) : ApiEnum {
 }
 
 @Serializable
+data class SiteLookupsReceived(
+    val received: Int,
+)
+
+@Serializable
+data class SiteLookupsUpload(
+    val lookups: List<SiteLookupIn>,
+)
+
+@Serializable
+data class SiteLookupIn(
+    val at: String,
+    val host: String,
+    val `package`: String,
+)
+
+@Serializable
 data class PushTokenPut(
     val fcmToken: String?,
 )

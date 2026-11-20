@@ -564,3 +564,53 @@ export const bedtimeExtensions = pgTable(
   },
   (t) => [primaryKey({ columns: [t.kidId, t.day] })],
 );
+
+/**
+ * A website lookup of one device (docs/SPEC.md §6.1, §12.10): the host a browser or app looked up, who looked it
+ * up, and when. Kept 90 days by the sweep. The primary key makes a repeat upload add nothing.
+ */
+export const siteLookups = pgTable(
+  'site_lookups',
+  {
+    familyId: familyId(),
+    kidId: uuid('kid_id')
+      .notNull()
+      .references(() => kids.id),
+    deviceId: uuid('device_id')
+      .notNull()
+      .references(() => devices.id),
+    at: ts('at').notNull(),
+    host: text('host').notNull(),
+    package: text('package').notNull(),
+    receivedAt: ts('received_at').notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.deviceId, t.at, t.host, t.package] }),
+    index('site_lookups_kid_at_idx').on(t.kidId, t.at),
+    index('site_lookups_at_idx').on(t.at),
+  ],
+);
+
+/**
+ * One device's lookups of one site on one local day, per app (docs/SPEC.md §6.1, §12.10): kept forever. `day` is the
+ * family's local date of `at`, worked out through the zone; `site` is the registrable domain of `host`.
+ */
+export const siteDaily = pgTable(
+  'site_daily',
+  {
+    familyId: familyId(),
+    kidId: uuid('kid_id')
+      .notNull()
+      .references(() => kids.id),
+    deviceId: uuid('device_id')
+      .notNull()
+      .references(() => devices.id),
+    day: date('day').notNull(),
+    site: text('site').notNull(),
+    package: text('package').notNull(),
+    lookups: integer('lookups').notNull(),
+    firstAt: ts('first_at').notNull(),
+    lastAt: ts('last_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.deviceId, t.day, t.site, t.package] }), index('site_daily_kid_day_idx').on(t.kidId, t.day)],
+);

@@ -36,6 +36,8 @@ androidx-camera-mlkit-vision = { group = "androidx.camera", name = "camera-mlkit
 mlkit-barcode-scanning = { group = "com.google.mlkit", name = "barcode-scanning", version.ref = "mlkitBarcode" }
 androidx-room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
 androidx-room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
+androidx-test-runner = { group = "androidx.test", name = "runner", version = "1.5.0" }
+androidx-test-ext-junit = { group = "androidx.test.ext", name = "junit", version = "1.2.0" }
 osmdroid = { group = "org.osmdroid", name = "osmdroid-android", version.ref = "osmdroid" }
 
 [plugins]

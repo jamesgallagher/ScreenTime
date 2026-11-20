@@ -24,6 +24,11 @@ const val PLAY_STORE = "com.android.vending"
 /** Never blocked whatever the snapshot says (docs/SPEC.md §12.4). Android does not protect Play services itself. */
 val NEVER_BLOCKED = setOf("com.google.android.gms", "com.google.android.gsf", "com.android.settings")
 
+/** The app list's prefs and the parent mode's span keys (docs/SPEC.md §12.4, §12.9). */
+const val APPS_PREFS = "apps"
+const val SPANS = "spans"
+const val PARENT_FROM = "parentFrom"
+
 /** A system app stays pre-installed even after an update from the Play Store. */
 fun appSource(isSystem: Boolean, installer: String?): AppSource = when {
     isSystem -> AppSource.PREINSTALLED

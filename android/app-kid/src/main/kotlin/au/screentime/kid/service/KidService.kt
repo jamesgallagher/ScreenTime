@@ -3,6 +3,7 @@ package au.screentime.kid.service
 import android.app.ActivityManager
 import android.app.KeyguardManager
 import android.app.Service
+import android.app.admin.DevicePolicyManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -13,14 +14,19 @@ import android.net.Network
 import android.os.IBinder
 import android.os.PowerManager
 import android.os.SystemClock
+import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
 import au.screentime.core.model.api.ApiClient
 import au.screentime.core.model.api.DeviceEventKind
 import au.screentime.core.model.api.KidKind
 import au.screentime.core.model.api.PushTokenPut
+import au.screentime.core.model.api.SiteLookupIn
+import au.screentime.core.model.api.SiteLookupsUpload
 import au.screentime.core.time.evaluate
+import au.screentime.kid.admin.KidDeviceAdminReceiver
 import au.screentime.kid.admin.Policies
+import au.screentime.kid.sites.uploadLookups
 import au.screentime.kid.block.BlockActivity
 import au.screentime.kid.data.FileStateStore
 import au.screentime.kid.data.KidDatabase
@@ -67,6 +73,7 @@ import au.screentime.kid.usage.dayStartMs
 import au.screentime.kid.usage.todayInput
 import io.ktor.client.engine.HttpClientEngine
 import io.ktor.client.engine.okhttp.OkHttp
+import java.time.Instant
 import java.time.OffsetDateTime
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
@@ -213,6 +220,8 @@ class KidService : Service() {
         }
         // Again on every start, so an app update gets the policies it added (Lock Task in CARD-033).
         Policies.apply(this)
+        // The sites (docs/SPEC.md §12.10): DNS lookups reach the admin receiver, and Chrome's Secure DNS is off.
+        turnOnSites()
 
         clock = TrustedClock(
             store = PrefsClockStore(this),
@@ -415,6 +424,21 @@ class KidService : Service() {
         onTamper(DeviceEventKind.TAMPER_CLOCK, mapOf("offsetMin" to "$offsetMin"))
     }
 
+    /**
+     * The sites (docs/SPEC.md §12.10): network logging, so DNS lookups reach the admin receiver (it keeps them
+     * in `kid.db`), and Chrome's managed configuration, so its Secure DNS can never hide lookups.
+     */
+    private fun turnOnSites() {
+        val dpm = getSystemService(DevicePolicyManager::class.java)
+        val admin = KidDeviceAdminReceiver.component(this)
+        if (!dpm.isNetworkLoggingEnabled(admin)) {
+            dpm.setNetworkLoggingEnabled(admin, true)
+            Log.i(TAG, "sites: network logging on")
+        }
+        dpm.setApplicationRestrictions(admin, "com.android.chrome", Bundle().apply { putString("DnsOverHttpsMode", "off") })
+        Log.i(TAG, "sites: chrome policy {DnsOverHttpsMode=${dpm.getApplicationRestrictions(admin, "com.android.chrome").getString("DnsOverHttpsMode")}}")
+    }
+
     /** Device Owner policies found off and turned on again (see [Policies.apply]). */
     private suspend fun checkPolicies() {
         val missing = Policies.takeMissing(this)
@@ -528,6 +552,7 @@ class KidService : Service() {
             sendTamper()
             apps?.send()
             states.load()?.let { apps?.sendUsage(it.state) }
+            sendSites()
             val ok = syncer.sync()
             lastSyncElapsed = SystemClock.elapsedRealtime()
             lastSyncOk = ok
@@ -549,6 +574,26 @@ class KidService : Service() {
         if (sent.isEmpty()) return
         tamper.saveQueue(tamper.queue().filterNot { it.id in sent })
         Log.i(TAG, "tamper: ${sent.size} sent")
+    }
+
+    /**
+     * The sites (docs/SPEC.md §12.10): after the usage, the stored DNS lookups go to the server, oldest first,
+     * 1,000 at a time, at most 10 calls per sync. A failure keeps them for the next sync.
+     */
+    private suspend fun sendSites() {
+        val client = api ?: return
+        val dao = KidDatabase.open(this).siteLookups()
+        val (sent, received) = uploadLookups(
+            oldest = dao::oldest,
+            send = { batch ->
+                client.postDeviceSiteLookups(
+                    SiteLookupsUpload(batch.map { SiteLookupIn(Instant.ofEpochMilli(it.atMs).toString(), it.host, it.pkg) }),
+                ).received
+            },
+            delete = dao::delete,
+            onFailure = { n, e -> Log.w(TAG, "sites: $n not sent: ${e.javaClass.simpleName}") },
+        )
+        if (sent > 0) Log.i(TAG, "sites: sent $sent ($received new)")
     }
 
     /**

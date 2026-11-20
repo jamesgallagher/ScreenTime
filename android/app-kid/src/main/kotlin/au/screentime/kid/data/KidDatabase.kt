@@ -4,12 +4,15 @@ import android.content.Context
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Entity
+import androidx.room.Insert
+import androidx.room.migration.Migration
 import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.Transaction
 import androidx.room.Upsert
+import androidx.sqlite.db.SupportSQLiteDatabase
 import au.screentime.kid.usage.LocalSegment
 import au.screentime.kid.usage.PendingSegment
 import au.screentime.kid.usage.SegmentStore
@@ -70,14 +73,69 @@ abstract class SegmentDao {
     abstract suspend fun prune(beforeMs: Long)
 }
 
+/** One DNS lookup the kid app kept, waiting to be sent to the server (docs/SPEC.md §12.10). */
+@Entity(tableName = "site_lookups")
+data class SiteLookupRow(
+    @PrimaryKey(autoGenerate = true) val id: Long,
+    val atMs: Long,
+    val host: String,
+    val pkg: String,
+)
+
+@Dao
+abstract class SiteLookupDao {
+    @Insert
+    abstract suspend fun insert(rows: List<SiteLookupRow>)
+
+    /** Oldest first: what the next sync sends. */
+    @Query("SELECT * FROM site_lookups ORDER BY atMs, id LIMIT :limit")
+    abstract suspend fun oldest(limit: Int): List<SiteLookupRow>
+
+    /** Deletes exactly the rows a sync sent. */
+    @Query("DELETE FROM site_lookups WHERE id IN (:ids)")
+    abstract suspend fun delete(ids: List<Long>)
+
+    /** Beyond the wait limit, the oldest go (docs/SPEC.md §12.10). */
+    @Query("DELETE FROM site_lookups WHERE id IN (SELECT id FROM site_lookups ORDER BY atMs, id LIMIT :toDelete)")
+    abstract suspend fun deleteOldest(toDelete: Int)
+
+    @Query("SELECT COUNT(*) FROM site_lookups")
+    abstract suspend fun count(): Int
+}
+
 /** The kid app's database, in app-private storage (never backed up). Later cards add their outboxes here. */
-@Database(entities = [SegmentRow::class], version = 1, exportSchema = false)
+@Database(entities = [SegmentRow::class, SiteLookupRow::class], version = 2, exportSchema = false)
 abstract class KidDatabase : RoomDatabase() {
     abstract fun segments(): SegmentDao
+    abstract fun siteLookups(): SiteLookupDao
 
     companion object {
+        /**
+         * Version 1 to 2: the site_lookups table (docs/SPEC.md §12.10). Everything else, including the unsent
+         * segments, stays: never destructive.
+         */
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `site_lookups` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`atMs` INTEGER NOT NULL, `host` TEXT NOT NULL, `pkg` TEXT NOT NULL)",
+                )
+            }
+        }
+
+        @Volatile private var instance: KidDatabase? = null
+
+        /**
+         * The one database of the process: the service and the admin receiver share it. A new Room instance per call
+         * would open another connection pool each sync and never close it.
+         */
         fun open(context: Context): KidDatabase =
-            Room.databaseBuilder(context.applicationContext, KidDatabase::class.java, "kid.db").build()
+            instance ?: synchronized(this) {
+                instance ?: Room.databaseBuilder(context.applicationContext, KidDatabase::class.java, "kid.db")
+                    .addMigrations(MIGRATION_1_2)
+                    .build()
+                    .also { instance = it }
+            }
     }
 }
 

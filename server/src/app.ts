@@ -21,6 +21,7 @@ import type { Pusher } from './push.js';
 import { registerRequestRoutes } from './requests/routes.js';
 import { createRouter } from './router.js';
 import { registerSosRoutes } from './sos/routes.js';
+import { registerSiteRoutes } from './sites/routes.js';
 import { registerReportRoutes } from './reports/routes.js';
 import { registerSyncRoutes } from './sync/routes.js';
 import { registerAppRoutes } from './apps/routes.js';
@@ -110,6 +111,7 @@ export function createApp(appDeps: AppDeps) {
   registerGameRoutes(app, deps);
   registerDownloadRoutes(app, deps);
   registerSosRoutes(app, deps);
+  registerSiteRoutes(app, deps);
   registerNotifyRoutes(app, deps);
   registerAdminRoutes(app, deps);
   registerLiveRoutes(app, deps, upgradeWebSocket);
