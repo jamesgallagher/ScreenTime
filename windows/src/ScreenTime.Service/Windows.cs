@@ -1,6 +1,8 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Security.AccessControl;
 using System.Security.Principal;
+using System.Text;
 using Microsoft.Win32;
 using System.Security.Cryptography;
 
@@ -185,6 +187,122 @@ internal static partial class Win
         finally
         {
             WTSFreeMemory(buffer);
+        }
+    }
+
+    // The DNS Client's operational log (docs/SPEC.md §12.10): the lookups, with the account and the process, are
+    // read by a subscription; the log is turned on at service start.
+    internal const string DnsChannel = "Microsoft-Windows-DNS-Client/Operational";
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    internal static partial nint OpenProcess(uint access, [MarshalAs(UnmanagedType.Bool)] bool inherit, uint pid);
+
+    [LibraryImport("kernel32.dll", EntryPoint = "QueryFullProcessImageNameW", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool QueryFullProcessImageName(nint process, uint flags, nint name, ref uint size);
+
+    /// <summary>The program id (file name) of a process, or "unknown" when it is gone or cannot be opened
+    /// (docs/SPEC.md §12.10).</summary>
+    internal static string ProcessImageName(uint pid)
+    {
+        try
+        {
+            var handle = OpenProcess(0x1000 /* PROCESS_QUERY_LIMITED_INFORMATION */, false, pid);
+            if (handle == nint.Zero) return "unknown";
+            unsafe
+            {
+                try
+                {
+                    var buf = (char*)Marshal.AllocHGlobal(1024 * sizeof(char));
+                    try
+                    {
+                        var size = (uint)1024;
+                        if (!QueryFullProcessImageName(handle, 0, (nint)buf, ref size)) return "unknown";
+                        var path = new string(buf, 0, (int)size);
+                        return ScreenTime.Core.Programs.ProgramNames.Id(path);
+                    }
+                    finally
+                    {
+                        Marshal.FreeHGlobal((nint)buf);
+                    }
+                }
+                finally
+                {
+                    CloseHandle(handle);
+                }
+            }
+        }
+        catch
+        {
+            return "unknown";
+        }
+    }
+
+    /// <summary>Turns on the DNS Client's operational log (docs/SPEC.md §12.10). True when wevtutil's exit code is 0.</summary>
+    internal static bool EnableDnsLog()
+    {
+        try
+        {
+            var systemDir = ReadValue(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion", "SystemDirectory") as string;
+            var wevtutil = systemDir is not null ? Path.Combine(systemDir, "wevtutil.exe") : @"C:\Windows\System32\wevtutil.exe";
+            var psi = new ProcessStartInfo(wevtutil, "sl " + DnsChannel + " /e:true")
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            };
+            using var p = Process.Start(psi);
+            if (p is null) return false;
+            p.WaitForExit();
+            return p.ExitCode == 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+
+    /// <summary>wevtapi!EvtSubscribe, the real 8-parameter signature. Returns a subscription handle (0 on
+    /// failure, with the error in GetLastError). Flags 1 is EvtSubscribeToFutureEvents (2 start at the oldest
+    /// record, 3 start after a bookmark).</summary>
+    [LibraryImport("wevtapi.dll", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
+    internal static unsafe partial nint EvtSubscribe(nint session, nint signalEvent, string channelPath, string query, nint bookmark, nint context, delegate* unmanaged[Stdcall]<uint, nint, nint, uint> callback, uint flags);
+
+    [LibraryImport("wevtapi.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool EvtClose(nint handle);
+
+    [LibraryImport("wevtapi.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool EvtRender(nint context, nint fragment, uint flags, int bufferSize, nint buffer, out int bufferUsed, out int propertyCount);
+
+    /// <summary>The event's XML (an event 3008), or null when it cannot be rendered (docs/SPEC.md §12.10).</summary>
+    internal static string? RenderEventXml(nint hEvent)
+    {
+        // EvtRender(Context, Fragment, Flags, BufferSize, Buffer, BufferUsed, PropertyCount): the first call with no
+        // buffer fails with ERROR_INSUFFICIENT_BUFFER and gives the size in BYTES; the XML is a UTF-16 string with
+        // its terminating null. Flags 1 is EvtRenderEventXml (0 values, 2 bookmark).
+        const uint EvtRenderEventXml = 1;
+        try
+        {
+            EvtRender(nint.Zero, hEvent, EvtRenderEventXml, 0, nint.Zero, out var needed, out _);
+            if (needed <= 0) return null;
+            var buffer = Marshal.AllocHGlobal(needed);
+            try
+            {
+                if (!EvtRender(nint.Zero, hEvent, EvtRenderEventXml, needed, buffer, out var used, out _)) return null;
+                return Marshal.PtrToStringUni(buffer, Math.Max(0, used / 2 - 1));
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(buffer);
+            }
+        }
+        catch
+        {
+            return null;
         }
     }
 }

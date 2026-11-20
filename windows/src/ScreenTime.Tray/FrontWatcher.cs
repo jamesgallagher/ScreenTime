@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using ScreenTime.Core.Programs;
 using ScreenTime.Core.Service;
+using ScreenTime.Core.Sites;
 
 namespace ScreenTime.Tray;
 
@@ -29,6 +30,7 @@ internal sealed class FrontWatcher
     private bool _sentOnce;
     private string? _lastId;
     private string? _lastLabel;
+    private string? _lastTitle;
     private Thread? _hookThread;
     private uint _hookThreadId;
     private System.Threading.Timer? _timer;
@@ -79,6 +81,9 @@ internal sealed class FrontWatcher
 
     [DllImport("user32.dll")]
     private static extern nint GetForegroundWindow();
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetWindowText(nint hwnd, StringBuilder text, int maxCount);
 
     [DllImport("user32.dll")]
     private static extern uint GetWindowThreadProcessId(nint hwnd, out uint pid);
@@ -135,13 +140,14 @@ internal sealed class FrontWatcher
         {
             lock (_gate)
             {
-                var (id, label) = NameFront();
-                if (_sentOnce && id == _lastId && label == _lastLabel) return;
+                var (id, label, title) = NameFront();
+                if (_sentOnce && id == _lastId && label == _lastLabel && title == _lastTitle) return;
                 _sentOnce = true;
                 _lastId = id;
                 _lastLabel = label;
-                _send(PipeMessage.Front(id, label));
-                _log(id is null ? "front: nothing" : $"front: {id} {label}");
+                _lastTitle = title;
+                _send(PipeMessage.Front(id, label, title));
+                _log(id is null ? "front: nothing" : $"front: {id} {label} {title}");
             }
         }
         catch (Exception e)
@@ -150,25 +156,26 @@ internal sealed class FrontWatcher
         }
     }
 
-    /// <summary>The program in front as (id, label), or (null, null) for nothing to count.</summary>
-    private (string? Id, string? Label) NameFront()
+    /// <summary>The program in front as (id, label, title), or (null, null, null) for nothing to count. The title is
+    /// the front window's title, cleaned, only for the four browsers (docs/SPEC.md §12.10).</summary>
+    private (string? Id, string? Label, string? Title) NameFront()
     {
         var hwnd = GetForegroundWindow();
-        if (hwnd == nint.Zero) return (null, null);
+        if (hwnd == nint.Zero) return (null, null, null);
         GetWindowThreadProcessId(hwnd, out var windowPid);
-        if (windowPid == 0) return (null, null);
+        if (windowPid == 0) return (null, null, null);
         var windowExe = ExePath(windowPid);
-        if (windowExe is null) return (null, null);
+        if (windowExe is null) return (null, null, null);
 
         var cls = new StringBuilder(256);
         GetClassName(hwnd, cls, cls.Capacity);
-        if (ProgramNames.Ignored(Path.GetFileName(windowExe), cls.ToString())) return (null, null);
+        if (ProgramNames.Ignored(Path.GetFileName(windowExe), cls.ToString())) return (null, null, null);
 
         var pid = ProgramNames.RealProcess(Path.GetFileName(windowExe), windowPid, ChildPids(hwnd));
-        if (pid is not { } realPid) return (null, null);
+        if (pid is not { } realPid) return (null, null, null);
         var exe = realPid == windowPid ? windowExe : ExePath(realPid);
-        if (exe is null) return (null, null);
-        if (realPid != windowPid && ProgramNames.Ignored(Path.GetFileName(exe), null)) return (null, null);
+        if (exe is null) return (null, null, null);
+        if (realPid != windowPid && ProgramNames.Ignored(Path.GetFileName(exe), null)) return (null, null, null);
 
         if (!_cache.TryGetValue(realPid, out var info) || !string.Equals(info.Exe, exe, StringComparison.OrdinalIgnoreCase))
         {
@@ -177,7 +184,18 @@ internal sealed class FrontWatcher
             _cache[realPid] = info;
             if (_cache.Count > 200) _cache.Clear();
         }
-        return (ProgramNames.Id(exe), ProgramNames.Label(exe, info.Desc, info.Product));
+        var id = ProgramNames.Id(exe);
+        var label = ProgramNames.Label(exe, info.Desc, info.Product);
+        var title = BrowserTitles.IsBrowser(id) ? BrowserTitles.Clean(WindowText(hwnd)) : null;
+        return (id, label, title);
+    }
+
+    /// <summary>The front window's title text, empty when it cannot be read.</summary>
+    private static string WindowText(nint hwnd)
+    {
+        var sb = new StringBuilder(256);
+        GetWindowText(hwnd, sb, sb.Capacity);
+        return sb.ToString();
     }
 
     /// <summary>The process ids of a window's child windows, in order.</summary>

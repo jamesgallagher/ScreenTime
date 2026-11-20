@@ -105,6 +105,11 @@ public sealed class ApiClient(HttpClient http, Func<string?> token) : ApiClientB
     public Task<SiteLookupsReceived> PostDeviceSiteLookupsAsync(SiteLookupsUpload body, CancellationToken cancellationToken = default) =>
         SendAsync(HttpMethod.Post, "v1/device/site-lookups", auth: true, body, ApiJsonContext.Default.SiteLookupsUpload, ApiJsonContext.Default.SiteLookupsReceived, cancellationToken);
 
+    /// <summary>Upload browser titles.</summary>
+    /// <remarks><c>POST /v1/device/site-titles</c></remarks>
+    public Task<SiteTitlesReceived> PostDeviceSiteTitlesAsync(SiteTitlesUpload body, CancellationToken cancellationToken = default) =>
+        SendAsync(HttpMethod.Post, "v1/device/site-titles", auth: true, body, ApiJsonContext.Default.SiteTitlesUpload, ApiJsonContext.Default.SiteTitlesReceived, cancellationToken);
+
     /// <summary>Set this kid device's push token.</summary>
     /// <remarks><c>PUT /v1/device/push-token</c></remarks>
     public Task PutDevicePushTokenAsync(PushTokenPut body, CancellationToken cancellationToken = default) =>

@@ -16,8 +16,8 @@ describe('C# API client', () => {
   });
 
   it('has one method for every device operation and none for the parent ones', () => {
-    // CARD-068 added one device operation: POST /v1/device/site-lookups.
-    expect(client.match(/^ {4}public Task/gm)).toHaveLength(20);
+    // CARD-068 added one device operation: POST /v1/device/site-lookups. CARD-069 adds POST /v1/device/site-titles.
+    expect(client.match(/^ {4}public Task/gm)).toHaveLength(21);
     expect(client).toContain(
       '    public Task<EnrolResponse> PostEnrolAsync(EnrolRequest body, CancellationToken cancellationToken = default) =>\n' +
         '        SendAsync(HttpMethod.Post, "v1/enrol", auth: false, body, ApiJsonContext.Default.EnrolRequest, ApiJsonContext.Default.EnrolResponse, cancellationToken);\n',

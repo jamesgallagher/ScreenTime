@@ -7,6 +7,7 @@ using ScreenTime.Core.Api;
 using ScreenTime.Core.Games;
 using ScreenTime.Core.Programs;
 using ScreenTime.Core.Service;
+using ScreenTime.Core.Sites;
 using ScreenTime.Core.Store;
 using ScreenTime.Core.Sync;
 using ScreenTime.Core.Time;
@@ -48,6 +49,10 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
     private readonly Dictionary<string, string> _parentAsks = new();
     private readonly ClockWatch _clockWatch = new();
     private readonly TimeZoneWatch _zoneWatch = new();
+    // Websites (docs/SPEC.md §12.10): the lookups and titles this PC collects and uploads.
+    private readonly SiteLookupFilter _siteFilter = new();
+    private readonly Channel<(DnsLookup, string)> _dnsChannel = Channel.CreateUnbounded<(DnsLookup, string)>();
+    private DnsLogSubscriber _dns = null!;
     private LocalStore _store = null!;
     private TrustedClock _clock = null!;
     private SessionTracker _tracker = null!;
@@ -69,7 +74,7 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
     /// <summary>What the server was last told this PC has, per account, so it is only told again when that changes.</summary>
     private readonly Dictionary<string, string> _gamesSent = new();
 
-    private sealed class KidSession(uint sessionId, string sid, TrayHost tray, CancellationTokenSource cts, ProgramClock programs)
+    private sealed class KidSession(uint sessionId, string sid, TrayHost tray, CancellationTokenSource cts, ProgramClock programs, TitleClock titles)
     {
         public uint SessionId { get; } = sessionId;
         public string Sid { get; } = sid;
@@ -85,6 +90,7 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
         public TrayKillWatch TrayKills { get; } = new();
         public bool CaughtPending { get; set; }
         public ProgramClock Programs { get; } = programs;
+        public TitleClock Titles { get; } = titles;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -103,6 +109,9 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
 
         var tracker = new SessionTracker(store, () => Guid.NewGuid().ToString());
         _tracker = tracker;
+
+        // Websites (docs/SPEC.md §12.10): the browser policies, the DNS log and the subscription to its events.
+        StartSites();
 
         if (config is null || store.Devices().Count == 0)
         {
@@ -175,6 +184,7 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
                         foreach (var s in _sessions.Values)
                         {
                             foreach (var p in s.Programs.Flush(now)) _store.AddProgramDay(s.Sid, p.Day, p.Id, p.Label, p.Ms);
+                            foreach (var t in s.Titles.Flush(now)) _store.AddTitleSpan(s.Sid, t.AtMs, t.Sec, t.Program, t.Title);
                         }
                         foreach (var device in store.Devices()) await SyncAccount(device.Sid, stoppingToken);
                         StartLiveChannels();
@@ -257,11 +267,62 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
             catch (OperationCanceledException) { }
         });
 
-        await Task.WhenAll(eventsTask, timerTask, lockTask, syncTask, gamesTask);
+        // The DNS lookups: the callback hands them to a channel (docs/SPEC.md §12.10), and one loop reads it,
+        // takes the lock like the other handlers, checks the account and parent mode and writes state.db.
+        var dnsTask = Task.Run(async () =>
+        {
+            try
+            {
+                await foreach (var (lookup, program) in _dnsChannel.Reader.ReadAllAsync(stoppingToken))
+                {
+                    await sem.WaitAsync(stoppingToken);
+                    try
+                    {
+                        var now = clock.NowMs();
+                        var kept = _siteFilter.Decide(lookup, program, _store.GetDevice(lookup.UserSid) is not null, ParentModeOn(lookup.UserSid, now));
+                        if (kept is not null) _store.AddSiteLookup(kept.Sid, kept.AtMs, kept.Host, kept.Program);
+                    }
+                    finally
+                    {
+                        sem.Release();
+                    }
+                }
+            }
+            catch (OperationCanceledException) { }
+        });
+
+        await Task.WhenAll(eventsTask, timerTask, lockTask, syncTask, gamesTask, dnsTask);
 
         foreach (var s in _sessions.Values) s.Cts.Cancel();
         tracker.OnChange(SessionChange.Shutdown, null, false, clock.NowMs());
+        _dns.Dispose();
         store.Dispose();
+    }
+
+    /// <summary>
+    /// Sets up the websites (docs/SPEC.md §12.10) at service start: writes the four browsers' policies, turns on the
+    /// DNS Client's operational log and subscribes to its event 3008.
+    /// </summary>
+    private void StartSites()
+    {
+        var failed = BrowserPolicies.WriteAll();
+        foreach (var (v, error) in failed) logger.LogWarning("sites: could not set browser policy {KeyPath} {Name} ({Error})", v.KeyPath, v.Name, error);
+        if (failed.Count == 0) logger.LogInformation("sites: browser policies set");
+
+        if (Win.EnableDnsLog()) logger.LogInformation("sites: dns log on");
+        else logger.LogWarning("sites: could not turn the dns log on; it is tried again at the next start");
+
+        _dns = new DnsLogSubscriber((l, p) => _dnsChannel.Writer.TryWrite((l, p)));
+        try
+        {
+            var error = _dns.Subscribe();
+            if (error == 0) logger.LogInformation("sites: dns log subscribed");
+            else logger.LogWarning("sites: could not subscribe to the dns log (error {Error}); it is tried again at the next start", error);
+        }
+        catch (Exception e)
+        {
+            logger.LogWarning("sites: could not subscribe to the dns log ({Message}); it is tried again at the next start", e.Message);
+        }
     }
 
     private async Task OnSessionEvent(SessionEvent e, string sid, bool isConsole, CancellationToken ct)
@@ -283,6 +344,7 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
                     s.InParentMode = false;
                     s.Keeper.OnLocked();
                     foreach (var p in s.Programs.Counting(false, now)) _store.AddProgramDay(s.Sid, p.Day, p.Id, p.Label, p.Ms);
+                    foreach (var t in s.Titles.Counting(false, now)) _store.AddTitleSpan(s.Sid, t.AtMs, t.Sec, t.Program, t.Title);
                     if (e.Change == SessionChange.Logoff)
                     {
                         s.Cts.Cancel();
@@ -314,7 +376,8 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
         var cts = CancellationTokenSource.CreateLinkedTokenSource(_stopping);
         var tray = new TrayHost(sessionId, sid, options.TrayExe, options.DryLock, options.AsService, m => OnTrayMessage(sessionId, m), logger, options.TrayOpen, () => OnTrayExit(sessionId), () => _shuttingDown, options.AsService ? () => Win.SessionActive(sessionId) : null, () => _updateInProgress);
         var programs = new ProgramClock(TimeZoneInfo.FindSystemTimeZoneById(_store.GetDevice(sid)!.Timezone));
-        var s = new KidSession(sessionId, sid, tray, cts, programs);
+        var titles = new TitleClock();
+        var s = new KidSession(sessionId, sid, tray, cts, programs, titles);
         _sessions[sessionId] = s;
         _ = tray.RunAsync(cts.Token);
         return s;
@@ -328,10 +391,12 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
         {
             s.InParentMode = true;
             foreach (var p in s.Programs.Counting(false, now)) _store.AddProgramDay(s.Sid, p.Day, p.Id, p.Label, p.Ms);
+            foreach (var t in s.Titles.Counting(false, now)) _store.AddTitleSpan(s.Sid, t.AtMs, t.Sec, t.Program, t.Title);
             return;
         }
         s.Unlocked = true;
         foreach (var p in s.Programs.Counting(true, now)) _store.AddProgramDay(s.Sid, p.Day, p.Id, p.Label, p.Ms);
+        foreach (var t in s.Titles.Counting(true, now)) _store.AddTitleSpan(s.Sid, t.AtMs, t.Sec, t.Program, t.Title);
         // Only StartCounting or Toast: neither waits on the pipe for long.
         _ = Apply(s, s.Keeper.OnUnlock(OutOfTime(s.Sid, now), now), now);
     }
@@ -343,6 +408,7 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
         s.InParentMode = true;
         s.Keeper.OnLocked();
         foreach (var p in s.Programs.Counting(false, now)) _store.AddProgramDay(s.Sid, p.Day, p.Id, p.Label, p.Ms);
+        foreach (var t in s.Titles.Counting(false, now)) _store.AddTitleSpan(s.Sid, t.AtMs, t.Sec, t.Program, t.Title);
         logger.LogInformation("{Kid}: parent mode on, not counting", KidName(s.Sid));
         foreach (var sid in _tracker.OnChange(SessionChange.Lock, s.Sid, true, now)) _syncRequests.Writer.TryWrite(sid);
     }
@@ -416,6 +482,7 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
             // Without its tray nothing is known to be in front, so the last program stops counting (docs/SPEC.md §12.9);
             // the tray sends what is in front again when it is back.
             foreach (var p in s.Programs.Front(null, null, _clock.NowMs())) _store.AddProgramDay(s.Sid, p.Day, p.Id, p.Label, p.Ms);
+            foreach (var t in s.Titles.Front(null, null, _clock.NowMs())) _store.AddTitleSpan(s.Sid, t.AtMs, t.Sec, t.Program, t.Title);
             if (s.TrayKills.OnExit(_clock.NowMs(), Guid.NewGuid().ToString()) is not { } e) return;
             Queue(s.Sid, e);
             s.CaughtPending = true;
@@ -553,7 +620,9 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
                         var now = _clock.NowMs();
                         var pieces = s.Programs.Front(m.Program, m.Text, now);
                         foreach (var p in pieces) _store.AddProgramDay(s.Sid, p.Day, p.Id, p.Label, p.Ms);
-                        logger.LogInformation("tray {Session}: front {Program} {Label}", sessionId, m.Program ?? "nothing", m.Text);
+                        var titleSpans = s.Titles.Front(m.Program, m.Title, now);
+                        foreach (var t in titleSpans) _store.AddTitleSpan(s.Sid, t.AtMs, t.Sec, t.Program, t.Title);
+                        logger.LogInformation("tray {Session}: front {Program} {Label} {Title}", sessionId, m.Program ?? "nothing", m.Text, m.Title);
                         break;
                     }
             }
@@ -768,6 +837,8 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
         await ReportEvents(sid, api, ct);
         await ReportGames(sid, api, ct);
         await ReportPrograms(sid, api, ct);
+        await ReportSiteLookups(sid, api, ct);
+        await ReportSiteTitles(sid, api, ct);
         var synced = await syncer.SyncAsync(ct);
         if (synced && !_versionSent.Contains(sid)) await ReportVersion(sid, api, ct);
         if (!synced) _tracker.MarkOffline(sid);
@@ -832,6 +903,77 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
         var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.FromUnixTimeMilliseconds(_clock.NowMs()), tz).DateTime);
         var before = today.AddDays(-31).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
         _store.PruneProgramDays(sid, before);
+    }
+
+    /// <summary>
+    /// Sends the stored website lookups to the server (docs/SPEC.md §12.10), the oldest 1,000 at a call, at most 10
+    /// calls per sync. On a failure the rows stay.
+    /// </summary>
+    private async Task ReportSiteLookups(string sid, ApiClient api, CancellationToken ct)
+    {
+        var device = _store.GetDevice(sid);
+        if (device is null) return;
+        var sent = 0;
+        var received = 0;
+        for (var call = 0; call < 10; call++)
+        {
+            var rows = _store.PeekSiteLookups(sid, 1000);
+            if (rows.Count == 0) break;
+            try
+            {
+                var body = new SiteLookupsUpload(rows.Select(r => new SiteLookupIn(IsoUtc.ToIso(r.AtMs), r.Host, r.Program)).ToList());
+                var res = await api.PostDeviceSiteLookupsAsync(body, ct);
+                _store.RemoveSiteLookups(rows.Select(r => r.Id).ToArray());
+                sent += rows.Count;
+                received += res.Received;
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception e)
+            {
+                logger.LogWarning("{Kid}: could not send site lookups ({Message})", KidName(sid), e.Message);
+                break;
+            }
+        }
+        if (sent > 0) logger.LogInformation("{Kid}: sites: sent {Sent} ({Received} new)", KidName(sid), sent, received);
+    }
+
+    /// <summary>
+    /// Sends the stored browser title spans to the server (docs/SPEC.md §12.10), the oldest 500 at a call, at most 10
+    /// calls per sync. On a failure the rows stay.
+    /// </summary>
+    private async Task ReportSiteTitles(string sid, ApiClient api, CancellationToken ct)
+    {
+        var device = _store.GetDevice(sid);
+        if (device is null) return;
+        var sent = 0;
+        var received = 0;
+        for (var call = 0; call < 10; call++)
+        {
+            var rows = _store.PeekTitleSpans(sid, 500);
+            if (rows.Count == 0) break;
+            try
+            {
+                var body = new SiteTitlesUpload(rows.Select(r => new SiteTitleIn(IsoUtc.ToIso(r.AtMs), r.Sec, r.Program, r.Title)).ToList());
+                var res = await api.PostDeviceSiteTitlesAsync(body, ct);
+                _store.RemoveTitleSpans(rows.Select(r => r.Id).ToArray());
+                sent += rows.Count;
+                received += res.Received;
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+
+            catch (Exception e)
+            {
+                logger.LogWarning("{Kid}: could not send site titles ({Message})", KidName(sid), e.Message);
+                break;
+            }
+        }
+        if (sent > 0) logger.LogInformation("{Kid}: sites: titles sent {Sent} ({Received} new)", KidName(sid), sent, received);
     }
 
     /// <summary>

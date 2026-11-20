@@ -904,6 +904,17 @@ class ApiClient(
     }
 
     /**
+     * Upload browser titles.
+     *
+     * `POST /v1/device/site-titles`
+     */
+    suspend fun postDeviceSiteTitles(
+        body: SiteTitlesUpload,
+    ): SiteTitlesReceived {
+        return call(HttpMethod.Post, "/v1/device/site-titles", auth = true, body = body, bodyType = typeInfo<SiteTitlesUpload>()).body()
+    }
+
+    /**
      * Set this parent app's push token.
      *
      * `PUT /v1/me/push-token`

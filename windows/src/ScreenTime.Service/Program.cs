@@ -136,8 +136,19 @@ switch (command)
             try
             {
                 if (command == "harden") Hardening.TakeTimeZoneRight();
-                if (command == "unharden") Hardening.GiveTimeZoneRight();
+                if (command == "unharden")
+                {
+                    Hardening.GiveTimeZoneRight();
+                    Console.WriteLine($"Browser policies removed: {ScreenTime.Core.Sites.BrowserPolicies.RemoveAll()} values");
+                }
                 Console.WriteLine($"Users can change the time zone: {(Hardening.UsersHaveTimeZoneRight() ? "yes" : "no")}");
+                if (command == "harden-check")
+                {
+                    var missing = ScreenTime.Core.Sites.BrowserPolicies.Missing();
+                    Console.WriteLine(missing.Count == 0
+                        ? "Browser policies: set"
+                        : $"Browser policies: missing {string.Join(", ", missing)}");
+                }
                 return 0;
             }
             catch (InvalidOperationException e)

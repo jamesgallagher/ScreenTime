@@ -1,10 +1,10 @@
 import { createRoute } from '@hono/zod-openapi';
 import { sql } from 'drizzle-orm';
 import { getDomain } from 'tldts';
-import { SiteLookupsReceived, SiteLookupsUpload } from '@screentime/schemas';
+import { SiteLookupsReceived, SiteLookupsUpload, SiteTitlesReceived, SiteTitlesUpload } from '@screentime/schemas';
 import type { AppDeps } from '../app.js';
 import { type FamilyTx, withFamily } from '../db/family.js';
-import { siteDaily, siteLookups } from '../db/schema.js';
+import { siteDaily, siteLookups, siteTitles } from '../db/schema.js';
 import { requireDevice } from '../devices/auth.js';
 import { errorResponses, deviceBearer, jsonBody, jsonResponse } from '../openapi.js';
 import type { createRouter } from '../router.js';
@@ -21,6 +21,18 @@ const siteLookupsRoute = createRoute({
   security: deviceBearer,
   request: { body: jsonBody(SiteLookupsUpload) },
   responses: { 200: jsonResponse('Stored.', SiteLookupsReceived), ...errorResponses(401, 422) },
+});
+
+const siteTitlesRoute = createRoute({
+  method: 'post',
+  path: '/v1/device/site-titles',
+  tags: ['device'],
+  summary: 'Upload browser titles',
+  description:
+    'The page titles this device\'s browser windows were showing. A title more than 30 days old or more than 1 day ahead is skipped; a repeat adds nothing.',
+  security: deviceBearer,
+  request: { body: jsonBody(SiteTitlesUpload) },
+  responses: { 200: jsonResponse('Stored.', SiteTitlesReceived), ...errorResponses(401, 422) },
 });
 
 /** The family's local date of an instant, worked out through the zone (never by adding hours). */
@@ -87,6 +99,39 @@ export function registerSiteRoutes(app: Router, deps: AppDeps) {
             },
           });
       }
+      return rows.length;
+    });
+    return c.json({ received }, 200);
+  });
+
+  app.openapi(siteTitlesRoute, async (c) => {
+    const { deviceId, kidId, familyId } = await requireDevice(c, db);
+    const { titles } = c.req.valid('json');
+    // The server's own clock decides what is in range (docs/SPEC.md §9.3).
+    const now = new Date();
+    const inRange = titles.filter((t) => {
+      const at = new Date(t.at);
+      return at >= new Date(now.getTime() - 30 * 86_400_000) && at <= new Date(now.getTime() + 86_400_000);
+    });
+    // Nothing in range: nothing to store. Answering 200 lets the device delete them; an error would make it send
+    // the same batch again at every sync, for ever.
+    if (inRange.length === 0) return c.json({ received: 0 }, 200);
+    const received = await withFamily(db, familyId, async (tx) => {
+      const rows = await tx
+        .insert(siteTitles)
+        .values(
+          inRange.map((t) => ({
+            familyId,
+            kidId,
+            deviceId,
+            at: new Date(t.at),
+            sec: t.sec,
+            package: t.package,
+            title: t.title,
+          })),
+        )
+        .onConflictDoNothing()
+        .returning({ at: siteTitles.at });
       return rows.length;
     });
     return c.json({ received }, 200);

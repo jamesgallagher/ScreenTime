@@ -614,3 +614,31 @@ export const siteDaily = pgTable(
   },
   (t) => [primaryKey({ columns: [t.deviceId, t.day, t.site, t.package] }), index('site_daily_kid_day_idx').on(t.kidId, t.day)],
 );
+
+/**
+ * One PC browser window's title (docs/SPEC.md §6.1, §12.10): the page title a kid's browser window was in front
+ * with, for `sec` seconds, in which program. Kept 90 days by the sweep. The primary key makes a repeat upload add
+ * nothing.
+ */
+export const siteTitles = pgTable(
+  'site_titles',
+  {
+    familyId: familyId(),
+    kidId: uuid('kid_id')
+      .notNull()
+      .references(() => kids.id),
+    deviceId: uuid('device_id')
+      .notNull()
+      .references(() => devices.id),
+    at: ts('at').notNull(),
+    sec: integer('sec').notNull(),
+    package: text('package').notNull(),
+    title: text('title').notNull(),
+    receivedAt: ts('received_at').notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.deviceId, t.at, t.package] }),
+    index('site_titles_kid_at_idx').on(t.kidId, t.at),
+    index('site_titles_at_idx').on(t.at),
+  ],
+);
