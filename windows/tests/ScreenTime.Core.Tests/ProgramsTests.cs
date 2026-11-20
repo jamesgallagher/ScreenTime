@@ -49,6 +49,29 @@ public sealed class ProgramsTests
         Assert.Equal(expected, ProgramNames.Ignored(exe, cls));
     }
 
+    // A Store app's window belongs to ApplicationFrameHost.exe; the program is its child window's process (§12.9).
+    [Fact]
+    public void AStoreAppIsTheProcessOfItsChildWindow()
+    {
+        // Calculator on James's PC, 20 Nov 2026: the frame (pid 100) holds its own windows and CalculatorApp.exe's (pid 200).
+        Assert.Equal(200u, ProgramNames.RealProcess("ApplicationFrameHost.exe", 100, [100, 100, 200, 300]));
+        Assert.Equal(200u, ProgramNames.RealProcess("applicationframehost.exe", 100, [0, 200]));
+    }
+
+    [Fact]
+    public void AStoreAppWithNoOtherProcessYetCountsAsNothing()
+    {
+        Assert.Null(ProgramNames.RealProcess("ApplicationFrameHost.exe", 100, [100, 100]));
+        Assert.Null(ProgramNames.RealProcess("ApplicationFrameHost.exe", 100, []));
+    }
+
+    [Fact]
+    public void AnyOtherWindowIsItsOwnProcess()
+    {
+        Assert.Equal(100u, ProgramNames.RealProcess("charmap.exe", 100, [200]));
+        Assert.Equal(100u, ProgramNames.RealProcess("explorer.exe", 100, []));
+    }
+
     // Criterion 12: ProgramClock across a local midnight.
     [Fact]
     public void TimeIsSplitAtTheLocalMidnight()

@@ -52,6 +52,22 @@ public static class ProgramNames
     };
 
     /// <summary>
+    /// The process whose program is in front (docs/SPEC.md §12.9). A Store app's window belongs to
+    /// <c>ApplicationFrameHost.exe</c>; the real program is the first child window whose process differs from the
+    /// frame's. Null when there is none yet (the app is starting or suspended): then nothing counts. Any other window's
+    /// own process is the program.
+    /// </summary>
+    public static uint? RealProcess(string exeFileName, uint windowPid, IEnumerable<uint> childWindowPids)
+    {
+        if (!string.Equals(exeFileName, "ApplicationFrameHost.exe", StringComparison.OrdinalIgnoreCase)) return windowPid;
+        foreach (var pid in childWindowPids)
+        {
+            if (pid != 0 && pid != windowPid) return pid;
+        }
+        return null;
+    }
+
+    /// <summary>
     /// True when the window is not a program to count (docs/SPEC.md §12.9): the desktop and taskbars of
     /// <c>explorer.exe</c>, and the named processes whatever their window class. File Explorer's own windows
     /// (<c>CabinetWClass</c>) do count.

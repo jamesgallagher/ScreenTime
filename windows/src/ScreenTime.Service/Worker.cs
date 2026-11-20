@@ -351,9 +351,8 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
     private void LeaveParentMode(KidSession s)
     {
         s.InParentMode = false;
-        var now = _clock.NowMs();
-        foreach (var p in s.Programs.Counting(true, now)) _store.AddProgramDay(s.Sid, p.Day, p.Id, p.Label, p.Ms);
         logger.LogInformation("{Kid}: parent mode over", KidName(s.Sid));
+        // Unlock turns program counting back on; a session that is locked now keeps it off until it is unlocked.
         if (Win.SessionUnlocked(s.SessionId)) Unlock(s);
     }
 
@@ -414,6 +413,9 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
         try
         {
             if (!_sessions.TryGetValue(sessionId, out var s)) return;
+            // Without its tray nothing is known to be in front, so the last program stops counting (docs/SPEC.md §12.9);
+            // the tray sends what is in front again when it is back.
+            foreach (var p in s.Programs.Front(null, null, _clock.NowMs())) _store.AddProgramDay(s.Sid, p.Day, p.Id, p.Label, p.Ms);
             if (s.TrayKills.OnExit(_clock.NowMs(), Guid.NewGuid().ToString()) is not { } e) return;
             Queue(s.Sid, e);
             s.CaughtPending = true;
