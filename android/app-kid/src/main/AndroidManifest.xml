@@ -142,6 +142,8 @@
                 android:resource="@xml/device_admin" />
             <intent-filter>
                 <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
+                <!-- The batches of network logs (docs/SPEC.md §12.10). -->
+                <action android:name="android.app.action.NETWORK_LOGS_AVAILABLE" />
             </intent-filter>
         </receiver>
 

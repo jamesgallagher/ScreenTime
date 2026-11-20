@@ -48,7 +48,7 @@ data class BlocksNow(
 class AppWatcher(context: Context, private val api: ApiClient, private val now: () -> Long = System::currentTimeMillis) {
     private val context = context.applicationContext
     private val pm = this.context.packageManager
-    private val prefs = this.context.getSharedPreferences("apps", Context.MODE_PRIVATE)
+    private val prefs = this.context.getSharedPreferences(APPS_PREFS, Context.MODE_PRIVATE)
     private val firstUsePrefs = this.context.getSharedPreferences("apps_first_use", Context.MODE_PRIVATE)
     private var warned = false
 
@@ -354,8 +354,6 @@ class AppWatcher(context: Context, private val api: ApiClient, private val now: 
         const val HIDDEN = "hidden"
         const val WARNED = "warned"
         const val DONE = "done"
-        const val SPANS = "spans"
-        const val PARENT_FROM = "parentFrom"
         const val USAGE_SENT = "usageSent"
         const val HAD_ACCESS = "hadAccess"
 
