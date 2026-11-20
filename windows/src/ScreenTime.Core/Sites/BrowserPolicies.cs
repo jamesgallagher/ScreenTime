@@ -89,7 +89,8 @@ public static class BrowserPolicies
         {
             try
             {
-                using var key = Registry.LocalMachine.OpenSubKey(value.RegistryPath);
+                // Read-write: DeleteValue on a key opened read-only throws, and the catch would hide it.
+                using var key = Registry.LocalMachine.OpenSubKey(value.RegistryPath, true);
                 if (key is null) continue;
                 if (key.GetValue(value.Name) is not null)
                 {
@@ -135,7 +136,8 @@ public static class BrowserPolicies
         try
         {
             var path = RelativePath(fullPath);
-            using var parent = Registry.LocalMachine.OpenSubKey(Path.GetDirectoryName(path) ?? "");
+            // Read-write: DeleteSubKey on a key opened read-only throws, and the catch would hide it.
+            using var parent = Registry.LocalMachine.OpenSubKey(Path.GetDirectoryName(path) ?? "", true);
             var name = Path.GetFileName(path);
             if (parent is null) return;
             using var subkey = parent.OpenSubKey(name);

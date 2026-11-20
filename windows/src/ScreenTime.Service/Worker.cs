@@ -315,8 +315,9 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
         _dns = new DnsLogSubscriber((l, p) => _dnsChannel.Writer.TryWrite((l, p)));
         try
         {
-            _dns.Subscribe();
-            logger.LogInformation("sites: dns log subscribed");
+            var error = _dns.Subscribe();
+            if (error == 0) logger.LogInformation("sites: dns log subscribed");
+            else logger.LogWarning("sites: could not subscribe to the dns log (error {Error}); it is tried again at the next start", error);
         }
         catch (Exception e)
         {
@@ -920,7 +921,7 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
             if (rows.Count == 0) break;
             try
             {
-                var body = new SiteLookupsUpload(rows.Select(r => new SiteLookupIn(IsoUtc(r.AtMs), r.Host, r.Program)).ToList());
+                var body = new SiteLookupsUpload(rows.Select(r => new SiteLookupIn(IsoUtc.ToIso(r.AtMs), r.Host, r.Program)).ToList());
                 var res = await api.PostDeviceSiteLookupsAsync(body, ct);
                 _store.RemoveSiteLookups(rows.Select(r => r.Id).ToArray());
                 sent += rows.Count;
@@ -955,7 +956,7 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
             if (rows.Count == 0) break;
             try
             {
-                var body = new SiteTitlesUpload(rows.Select(r => new SiteTitleIn(IsoUtc(r.AtMs), r.Sec, r.Program, r.Title)).ToList());
+                var body = new SiteTitlesUpload(rows.Select(r => new SiteTitleIn(IsoUtc.ToIso(r.AtMs), r.Sec, r.Program, r.Title)).ToList());
                 var res = await api.PostDeviceSiteTitlesAsync(body, ct);
                 _store.RemoveTitleSpans(rows.Select(r => r.Id).ToArray());
                 sent += rows.Count;
@@ -965,6 +966,7 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
             {
                 throw;
             }
+
             catch (Exception e)
             {
                 logger.LogWarning("{Kid}: could not send site titles ({Message})", KidName(sid), e.Message);
@@ -973,9 +975,6 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
         }
         if (sent > 0) logger.LogInformation("{Kid}: sites: titles sent {Sent} ({Received} new)", KidName(sid), sent, received);
     }
-
-    /// <summary>A unix-millisecond instant as an ISO 8601 UTC instant (docs/SPEC.md §12.10).</summary>
-    private static string IsoUtc(long atMs) => new DateTimeOffset(atMs, TimeSpan.Zero).ToString("O");
 
     /// <summary>
     /// Tells the server which known games this PC has (docs/SPEC.md §12.6), once per account, and again only when the

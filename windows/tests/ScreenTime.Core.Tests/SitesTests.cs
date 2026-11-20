@@ -1,3 +1,5 @@
+using System.Text.Json;
+using ScreenTime.Core.Api;
 using ScreenTime.Core.Sites;
 using Xunit;
 
@@ -201,5 +203,34 @@ public sealed class SitesTests
         clock.Front("msedge.exe", "A", 0);
         var spans = clock.Front("msedge.exe", "B", 100_000_000);
         Assert.Equal([new TitleSpan(0, 86_400, "msedge.exe", "A")], spans);
+    }
+
+    /// <summary>The C# client's SiteTitlesUpload must serialise to the server's field names: a top-level
+    /// "titles" array, each item with "at", "sec", "package" and "title" (lower case). A mismatch is a 422.</summary>
+    [Fact]
+    public void TheSiteTitlesUploadSerialisesWithTheServerFieldNames()
+    {
+        var body = new SiteTitlesUpload([new SiteTitleIn("2026-11-10T01:00:00Z", 42, "msedge.exe", "how to draw - Search")]);
+        var json = JsonSerializer.Serialize(body, ApiJsonContext.Default.SiteTitlesUpload);
+        Assert.Contains("\"titles\"", json);
+        Assert.Contains("\"at\"", json);
+        Assert.Contains("\"sec\"", json);
+        Assert.Contains("\"package\"", json);
+        Assert.Contains("\"title\"", json);
+        // The PascalCase property names must not leak into the JSON.
+        Assert.DoesNotContain("\"At\"", json);
+        Assert.DoesNotContain("\"Sec\"", json);
+        Assert.DoesNotContain("\"Package\"", json);
+        Assert.DoesNotContain("\"Title\"", json);
+        Assert.DoesNotContain("\"Titles\"", json);
+    }
+
+    /// <summary>The at field is milliseconds since the Unix epoch as a UTC instant ending in Z
+    /// (docs/SPEC.md §12.10). The old code used the ticks constructor and a +00:00 offset, which sent year-0001
+    /// dates and a 422.</summary>
+    [Fact]
+    public void IsoUtcFormatsUnixMillisecondsAsUtcZ()
+    {
+        Assert.Equal("2026-11-20T08:49:36.404Z", IsoUtc.ToIso(1_795_164_576_404));
     }
 }

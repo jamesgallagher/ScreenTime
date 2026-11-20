@@ -218,8 +218,8 @@ internal static partial class Win
                     {
                         var size = (uint)1024;
                         if (!QueryFullProcessImageName(handle, 0, (nint)buf, ref size)) return "unknown";
-                        var path = new string(buf);
-                        return Path.GetFileName(path);
+                        var path = new string(buf, 0, (int)size);
+                        return ScreenTime.Core.Programs.ProgramNames.Id(path);
                     }
                     finally
                     {
@@ -263,15 +263,18 @@ internal static partial class Win
         }
     }
 
-    internal delegate int EvtRecordHandler(nint pEventRecord, nint eventContext, nint evtCallbackContext);
 
-    [LibraryImport("advapi32.dll", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
-    internal static partial nint EvtSubscribe(nint eventHandle, string eventChannelPath, string eventQuery, nint evtContext, EvtRecordHandler handler, uint flags, nint parameter);
+    /// <summary>wevtapi!EvtSubscribe, the real 8-parameter signature. Returns a subscription handle (0 on
+    /// failure, with the error in GetLastError). Flags 1 is EvtSubscribeToFutureEvents (2 start at the oldest
+    /// record, 3 start after a bookmark).</summary>
+    [LibraryImport("wevtapi.dll", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
+    internal static unsafe partial nint EvtSubscribe(nint session, nint signalEvent, string channelPath, string query, nint bookmark, nint context, delegate* unmanaged[Stdcall]<uint, nint, nint, uint> callback, uint flags);
 
-    [LibraryImport("advapi32.dll")]
-    internal static partial void EvtClose(nint handle);
+    [LibraryImport("wevtapi.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool EvtClose(nint handle);
 
-    [LibraryImport("advapi32.dll", SetLastError = true)]
+    [LibraryImport("wevtapi.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool EvtRender(nint eventHandle, nint propertySet, uint renderContext, nint value, ref int valueSize, out int propertyCount);
 
