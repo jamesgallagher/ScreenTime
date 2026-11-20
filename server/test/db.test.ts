@@ -53,8 +53,10 @@ describe.skipIf(!url)('database', () => {
       'parent_sessions',
       'parents',
       'schedule_versions',
+      'site_classes',
       'site_daily',
       'site_lookups',
+      'site_overrides',
       'site_titles',
       'sos_acks',
       'sos_incidents',
@@ -68,14 +70,15 @@ describe.skipIf(!url)('database', () => {
     await expect(runMigrations(db)).resolves.toBeUndefined();
   });
 
-  it('turns on row-level security for every table except otp_codes', async () => {
+  it('turns on row-level security for every table except otp_codes and the shared site_classes', async () => {
     const result = await pool.query<{ relname: string; relrowsecurity: boolean }>(
       "SELECT relname, relrowsecurity FROM pg_class WHERE relnamespace = 'public'::regnamespace AND relkind = 'r'",
     );
     for (const row of result.rows) {
+      // site_classes is shared by every family (a domain's kind says nothing about a family), so it has no RLS.
       expect({ table: row.relname, rls: row.relrowsecurity }).toEqual({
         table: row.relname,
-        rls: row.relname !== 'otp_codes',
+        rls: row.relname !== 'otp_codes' && row.relname !== 'site_classes',
       });
     }
   });
