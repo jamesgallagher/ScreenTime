@@ -23,6 +23,16 @@ The repo has about 750 files (1.5 MB of text). **You cannot hold it all, and try
 - `server/drizzle/meta/` (written by `db:generate`), `pnpm-lock.yaml`, images and fonts.
 - Other cards in `docs/cards/` (only yours), unless your card names one as an example.
 
+In OpenCode these are blocked by `opencode.jsonc` (reading them is refused). To see one generated type, search for its name: the search shows the line.
+
+## Tools for a card (OpenCode)
+
+- **`/card NNN`** starts or resumes a card: it shows the branch and changes, then has you read the card and list the files you will touch before opening anything.
+- **`/review-card NNN`** runs the `card-reviewer` agent: a read-only check of the branch against the card's acceptance criteria. Run it before the handback and fix what it finds.
+- **`/handback NNN`** writes the handback with the commit, branch, changed files and PR taken straight from git.
+- **Skills** load when they fit: `server-route`, `db-migration`, `card-tests`, `sandbox-run`, `emulator-run` (in `.opencode/skills/`).
+- **Limits** (`opencode.jsonc`): pushing to `main`, force-pushing, merging a PR, `Stop-Process -Name` and `taskkill /IM` are refused; editing generated files and secrets is refused.
+
 ## Where things are
 
 | Area | Where | Notes |
