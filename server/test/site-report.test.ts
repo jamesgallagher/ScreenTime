@@ -476,6 +476,22 @@ describe.skipIf(!url)('the websites report', () => {
     expect((await api.del(`/v1/sites/youtube.com/class`, dad)).status).toBe(204);
   });
 
+  // Added by Claude in review: a parent's class also wins over a site the classifier has already sorted.
+  it("a parent's own class wins over the classifier's for a sorted site, and clearing it brings the classifier's back", async () => {
+    await loadFixtureS();
+    await loadClassesAndTitles();
+    expect((await api.put(`/v1/sites/kastatic.org/class`, dad, { kind: 'website', category: 'games' })).status).toBe(200);
+    const week = await report(`kidId=${kid}&period=week&date=2026-11-11`);
+    const kastatic = week.body.sites.find((s: { site: string }) => s.site === 'kastatic.org');
+    expect(kastatic).toMatchObject({ kind: 'website', category: 'games', source: 'parent', owner: 'khanacademy.org' });
+    expect(week.body.behindTheScenes.map((s: { site: string }) => s.site)).toEqual(['googlevideo.com']);
+
+    expect((await api.del(`/v1/sites/kastatic.org/class`, dad)).status).toBe(204);
+    const after = await report(`kidId=${kid}&period=week&date=2026-11-11`);
+    const back = after.body.behindTheScenes.find((s: { site: string }) => s.site === 'kastatic.org');
+    expect(back).toMatchObject({ kind: 'cdn', category: 'education', source: 'classifier' });
+  });
+
   it('refuses a bad site, kind or category, a device token, and another family', async () => {
     await loadFixtureS();
     expect((await api.put(`/v1/sites/${encodeURIComponent('not a site!')}/class`, dad, { kind: 'website', category: 'video' })).status).toBe(422);

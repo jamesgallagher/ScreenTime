@@ -115,7 +115,8 @@ export async function classifyPending(deps: ClassifierDeps, io: ClassifierIo): P
   }
 
   const stored: Stored[] = [];
-  for (let i = 0; i < candidates.length; i += 50) {
+  let failed: 'unavailable' | 'bad_answer' | null = null;
+  for (let i = 0; i < candidates.length && failed === null; i += 50) {
     const batch = candidates.slice(i, i + 50);
     result.asked += batch.length;
 
@@ -142,14 +143,14 @@ export async function classifyPending(deps: ClassifierDeps, io: ClassifierIo): P
       });
       if (response.status !== 200) {
         console.log(`classifier: unavailable (HTTP ${response.status})`);
-        result.status = 'unavailable';
-        return result;
+        failed = 'unavailable';
+        break;
       }
       content = await response.text();
     } catch (err) {
       console.log(`classifier: unavailable (${reasonOf(err)})`);
-      result.status = 'unavailable';
-      return result;
+      failed = 'unavailable';
+      break;
     }
 
     let answer: z.infer<typeof Answer>;
@@ -158,9 +159,13 @@ export async function classifyPending(deps: ClassifierDeps, io: ClassifierIo): P
       answer = Answer.parse(JSON.parse(envelope.choices[0]?.message.content ?? '') as unknown);
     } catch (err) {
       console.log(`classifier: bad answer (${reasonOf(err)})`);
-      await countAttempts(deps.db, batch);
-      result.status = 'bad_answer';
-      return result;
+      // A site whose answer could not be read three times is stored as unknown, like a site missing three times.
+      for (const site of await countAttempts(deps.db, batch, settings.model)) {
+        stored.push({ site, kind: 'unknown', confidence: 0, firstHost: batch.find((c) => c.site === site)?.hosts[0] ?? null });
+        result.stored += 1;
+      }
+      failed = 'bad_answer';
+      break;
     }
 
     const asked = new Set(batch.map((c) => c.site));
@@ -260,6 +265,11 @@ export async function classifyPending(deps: ClassifierDeps, io: ClassifierIo): P
     }
   }
 
+  // A run that stopped early still checks what it stored before it stopped.
+  if (failed !== null) {
+    result.status = failed;
+    return result;
+  }
   result.status = 'done';
   console.log(`classifier: ${result.stored} sites sorted (${result.blocked} blocked by the family filter)`);
   return result;
@@ -322,12 +332,27 @@ async function pendingSites(db: Db): Promise<Candidate[]> {
   }));
 }
 
-/** Adds one attempt to every site of a request whose answer could not be read. */
-async function countAttempts(db: Db, batch: Candidate[]): Promise<void> {
+/**
+ * Adds one attempt to every site of a request whose answer could not be read. A site that reaches 3 is stored as
+ * unknown / other with confidence 0, as a site missing from three answers is; returns those sites.
+ */
+async function countAttempts(db: Db, batch: Candidate[], model: string): Promise<string[]> {
   await db
     .insert(siteClasses)
     .values(batch.map((c) => ({ site: c.site, attempts: 1 })))
     .onConflictDoUpdate({ target: siteClasses.site, set: { attempts: sql`${siteClasses.attempts} + 1` } });
+  const given = await db
+    .update(siteClasses)
+    .set({ kind: 'unknown', category: 'other', owner: null, label: null, confidence: 0, model, classifiedAt: new Date() })
+    .where(
+      and(
+        inArray(siteClasses.site, batch.map((c) => c.site)),
+        isNull(siteClasses.kind),
+        sql`${siteClasses.attempts} >= 3`,
+      ),
+    )
+    .returning({ site: siteClasses.site });
+  return given.map((g) => g.site);
 }
 
 /**

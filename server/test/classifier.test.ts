@@ -349,6 +349,40 @@ describe.skipIf(!url)('the website classifier', () => {
     expect(rows.every((r) => r.kind === null && r.attempts === 1)).toBe(true);
   });
 
+  // Added by Claude in review: a later request failing must not skip the family filter for what is already stored.
+  it('still runs the family filter on the sites of the first request when a later request fails', async () => {
+    await addExtraSites(120);
+    resolver = async (name) => (name === 'abc.net.au' ? ['0.0.0.0'] : ['203.0.113.9']);
+    answers.push(() =>
+      jsonAnswer({ sites: [{ site: 'abc.net.au', kind: 'unknown', category: 'other', owner: null, label: null, confidence: 0.1 }] }),
+    );
+    answers.push(() => new Response('down', { status: 503 }));
+    const result = await run();
+    expect(result).toMatchObject({ status: 'unavailable', stored: 1, blocked: 1 });
+    expect(calls).toHaveLength(2);
+    expect(resolved).toEqual(['abc.net.au']);
+    const abc = await classOf('abc.net.au');
+    expect(abc?.familyDnsBlocked).toBe(true);
+    expect(abc?.kind).toBe('website');
+    expect(abc?.category).toBe('adult');
+  });
+
+  // Added by Claude in review: an answer that cannot be read three times ends as unknown, never stuck unsorted.
+  it('stores a site whose answer could not be read three times as unknown, and stops asking', async () => {
+    for (let i = 0; i < 3; i++) {
+      answers.push(() => new Response(JSON.stringify({ choices: [{ message: { content: 'not json' } }] }), { status: 200 }));
+      // The family filter off, so this checks only the attempt rule (it is checked on its own above).
+      expect((await run(settings({ CLASSIFIER_FAMILY_DNS: '' }))).status).toBe('bad_answer');
+    }
+    const rows = await classes();
+    expect(rows).toHaveLength(7);
+    expect(rows.every((r) => r.attempts === 3 && r.kind === 'unknown' && r.category === 'other' && r.confidence === 0)).toBe(true);
+    expect(rows.every((r) => r.model === 'Qwen3.8-27B')).toBe(true);
+    const count = calls.length;
+    expect((await run(settings({ CLASSIFIER_FAMILY_DNS: '' }))).status).toBe('nothing');
+    expect(calls).toHaveLength(count);
+  });
+
   it('sends 127 sites in three requests of 50, 50 and 27', async () => {
     await addExtraSites(120);
     for (const _ of [0, 1, 2]) answers.push(() => jsonAnswer(ANSWER_EMPTY));
