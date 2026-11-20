@@ -190,26 +190,26 @@ Paste the **real totals** each test runner prints (files and tests, passed and f
 
 Write `windows/installer/sandbox/Test-Programs.ps1` and `windows/installer/sandbox/in-sandbox-programs.ps1`, modelled on `Test-TrayExit.ps1` and `in-sandbox-trayexit.ps1` (same layout: a work folder under `C:\Users\james\OpenCode\Testing\temp\`, `in` and `out` mapped folders, the dev server reset, Sam's PC code, a LogonCommand, results in `out\results.txt`, the Sandbox shut down at the end). Each check prints `ok: …` or `FAILED: …`, and the last line is `=== done: <n> failed`.
 
-In the Sandbox (as WDAGUtilityAccount), in this order. **Corrected 20 Nov 2026 after Bob's first run** (Claude's mistakes in the first version: the Sandbox has no working Notepad, `MinimizeAll` does not minimise dialog windows such as Character Map, and the service writes only warnings and errors to the event log, so its `front:` and `programs: sent` lines never appear there). Every check prints `ok: …` or `FAILED: …`; a failed check never lets the script carry on silently.
+In the Sandbox (as WDAGUtilityAccount), in this order. **Corrected 20 Nov 2026 after Bob's first run** (Claude's mistakes in the first version: the Sandbox has no working Notepad, `MinimizeAll` does not minimise dialog windows such as Character Map, and the service writes only warnings and errors to the event log, so its `front:` and `programs: sent` lines never appear there), and **shortened after his second run** (a correct run took about 9 minutes; this one takes about 5). Every check prints `ok: …` or `FAILED: …`; a failed check never lets the script carry on silently. Every line of `results.txt` starts with the time, so the host looks for `=== done:` **anywhere** in a line (never `^=== done:`).
 
 1. Install the MSI, enrol the account as Sam, point the service at this session with `--session <id> --dry-lock` and restart it, wait for the tray. Check: `ok: tray running`.
-2. Start Character Map (`charmap.exe`) and make sure it is in front (if `GetForegroundWindow` is not its window, bring it to the front with `SetForegroundWindow`, using the documented ALT-key press first if needed). Check what is in front **before** timing: `ok: Character Map in front` (its exe is `charmap.exe`). Keep it in front 90 s.
-3. Start About Windows (`winver.exe`) the same way; check `ok: winver in front`; keep it 60 s.
-4. Close both programs by the process ids the script started (`Stop-Process -Id`, inside the Sandbox only); check that the window in front now belongs to `explorer.exe` with class `Progman` or `WorkerW`, or that there is none: `ok: nothing in front`. Wait 60 s.
-5. Keep the Sandbox running 150 s more, so the service syncs at least twice, then shut it down.
+2. Start Character Map (`charmap.exe`) and make sure it is in front (if `GetForegroundWindow` is not its window, bring it to the front with `SetForegroundWindow`, using the documented ALT-key press first if needed). Check what is in front **before** timing: `ok: Character Map in front` (its exe is `charmap.exe`). Keep it in front **40 s**.
+3. Close Character Map by its process id, start About Windows (`winver.exe`) the same way; check `ok: winver in front`; keep it **30 s**.
+4. Close About Windows by its process id (`Stop-Process -Id`, inside the Sandbox only); check that the window in front now belongs to `explorer.exe` with class `Progman` or `WorkerW`, or that there is none: `ok: nothing in front`. Write `=== 5. waiting for the host` to `results.txt`.
+5. Wait for the host's go-ahead: check every 5 s for `C:\in\stop.txt` (the host writes it into the `in` folder, which the Sandbox sees read-only), for at most 4 minutes. Then write `=== done: <n> failed` (and `FAILED: no go-ahead from the host after 240 s` if it timed out) and shut down.
 
-Back on the host, after the Sandbox closes, `Test-Programs.ps1` prints `server/scripts/dev-report.ts Sam day` for today and checks:
+Meanwhile on the host, `Test-Programs.ps1`, once `results.txt` has the `=== 5.` line: every 10 s, for at most 4 minutes, run `server/scripts/dev-report.ts Sam day` for today, until **two runs in a row** give the same seconds for both `charmap.exe` and `winver.exe` (the service uploads about once a minute, so the last upload after the programs closed is in). Then it writes `in\stop.txt`, waits for `=== done:` in `results.txt`, prints the last report and checks:
 
-- `charmap.exe` labelled `Character Map` with 80 to 100 seconds;
-- `winver.exe` labelled `Version Reporter Applet` with 50 to 70 seconds;
+- `charmap.exe` labelled `Character Map` with 35 to 45 seconds;
+- `winver.exe` labelled `Version Reporter Applet` with 25 to 35 seconds;
 - nothing else above 15 seconds (the time on the desktop before step 2 and after step 4 is not counted), except the console that runs the script (`powershell.exe`, `conhost.exe`, `openconsole.exe` or `windowsterminal.exe`), which is printed but not checked;
 - the PC has `appsRecorded: true`.
 
-(Windows Sandbox has no Store apps, so neither Calculator nor Notepad is there: Claude's spike on James's PC covered the Store-app path. Bob's first run already showed the server receiving `charmap.exe`, labelled `Character Map`, from the Sandbox.)
+(Windows Sandbox has no Store apps, so neither Calculator nor Notepad is there: Claude's spike on James's PC covered the Store-app path. Bob's first two runs already showed the server receiving `charmap.exe` "Character Map" and `winver.exe` "Version Reporter Applet" from the Sandbox, with nothing for the desktop.)
 
-Then paste the **whole** of `out\results.txt` and the host output into the handback. A summary counts as `NOT RUN`. The run takes about 10 minutes; a Sandbox window opens and closes by itself: do not click in it. Nothing is installed on James's PC and no program is opened on his desktop.
+Then paste the **whole** of `out\results.txt` and the host output into the handback. A summary counts as `NOT RUN`. The run takes about 5 minutes (about 2 of them installing the MSI); a Sandbox window opens and closes by itself: do not click in it. Nothing is installed on James's PC and no program is opened on his desktop.
 
-Get the MSI from your PR's CI run:
+**Run the Sandbox once, at the end**, for evidence: check logic with the unit tests first. **Reuse the MSI you already downloaded** when nothing under `windows/src` has changed since its CI run (script and test changes do not need a new MSI); download a new one only when `git diff --name-only <that run's commit> HEAD -- windows/src` prints something. The MSI from your PR's CI run:
 
 ```powershell
 $run = (gh run list --branch bob/card-067-pc-programs --workflow Windows --limit 1 --json databaseId --jq '.[0].databaseId')
