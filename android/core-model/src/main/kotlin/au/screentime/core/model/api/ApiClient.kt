@@ -380,6 +380,20 @@ class ApiClient(
     }
 
     /**
+     * The apps report of a kid or shared device.
+     *
+     * `GET /v1/reports/apps`
+     */
+    suspend fun getReportsApps(
+        kidId: String,
+        period: ReportPeriod,
+        date: String? = null,
+        deviceId: String? = null,
+    ): AppReport {
+        return call(HttpMethod.Get, "/v1/reports/apps", auth = true, query = listOf("kidId" to kidId, "period" to period, "date" to date, "deviceId" to deviceId)).body()
+    }
+
+    /**
      * A kid's time adjustments for one day.
      *
      * `GET /v1/kids/{kidId}/grants`
