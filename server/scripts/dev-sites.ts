@@ -41,7 +41,7 @@ try {
   }
   const [rawRow] = (await db.execute<{ count: number }>(sql`
     select count(*) as count from site_lookups
-    where device_id in (${sql.join(deviceIds.map((id) => sql`${id}`), sql`,`)})
+    where device_id = any(${`{${deviceIds.join(',')}}`}::uuid[])
       and to_char(at at time zone ${family.timezone}, 'YYYY-MM-DD') = ${day}
   `)).rows;
   console.log(`raw site_lookups for ${day}: ${rawRow.count}`);
