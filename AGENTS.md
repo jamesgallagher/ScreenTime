@@ -32,6 +32,7 @@ In OpenCode these are blocked by `opencode.jsonc` (reading them is refused). To 
 - **`/handback NNN`** writes the handback with the commit, branch, changed files and PR taken straight from git.
 - **Skills** load when they fit: `server-route`, `db-migration`, `card-tests`, `sandbox-run`, `emulator-run` (in `.opencode/skills/`).
 - **Limits** (`opencode.jsonc`): pushing to `main`, force-pushing, merging a PR, `Stop-Process -Name` and `taskkill /IM` are refused; editing generated files and secrets is refused.
+- **Loop guard** (`.opencode/plugins/loop-guard.js`): the same call 3 times in a row, two calls taking turns, or 25 reads in a row are refused with a message; after 6 refusals in 10 minutes the turn is stopped. When it refuses, do something different: never retry the same thing.
 
 ## Where things are
 
