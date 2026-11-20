@@ -306,7 +306,7 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
     private void StartSites()
     {
         var failed = BrowserPolicies.WriteAll();
-        foreach (var v in failed) logger.LogWarning("sites: could not set browser policy {KeyPath} {Name}", v.KeyPath, v.Name);
+        foreach (var (v, error) in failed) logger.LogWarning("sites: could not set browser policy {KeyPath} {Name} ({Error})", v.KeyPath, v.Name, error);
         if (failed.Count == 0) logger.LogInformation("sites: browser policies set");
 
         if (Win.EnableDnsLog()) logger.LogInformation("sites: dns log on");
