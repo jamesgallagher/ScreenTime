@@ -3386,6 +3386,58 @@
           "locations"
         ]
       },
+      "SiteLookupsReceived": {
+        "type": "object",
+        "properties": {
+          "received": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "received"
+        ]
+      },
+      "SiteLookupsUpload": {
+        "type": "object",
+        "properties": {
+          "lookups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SiteLookupIn"
+            },
+            "minItems": 1,
+            "maxItems": 1000
+          }
+        },
+        "required": [
+          "lookups"
+        ]
+      },
+      "SiteLookupIn": {
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "host": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 253,
+            "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$"
+          },
+          "package": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          }
+        },
+        "required": [
+          "at",
+          "host",
+          "package"
+        ]
+      },
       "PushTokenPut": {
         "type": "object",
         "properties": {
@@ -9139,6 +9191,62 @@
           },
           "409": {
             "description": "Conflicts with existing data.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/device/site-lookups": {
+      "post": {
+        "tags": [
+          "device"
+        ],
+        "summary": "Upload website lookups",
+        "description": "The DNS lookups this device's browsers and apps made. A lookup more than 30 days old or more than 1 day ahead is skipped; a repeat adds nothing.",
+        "security": [
+          {
+            "deviceAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SiteLookupsUpload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Stored.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteLookupsReceived"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the code or token is wrong or expired.",
             "content": {
               "application/json": {
                 "schema": {

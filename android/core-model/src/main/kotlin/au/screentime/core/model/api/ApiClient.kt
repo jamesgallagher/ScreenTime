@@ -893,6 +893,17 @@ class ApiClient(
     }
 
     /**
+     * Upload website lookups.
+     *
+     * `POST /v1/device/site-lookups`
+     */
+    suspend fun postDeviceSiteLookups(
+        body: SiteLookupsUpload,
+    ): SiteLookupsReceived {
+        return call(HttpMethod.Post, "/v1/device/site-lookups", auth = true, body = body, bodyType = typeInfo<SiteLookupsUpload>()).body()
+    }
+
+    /**
      * Set this parent app's push token.
      *
      * `PUT /v1/me/push-token`
