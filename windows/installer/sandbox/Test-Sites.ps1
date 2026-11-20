@@ -58,8 +58,8 @@ $waited = 0
 while (-not ((Test-Path $results) -and (Select-String -Path $results -Pattern "=== 5\." -Quiet)) -and $waited -lt 300) { Start-Sleep 5; $waited += 5 }
 "--- the Sandbox reached the wait (saw it after $waited s)"
 
-# Poll dev-sites.ts every 10 s until two runs in a row print the same output (the service syncs about once
-# a minute); at most 4 minutes.
+# Poll dev-sites.ts every 10 s until its output has not changed for 70 s (the service syncs about once
+# a minute, so a shorter wait can stop between two uploads); at most 4 minutes.
 $last = ""
 $stable = 0
 $t = 0
@@ -69,7 +69,7 @@ while ($t -lt 240) {
     # site row is there (two empty runs must not be taken as the uploads being done).
     $siteRows = (($now -split "(?m)^titles:" | Select-Object -First 1) -split "`n") | Where-Object { $_ -match '^\S+ \| \S+ \| \d+ \|' }
     if ($now -eq $last -and ($siteRows | Measure-Object).Count -ge 1) { $stable++ } else { $stable = 0; $last = $now }
-    if ($stable -ge 1) { break }
+    if ($stable -ge 7) { break }
     Start-Sleep 10
     $t += 10
 }

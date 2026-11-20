@@ -276,34 +276,33 @@ internal static partial class Win
 
     [LibraryImport("wevtapi.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
-    internal static partial bool EvtRender(nint eventHandle, nint propertySet, uint renderContext, nint value, ref int valueSize, out int propertyCount);
+    internal static partial bool EvtRender(nint context, nint fragment, uint flags, int bufferSize, nint buffer, out int bufferUsed, out int propertyCount);
 
     /// <summary>The event's XML (an event 3008), or null when it cannot be rendered (docs/SPEC.md §12.10).</summary>
-    internal static string? RenderEventXml(nint pEventRecord)
+    internal static string? RenderEventXml(nint hEvent)
     {
-        unsafe
+        // EvtRender(Context, Fragment, Flags, BufferSize, Buffer, BufferUsed, PropertyCount): the first call with no
+        // buffer fails with ERROR_INSUFFICIENT_BUFFER and gives the size in BYTES; the XML is a UTF-16 string with
+        // its terminating null. Flags 1 is EvtRenderEventXml (0 values, 2 bookmark).
+        const uint EvtRenderEventXml = 1;
+        try
         {
+            EvtRender(nint.Zero, hEvent, EvtRenderEventXml, 0, nint.Zero, out var needed, out _);
+            if (needed <= 0) return null;
+            var buffer = Marshal.AllocHGlobal(needed);
             try
             {
-                var probe = (char*)Marshal.AllocHGlobal(sizeof(char));
-                var size = 0;
-                EvtRender(pEventRecord, nint.Zero, 3 /* EvtRenderEventXml */, (nint)probe, ref size, out _);
-                Marshal.FreeHGlobal((nint)probe);
-                if (size <= 0) return null;
-                var value = (char*)Marshal.AllocHGlobal(size * sizeof(char));
-                try
-                {
-                    return EvtRender(pEventRecord, nint.Zero, 3, (nint)value, ref size, out _) ? new string(value) : null;
-                }
-                finally
-                {
-                    Marshal.FreeHGlobal((nint)value);
-                }
+                if (!EvtRender(nint.Zero, hEvent, EvtRenderEventXml, needed, buffer, out var used, out _)) return null;
+                return Marshal.PtrToStringUni(buffer, Math.Max(0, used / 2 - 1));
             }
-            catch
+            finally
             {
-                return null;
+                Marshal.FreeHGlobal(buffer);
             }
+        }
+        catch
+        {
+            return null;
         }
     }
 }
