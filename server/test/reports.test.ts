@@ -330,64 +330,61 @@ describe.skipIf(!url)('reports', () => {
     expect(body.devices.map((d) => d.deviceId)).toEqual([phone.id, tablet.id, pc.id]);
   });
 
-  // Criterion 6: screen time (union of segments)
-  // Fixed date: 2026-11-20 (a Friday). The week is 2026-11-16 to 2026-11-22.
-  // The test zone is midday, so local midnight is about 12 hours away.
-  // All segments are in the past (before 2026-11-20), so they are not clipped by now.
+  // Criterion 6: screen time (union of segments). These use fixed past dates, so the family is moved to UTC first:
+  // the midday zone above changes with the hour the tests run, and fixed instants need a fixed zone.
+  async function familyInUtc() {
+    await db.update(families).set({ timezone: 'UTC' }).where(eq(families.id, family));
+  }
 
-  it('two devices in the same pool give the union length', async () => {
-    // Two tablets (both screens pool) on 2026-11-10:
-    // Tablet 1: 2026-11-09T12:00:00Z to 2026-11-09T13:00:00Z (10:00–11:00 local in midday zone).
-    // Tablet 2: 2026-11-09T12:30:00Z to 2026-11-09T13:30:00Z (10:30–11:30 local).
-    // Union: 12:00–13:30 = 90 min = 5400 s.
+  async function screenTimeOf(period: 'day' | 'week', date: string, pool: 'screens' | 'phone') {
+    const res = await api.get(`/v1/reports/apps?kidId=${kid}&period=${period}&date=${date}`, dad);
+    expect(res.status).toBe(200);
+    const body = res.body as { screenTime: { pool: string; usedSec: number }[] };
+    return body.screenTime.find((p) => p.pool === pool)?.usedSec;
+  }
+
+  it('two devices in the same pool give the union length, not the sum', async () => {
+    await familyInUtc();
     const tablet2 = await addDevice(family, kid, 'android', 'tablet', 'Tablet 2');
     await db.insert(usageSegments).values([
-      { id: randomUUID(), familyId: family, kidId: kid, deviceId: tablet.id, pool: 'screens', startedAt: new Date('2026-11-09T12:00:00Z'), endedAt: new Date('2026-11-09T13:00:00Z') },
-      { id: randomUUID(), familyId: family, kidId: kid, deviceId: tablet2.id, pool: 'screens', startedAt: new Date('2026-11-09T12:30:00Z'), endedAt: new Date('2026-11-09T13:30:00Z') },
+      { id: randomUUID(), familyId: family, kidId: kid, deviceId: tablet.id, pool: 'screens', startedAt: new Date('2026-11-10T10:00:00Z'), endedAt: new Date('2026-11-10T11:00:00Z') },
+      { id: randomUUID(), familyId: family, kidId: kid, deviceId: tablet2.id, pool: 'screens', startedAt: new Date('2026-11-10T10:30:00Z'), endedAt: new Date('2026-11-10T11:30:00Z') },
     ]);
-    const res = await api.get(`/v1/reports/apps?kidId=${kid}&period=day&date=2026-11-10`, dad);
-    const body = res.body as { screenTime: { pool: string; usedSec: number }[] };
-    const screensPool = body.screenTime.find((p) => p.pool === 'screens');
-    expect(screensPool?.usedSec).toBe(5400);
+    // 10:00–11:30 = 5400 s; a plain sum would be 7200.
+    expect(await screenTimeOf('day', '2026-11-10', 'screens')).toBe(5400);
   });
 
   it('a segment across the week last midnight counts only the part in the week', async () => {
-    // The week holding 2026-11-09 is 2026-11-09 to 2026-11-15.
-    // In the midday zone, local midnight of 2026-11-15 is 2026-11-14T12:00:00Z.
-    // A segment from 2026-11-14T11:30:00Z to 2026-11-14T12:30:00Z crosses that midnight.
-    // Only the part from 11:30 to 12:00 (30 min = 1800 s) is in the week.
+    await familyInUtc();
+    // The week of 2026-11-09 runs Monday 9 to Sunday 15 November, so it ends at 2026-11-16T00:00 local.
     await db.insert(usageSegments).values({
-      id: randomUUID(),
-      familyId: family,
-      kidId: kid,
-      deviceId: phone.id,
-      pool: 'phone',
-      startedAt: new Date('2026-11-14T11:30:00Z'),
-      endedAt: new Date('2026-11-14T12:30:00Z'),
+      id: randomUUID(), familyId: family, kidId: kid, deviceId: phone.id, pool: 'phone',
+      startedAt: new Date('2026-11-15T23:30:00Z'), endedAt: new Date('2026-11-16T00:30:00Z'),
     });
-    const res = await api.get(`/v1/reports/apps?kidId=${kid}&period=week&date=2026-11-09`, dad);
-    const body = res.body as { screenTime: { pool: string; usedSec: number }[] };
-    const phonePool = body.screenTime.find((p) => p.pool === 'phone');
-    expect(phonePool?.usedSec).toBe(1800);
+    expect(await screenTimeOf('week', '2026-11-09', 'phone')).toBe(1800);
+    // The other half is in the next week.
+    expect(await screenTimeOf('week', '2026-11-16', 'phone')).toBe(1800);
   });
 
   it('a segment that starts before the period first midnight counts only the part inside', async () => {
-    // The day is 2026-11-10. In the midday zone, local midnight of 2026-11-10 is 2026-11-09T12:00:00Z.
-    // A segment from 2026-11-09T11:00:00Z to 2026-11-09T13:00:00Z crosses that midnight.
-    // Only the part from 12:00 to 13:00 (60 min = 3600 s) is in the day.
+    await familyInUtc();
     await db.insert(usageSegments).values({
-      id: randomUUID(),
-      familyId: family,
-      kidId: kid,
-      deviceId: phone.id,
-      pool: 'phone',
-      startedAt: new Date('2026-11-09T11:00:00Z'),
-      endedAt: new Date('2026-11-09T13:00:00Z'),
+      id: randomUUID(), familyId: family, kidId: kid, deviceId: phone.id, pool: 'phone',
+      startedAt: new Date('2026-11-09T23:00:00Z'), endedAt: new Date('2026-11-10T01:00:00Z'),
     });
-    const res = await api.get(`/v1/reports/apps?kidId=${kid}&period=day&date=2026-11-10`, dad);
-    const body = res.body as { screenTime: { pool: string; usedSec: number }[] };
-    const phonePool = body.screenTime.find((p) => p.pool === 'phone');
-    expect(phonePool?.usedSec).toBe(3600);
+    expect(await screenTimeOf('day', '2026-11-10', 'phone')).toBe(3600);
+  });
+
+  it('a closed segment that ends after now counts only up to now', async () => {
+    // The midday zone keeps today's report well away from local midnight.
+    const startedAt = new Date(Date.now() - 10 * 60_000);
+    await db.insert(usageSegments).values({
+      id: randomUUID(), familyId: family, kidId: kid, deviceId: phone.id, pool: 'phone',
+      startedAt, endedAt: new Date(Date.now() + 20 * 60_000),
+    });
+    const used = await screenTimeOf('day', localDate(), 'phone');
+    expect(used).toBeGreaterThanOrEqual(600);
+    expect(used).toBeLessThanOrEqual(605);
   });
 
   // Criterion 7: open segments

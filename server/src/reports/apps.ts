@@ -222,8 +222,7 @@ async function poolScreenTime(
     byPool.set(r.pool as Pool, [...(byPool.get(r.pool as Pool) ?? []), { start: s, end: e }]);
   }
   return pools
-    .map((pool) => ({ pool, usedSec: unionSec(byPool.get(pool) ?? []) }))
-    .filter((p) => p.usedSec > 0 || true);
+    .map((pool) => ({ pool, usedSec: unionSec(byPool.get(pool) ?? []) }));
 }
 
 /** The length of the union of intervals, in whole seconds (rounded down). */
