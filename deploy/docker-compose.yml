@@ -40,6 +40,9 @@ services:
       SMTP_FROM_NAME: ${SMTP_FROM_NAME:-}
       FIREBASE_SERVICE_ACCOUNT_JSON: ${FIREBASE_SERVICE_ACCOUNT_JSON:-}
       RELEASES_DIR: /releases
+      CLASSIFIER_URL: ${CLASSIFIER_URL:-}
+      CLASSIFIER_MODEL: ${CLASSIFIER_MODEL:-Qwen3.8-27B}
+      CLASSIFIER_FAMILY_DNS: ${CLASSIFIER_FAMILY_DNS-1.1.1.3}
     volumes:
       - ./releases:/releases:ro
     ports:

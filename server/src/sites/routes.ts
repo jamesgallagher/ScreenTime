@@ -1,12 +1,22 @@
 import { createRoute } from '@hono/zod-openapi';
-import { sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { getDomain } from 'tldts';
-import { SiteLookupsReceived, SiteLookupsUpload, SiteTitlesReceived, SiteTitlesUpload } from '@screentime/schemas';
+import {
+  SiteClassOverride,
+  SiteClassSaved,
+  SiteLookupIn,
+  SiteLookupsReceived,
+  SiteLookupsUpload,
+  SiteTitlesReceived,
+  SiteTitlesUpload,
+} from '@screentime/schemas';
 import type { AppDeps } from '../app.js';
+import { requireFamilyParent } from '../auth/guards.js';
 import { type FamilyTx, withFamily } from '../db/family.js';
-import { siteDaily, siteLookups, siteTitles } from '../db/schema.js';
+import { siteDaily, siteLookups, siteOverrides, siteTitles } from '../db/schema.js';
 import { requireDevice } from '../devices/auth.js';
-import { errorResponses, deviceBearer, jsonBody, jsonResponse } from '../openapi.js';
+import { ApiError } from '../errors.js';
+import { bearer, errorResponses, deviceBearer, jsonBody, jsonResponse } from '../openapi.js';
 import type { createRouter } from '../router.js';
 
 type Router = ReturnType<typeof createRouter>;
@@ -35,15 +45,43 @@ const siteTitlesRoute = createRoute({
   responses: { 200: jsonResponse('Stored.', SiteTitlesReceived), ...errorResponses(401, 422) },
 });
 
+const siteClassPutRoute = createRoute({
+  method: 'put',
+  path: '/v1/sites/{site}/class',
+  tags: ['reports'],
+  summary: "A family's own kind and category for a site",
+  description: "Replaces the classifier's kind and category for the whole family. `site` must be a host name.",
+  security: bearer,
+  request: { body: jsonBody(SiteClassOverride) },
+  responses: { 200: jsonResponse('Saved.', SiteClassSaved), ...errorResponses(401, 403, 422) },
+});
+
+const siteClassDeleteRoute = createRoute({
+  method: 'delete',
+  path: '/v1/sites/{site}/class',
+  tags: ['reports'],
+  summary: 'Back to the classifier for a site',
+  description: "Removes the family's own kind and category, so the classifier's answer shows again. 204 also when there was none.",
+  security: bearer,
+  responses: { 204: { description: 'Cleared.' }, ...errorResponses(401, 403, 422) },
+});
+
 /** The family's local date of an instant, worked out through the zone (never by adding hours). */
 async function localDay(tx: FamilyTx, timezone: string, at: Date): Promise<string> {
   const result = await tx.execute<{ day: string }>(sql`select to_char(${at} at time zone ${timezone}, 'YYYY-MM-DD') as day`);
   return result.rows[0]?.day ?? '';
 }
 
+/** 422 unless `site` is the host rule of SiteLookupIn: lower case, no trailing dot, not an IP address. */
+function checkSite(site: string): void {
+  if (!SiteLookupIn.shape.host.safeParse(site).success) {
+    throw new ApiError('validation_failed', 'The site is not a host name.');
+  }
+}
+
 /** Websites of a kid device (docs/SPEC.md §12.10). Any device kind may send them. */
 export function registerSiteRoutes(app: Router, deps: AppDeps) {
-  const { db } = deps;
+  const { db, config } = deps;
 
   app.openapi(siteLookupsRoute, async (c) => {
     const { deviceId, kidId, familyId } = await requireDevice(c, db);
@@ -68,14 +106,16 @@ export function registerSiteRoutes(app: Router, deps: AppDeps) {
             deviceId,
             at: new Date(l.at),
             host: l.host,
+            site: getDomain(l.host) ?? l.host,
             package: l.package,
           })),
         )
         .onConflictDoNothing()
-        .returning({ at: siteLookups.at, host: siteLookups.host, package: siteLookups.package });
+        .returning({ at: siteLookups.at, host: siteLookups.host, site: siteLookups.site, package: siteLookups.package });
       // Only the new rows add to the daily totals, in the same transaction (docs/SPEC.md §12.10).
+      const touched = new Map<string, { day: string; site: string; package: string }>();
       for (const row of rows) {
-        const site = getDomain(row.host) ?? row.host;
+        const site = row.site ?? getDomain(row.host) ?? row.host;
         const day = await localDay(tx, timezone, row.at);
         await tx
           .insert(siteDaily)
@@ -87,6 +127,7 @@ export function registerSiteRoutes(app: Router, deps: AppDeps) {
             site,
             package: row.package,
             lookups: 1,
+            minutes: 0,
             firstAt: row.at,
             lastAt: row.at,
           })
@@ -98,6 +139,21 @@ export function registerSiteRoutes(app: Router, deps: AppDeps) {
               lastAt: sql`greatest(${siteDaily.lastAt}, ${row.at})`,
             },
           });
+        touched.set(`${day}\u0000${site}\u0000${row.package}`, { day, site, package: row.package });
+      }
+      // Active minutes: the distinct minutes of the local day in which this device looked the site up, counted from
+      // the raw rows so a minute split across two uploads is still one (docs/SPEC.md §12.10).
+      for (const t of touched.values()) {
+        await tx.execute(sql`
+          update site_daily set minutes = (
+            select count(distinct date_trunc('minute', l.at))::int
+            from site_lookups l
+            where l.device_id = ${deviceId} and l.site = ${t.site} and l.package = ${t.package}
+              and l.at >= (${t.day}::date::timestamp at time zone ${timezone})
+              and l.at < ((${t.day}::date + 1)::timestamp at time zone ${timezone})
+          )
+          where device_id = ${deviceId} and day = ${t.day}::date and site = ${t.site} and package = ${t.package}
+        `);
       }
       return rows.length;
     });
@@ -135,6 +191,33 @@ export function registerSiteRoutes(app: Router, deps: AppDeps) {
       return rows.length;
     });
     return c.json({ received }, 200);
+  });
+
+  app.openapi(siteClassPutRoute, async (c) => {
+    const { familyId, parentId } = await requireFamilyParent(c, db, config.jwtSecret);
+    const site = c.req.param('site');
+    checkSite(site);
+    const body = c.req.valid('json');
+    await withFamily(db, familyId, (tx) =>
+      tx
+        .insert(siteOverrides)
+        .values({ familyId, site, kind: body.kind, category: body.category, parentId })
+        .onConflictDoUpdate({
+          target: [siteOverrides.familyId, siteOverrides.site],
+          set: { kind: body.kind, category: body.category, parentId, setAt: sql`now()` },
+        }),
+    );
+    return c.json({ site, kind: body.kind, category: body.category }, 200);
+  });
+
+  app.openapi(siteClassDeleteRoute, async (c) => {
+    const { familyId } = await requireFamilyParent(c, db, config.jwtSecret);
+    const site = c.req.param('site');
+    checkSite(site);
+    await withFamily(db, familyId, (tx) =>
+      tx.delete(siteOverrides).where(and(eq(siteOverrides.familyId, familyId), eq(siteOverrides.site, site))),
+    );
+    return c.body(null, 204);
   });
 }
 
