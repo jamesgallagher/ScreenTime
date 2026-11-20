@@ -107,4 +107,8 @@ dependencies {
     testImplementation(libs.junit.jupiter)
     testImplementation(libs.ktor.client.mock)
     testRuntimeOnly(libs.junit.platform.launcher)
+    // The version 1 to 2 Room migration test (docs/SPEC.md §12.10, acceptance criterion 13) runs on the emulator.
+    androidTestImplementation(libs.androidx.room.testing)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.ext.junit)
 }
