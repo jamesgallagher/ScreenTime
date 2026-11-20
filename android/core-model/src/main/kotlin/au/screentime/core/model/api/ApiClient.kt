@@ -934,6 +934,7 @@ class ApiClient(
      * `PUT /v1/sites/{site}/class`
      */
     suspend fun putSitesClass(
+        site: String,
         body: SiteClassOverride,
     ): SiteClassSaved {
         return call(HttpMethod.Put, "/v1/sites/${segment(site)}/class", auth = true, body = body, bodyType = typeInfo<SiteClassOverride>()).body()
@@ -944,7 +945,9 @@ class ApiClient(
      *
      * `DELETE /v1/sites/{site}/class`
      */
-    suspend fun deleteSitesClass() {
+    suspend fun deleteSitesClass(
+        site: String,
+    ) {
         call(HttpMethod.Delete, "/v1/sites/${segment(site)}/class", auth = true)
     }
 

@@ -1,5 +1,6 @@
 import { createRoute } from '@hono/zod-openapi';
 import { and, eq, sql } from 'drizzle-orm';
+import { z } from 'zod';
 import { getDomain } from 'tldts';
 import {
   SiteClassOverride,
@@ -45,6 +46,8 @@ const siteTitlesRoute = createRoute({
   responses: { 200: jsonResponse('Stored.', SiteTitlesReceived), ...errorResponses(401, 422) },
 });
 
+const SiteParam = z.object({ site: z.string() });
+
 const siteClassPutRoute = createRoute({
   method: 'put',
   path: '/v1/sites/{site}/class',
@@ -52,7 +55,7 @@ const siteClassPutRoute = createRoute({
   summary: "A family's own kind and category for a site",
   description: "Replaces the classifier's kind and category for the whole family. `site` must be a host name.",
   security: bearer,
-  request: { body: jsonBody(SiteClassOverride) },
+  request: { params: SiteParam, body: jsonBody(SiteClassOverride) },
   responses: { 200: jsonResponse('Saved.', SiteClassSaved), ...errorResponses(401, 403, 422) },
 });
 
@@ -63,6 +66,7 @@ const siteClassDeleteRoute = createRoute({
   summary: 'Back to the classifier for a site',
   description: "Removes the family's own kind and category, so the classifier's answer shows again. 204 also when there was none.",
   security: bearer,
+  request: { params: SiteParam },
   responses: { 204: { description: 'Cleared.' }, ...errorResponses(401, 403, 422) },
 });
 
