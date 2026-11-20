@@ -105,6 +105,9 @@ public sealed class ProgramsTests
         var p2 = clock.Counting(false, off);
         var p3 = clock.Counting(true, on);
         var p4 = clock.Flush(b);
+        // Counting off from 09:05 to 09:08: the total for a.exe from 09:00 to 09:10 is 420,000 ms.
+        var total = p2.Sum(p => p.Ms) + p3.Sum(p => p.Ms) + p4.Sum(p => p.Ms);
+        Assert.Equal(420_000, total);
         Assert.Equal(120_000, p4[0].Ms);
         Assert.Equal("a.exe", p4[0].Id);
 
