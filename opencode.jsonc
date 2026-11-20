@@ -38,6 +38,18 @@
       "*keystore*": "deny",
       "*google-services.json": "deny"
     },
+    // Skills: only the ones for this repo (and the two MCP helpers). Every other skill on the PC (documents,
+    // slides, morning briefs…) would be offered with every request, costing a local model context.
+    "skill": {
+      "*": "deny",
+      "server-route": "allow",
+      "db-migration": "allow",
+      "card-tests": "allow",
+      "sandbox-run": "allow",
+      "emulator-run": "allow",
+      "context7-mcp": "allow",
+      "playwright": "allow"
+    },
     // Commands: everything as before, except what AGENTS.md forbids.
     "bash": {
       "*": "allow",
