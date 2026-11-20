@@ -123,10 +123,19 @@ abstract class KidDatabase : RoomDatabase() {
             }
         }
 
+        @Volatile private var instance: KidDatabase? = null
+
+        /**
+         * The one database of the process: the service and the admin receiver share it. A new Room instance per call
+         * would open another connection pool each sync and never close it.
+         */
         fun open(context: Context): KidDatabase =
-            Room.databaseBuilder(context.applicationContext, KidDatabase::class.java, "kid.db")
-                .addMigrations(MIGRATION_1_2)
-                .build()
+            instance ?: synchronized(this) {
+                instance ?: Room.databaseBuilder(context.applicationContext, KidDatabase::class.java, "kid.db")
+                    .addMigrations(MIGRATION_1_2)
+                    .build()
+                    .also { instance = it }
+            }
     }
 }
 

@@ -26,6 +26,7 @@ import au.screentime.core.model.api.SiteLookupsUpload
 import au.screentime.core.time.evaluate
 import au.screentime.kid.admin.KidDeviceAdminReceiver
 import au.screentime.kid.admin.Policies
+import au.screentime.kid.sites.uploadLookups
 import au.screentime.kid.block.BlockActivity
 import au.screentime.kid.data.FileStateStore
 import au.screentime.kid.data.KidDatabase
@@ -580,30 +581,18 @@ class KidService : Service() {
      * 1,000 at a time, at most 10 calls per sync. A failure keeps them for the next sync.
      */
     private suspend fun sendSites() {
+        val client = api ?: return
         val dao = KidDatabase.open(this).siteLookups()
-        var sent = 0
-        var received = 0
-        repeat(10) {
-            val batch = dao.oldest(1000)
-            if (batch.isEmpty()) return@repeat
-            try {
-                val res = api?.postDeviceSiteLookups(
-                    SiteLookupsUpload(
-                        batch.map {
-                            SiteLookupIn(Instant.ofEpochMilli(it.atMs).toString(), it.host, it.pkg)
-                        },
-                    ),
-                )
-                dao.delete(batch.map { it.id })
-                sent += batch.size
-                received += res?.received ?: 0
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.w(TAG, "sites: ${batch.size} not sent: ${e.javaClass.simpleName}")
-                return@repeat
-            }
-        }
+        val (sent, received) = uploadLookups(
+            oldest = dao::oldest,
+            send = { batch ->
+                client.postDeviceSiteLookups(
+                    SiteLookupsUpload(batch.map { SiteLookupIn(Instant.ofEpochMilli(it.atMs).toString(), it.host, it.pkg) }),
+                ).received
+            },
+            delete = dao::delete,
+            onFailure = { n, e -> Log.w(TAG, "sites: $n not sent: ${e.javaClass.simpleName}") },
+        )
         if (sent > 0) Log.i(TAG, "sites: sent $sent ($received new)")
     }
 
