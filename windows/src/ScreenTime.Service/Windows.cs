@@ -197,7 +197,7 @@ internal static partial class Win
     [LibraryImport("kernel32.dll", SetLastError = true)]
     internal static partial nint OpenProcess(uint access, [MarshalAs(UnmanagedType.Bool)] bool inherit, uint pid);
 
-    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [LibraryImport("kernel32.dll", EntryPoint = "QueryFullProcessImageNameW", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool QueryFullProcessImageName(nint process, uint flags, nint name, ref uint size);
 
