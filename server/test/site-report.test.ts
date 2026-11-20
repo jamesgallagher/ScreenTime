@@ -388,8 +388,15 @@ describe.skipIf(!url)('the websites report', () => {
     });
     expect(onPc.body.behindTheScenes).toEqual([]);
     expect(onPc.body.browserSec).toBe(472);
-    expect(onPc.body.searches).toHaveLength(3);
-    expect(onPc.body.pages).toHaveLength(2);
+    expect(onPc.body.searches).toEqual([
+      { engine: 'google', query: 'How To Draw', sec: 10, private: false, firstAt: '2026-11-11T02:09:00.000Z', deviceId: pc.id },
+      { engine: 'google', query: 'fortnite skins', sec: 50, private: false, firstAt: '2026-11-11T02:08:00.000Z', deviceId: pc.id },
+      { engine: 'bing', query: 'how to draw', sec: 67, private: true, firstAt: '2026-11-11T02:00:00.000Z', deviceId: pc.id },
+    ]);
+    expect(onPc.body.pages).toEqual([
+      { page: 'Wikipedia', package: 'msedge.exe', sec: 300, private: false },
+      { page: 'Wikipedia', package: 'firefox.exe', sec: 15, private: true },
+    ]);
     expect(onPc.body.devices.map((d: { name: string }) => d.name)).toEqual(['Phone', 'PC', 'Tablet']);
 
     const onPhone = await report(`kidId=${kid}&period=week&date=2026-11-11&deviceId=${phone.id}`);
