@@ -26,6 +26,7 @@ import au.screentime.core.model.api.SiteLookupsUpload
 import au.screentime.core.time.evaluate
 import au.screentime.kid.admin.KidDeviceAdminReceiver
 import au.screentime.kid.admin.Policies
+import au.screentime.kid.BuildConfig
 import au.screentime.kid.sites.uploadLookups
 import au.screentime.kid.block.BlockActivity
 import au.screentime.kid.data.FileStateStore
@@ -57,7 +58,10 @@ import au.screentime.kid.status.WarningTracker
 import au.screentime.kid.status.kidStatus
 import au.screentime.kid.status.nextCheckAtMs
 import au.screentime.kid.sync.Syncer
+import au.screentime.kid.update.AskedNote
 import au.screentime.kid.update.AppUpdater
+import au.screentime.kid.update.KidUpdateSource
+import au.screentime.kid.update.KidUpdates
 import au.screentime.kid.sync.TrustedClock
 import au.screentime.kid.tamper.CaughtActivity
 import au.screentime.kid.apps.AppWatcher
@@ -243,6 +247,16 @@ class KidService : Service() {
         tamperApi = TamperApi(client)
         apps = AppWatcher(this, client)
         updater = AppUpdater(this, client, enrolment.serverUrl, token = { enrolment.deviceToken }, onReady = notifier::showUpdate)
+        KidUpdates.source = KidUpdateSource(
+            currentCode = { BuildConfig.VERSION_CODE },
+            check = updater!!::checkNow,
+            downloaded = updater!!::downloaded,
+            download = updater!!::download,
+            install = { updater!!.installNow(it) },
+            noteAsked = { AskedNote(this).write(System.currentTimeMillis()) },
+            sosActive = { sos.pending || sos.active },
+            scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
+        )
         // This version may be the update that notice was about.
         notifier.cancelUpdate()
         kidName = enrolment.kidName

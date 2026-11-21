@@ -565,6 +565,7 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
                     logger.LogInformation("tray {Session}: hello pid {Pid}", sessionId, m.Pid);
                     if (View(s.Sid, _clock.NowMs()) is { } view) await SendView(s, view);
                     await SendGames(s);
+                    await PublishUpdate(force: true);
                     // A tray killed three times was dead when it was caught: it hears it now.
                     if (s.CaughtPending)
                     {
@@ -572,6 +573,23 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
                         await s.Tray.SendAsync(PipeMessage.Caught());
                     }
                     break;
+                case "update-check" or "update-now" when m.Id is not null:
+                    {
+                        var kind = m.Type == "update-now" ? UpdateRequestKind.Now : UpdateRequestKind.Check;
+                        var (allowed, asked) = UpdateControl.Request(kind, s.InParentMode, _asked);
+                        if (!allowed)
+                        {
+                            logger.LogInformation("update: refused, not in parent mode");
+                            await s.Tray.SendAsync(PipeMessage.Reply(m.Id, SendResult.Refused));
+                            break;
+                        }
+                        _asked = asked;
+                        if (kind == UpdateRequestKind.Check) _forceCheck = true;
+                        await s.Tray.SendAsync(PipeMessage.Reply(m.Id, SendResult.Sent));
+                        await PublishUpdate(force: true);
+                        if (kind == UpdateRequestKind.Now) RunUpdateNow();
+                        break;
+                    }
                 case "ask" or "message" when m.Id is not null && Api(s.Sid) is { } api:
                     // The server call can take up to 30 s: it must not hold up the pipe or the lock loop.
                     _ = Task.Run(() => SendForTray(s, api, m));
@@ -1044,6 +1062,56 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
     private PendingUpdate? _pending;
     private bool _pendingLoaded;
 
+    // CARD-071: manual update trigger state (tap not yet acted on, not persisted).
+    private bool _asked;
+    private bool _forceCheck;
+    private bool _downloading;
+    private LastCheckState _lastCheck = LastCheckState.Never;
+    private UpdateView? _sentUpdate;
+
+    /// <summary>Builds the current <see cref="UpdateView"/> from the live service state (pure facts only).</summary>
+    private UpdateView CurrentUpdateView()
+    {
+        var (code, name) = Win.AppVersion();
+        var best = BestOffer(code);
+        var downloaded = best is not null && _verifiedVersionCode == best.Value.Offer.VersionCode && _verified is not null;
+        var failures = best is { } b ? UpdateFailures.For(UpdateFailures.Decode(_store.GetValue(UpdateKey, "failures")), b.Offer.VersionCode) : 0;
+        var lastAttemptFailed = best is not null && failures > 0;
+        var facts = new UpdateViewFacts(name, code, best?.Offer, downloaded, _downloading, _pending, lastAttemptFailed, _lastCheck);
+        return UpdateViewBuilder.Build(facts);
+    }
+
+    /// <summary>Sends the current update view to every tray when it has changed (or <paramref name="force"/> is true).</summary>
+    private async Task PublishUpdate(bool force = false)
+    {
+        var view = CurrentUpdateView();
+        if (!force && view == _sentUpdate) return;
+        _sentUpdate = view;
+        foreach (var s in _sessions.Values.ToList()) await s.Tray.SendAsync(PipeMessage.UpdateOf(view));
+    }
+
+    /// <summary>A parent asked, so the next tick is now; automatic timing is untouched. Runs the update tick immediately in a background task.</summary>
+    private void RunUpdateNow()
+    {
+        _ = Task.Run(async () =>
+        {
+            if (_stopping.IsCancellationRequested) return;
+            try
+            {
+                await _sem.WaitAsync(_stopping);
+                try
+                {
+                    await UpdateTick(_stopping);
+                }
+                finally
+                {
+                    _sem.Release();
+                }
+            }
+            catch (OperationCanceledException) { }
+        });
+    }
+
     /// <summary>
     /// One tick of the update loop, from the 60 s timer (under the worker's lock). Steps follow each other at once, so a
     /// check, a download and an install can happen on one tick; at most six steps, so a mistake cannot spin.
@@ -1055,6 +1123,14 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
             _pending = PendingUpdateJson.Decode(_store.GetValue(UpdateKey, "pending"));
             _pendingLoaded = true;
         }
+        // A manual "Check for updates": one extra check at the next tick, without moving the 6-hour timer.
+        if (_forceCheck && _pending is null)
+        {
+            _forceCheck = false;
+            _lastCheck = LastCheckState.Running;
+            await PublishUpdate();
+            await CheckForUpdate(ct, moveTimer: false);
+        }
         for (var step = 0; step < 6; step++)
         {
             var now = _clock.NowMs();
@@ -1063,30 +1139,41 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
             var failures = best is { } b ? UpdateFailures.For(UpdateFailures.Decode(_store.GetValue(UpdateKey, "failures")), b.Offer.VersionCode) : 0;
             var action = UpdateDecision.Decide(new UpdateState(
                 _pending, _lastUpdateCheckMs, best?.Offer, _verifiedVersionCode, _verified?.VerifiedAtMs, failures,
-                AnySessionUsing(), options.UpdateAnytime, runningCode, now));
+                AnySessionUsing(), options.UpdateAnytime, runningCode, now, _asked));
             switch (action)
             {
                 case UpdateAction.Nothing:
                     if (best is null && _pending is null) DropDownload();
+                    await PublishUpdate();
                     return;
                 case UpdateAction.Check:
-                    await CheckForUpdate(ct);
+                    await CheckForUpdate(ct, moveTimer: true);
+                    await PublishUpdate();
                     if (_lastUpdateCheckMs is null) return;
                     break;
                 case UpdateAction.Download:
                     var offered = best!.Value;
                     logger.LogInformation("update: offered {Version} ({Code})", offered.Offer.VersionName, offered.Offer.VersionCode);
-                    if (!await DownloadAndVerify(offered.Sid, offered.Offer, ct))
+                    _downloading = true;
+                    await PublishUpdate();
+                    var ok = await DownloadAndVerify(offered.Sid, offered.Offer, ct);
+                    _downloading = false;
+                    if (!ok)
                     {
                         // Tried again at the next check (6 hours), not every minute: a bad file would be downloaded over and over.
                         _offers.Remove(offered.Sid);
+                        _asked = false;
+                        await PublishUpdate();
                         return;
                     }
+                    await PublishUpdate();
                     break;
                 case UpdateAction.Install:
+                    _asked = false;
                     if (!options.AsService)
                     {
                         logger.LogInformation("update: would install {Version} (not a service)", best!.Value.Offer.VersionName);
+                        await PublishUpdate();
                         return;
                     }
                     await Install(best!.Value.Offer, ct);
@@ -1099,6 +1186,8 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
                     _store.SetValue(UpdateKey, "pending", null);
                     _store.SetValue(UpdateKey, "failures", null);
                     _pending = null;
+                    _asked = false;
+                    await PublishUpdate();
                     break;
                 case UpdateAction.RecordFailure:
                     logger.LogWarning("update: {Version} failed to install", _pending!.VersionName);
@@ -1106,16 +1195,21 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
                     DeleteUpdateTask();
                     _store.SetValue(UpdateKey, "pending", null);
                     _pending = null;
+                    _asked = false;
                     // The trays may start again.
                     _updateInProgress = false;
+                    await PublishUpdate();
                     break;
             }
         }
     }
 
-    /// <summary>Asks the server for a newer version for every enrolled account, and keeps what each was offered.</summary>
-    private async Task CheckForUpdate(CancellationToken ct)
+    /// <summary>Asks the server for a newer version for every enrolled account, and keeps what each was offered.
+    /// <paramref name="moveTimer"/> true: the 6-hour timer's last-check time moves; false: a manual check does not move it.</summary>
+    private async Task CheckForUpdate(CancellationToken ct, bool moveTimer)
     {
+        _lastCheck = LastCheckState.Running;
+        await PublishUpdate();
         var (code, name) = Win.AppVersion();
         var answered = false;
         foreach (var device in _store.Devices())
@@ -1137,12 +1231,18 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
                 logger.LogWarning("update: could not check for {Kid} ({Message})", KidName(device.Sid), e.Message);
             }
         }
-        // A check that reached nobody is tried again at the next tick.
-        if (answered)
+        _lastCheck = answered ? LastCheckState.Ok : LastCheckState.Failed;
+        // A check that reached nobody is tried again at the next tick; a successful check moves the 6-hour timer.
+        if (moveTimer && answered)
         {
             _lastUpdateCheckMs = _clock.NowMs();
-            logger.LogInformation("update: checked, {Count} offer(s)", _offers.Count);
         }
+        else
+        {
+            _lastUpdateCheckMs = UpdateCheck.AfterManualCheck(_lastUpdateCheckMs);
+        }
+        if (answered) logger.LogInformation("update: checked, {Count} offer(s)", _offers.Count);
+        await PublishUpdate();
     }
 
     /// <summary>The highest offer above the running version, with the SID of the account that got it; null when none.</summary>
