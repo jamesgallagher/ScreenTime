@@ -109,6 +109,17 @@ public class UpdateViewTests
     }
 
     [Fact]
+    public void NoOfferAfterASuccessfulCheckIsUpToDate()
+    {
+        var view = UpdateViewBuilder.Build(Facts(lastCheck: LastCheckState.Ok));
+        Assert.Equal(UpdateStates.UpToDate, view.State);
+        Assert.Equal("0.1.130", view.Version);
+        Assert.Null(view.Offered);
+        Assert.Null(view.SizeBytes);
+        Assert.Equal("You're up to date", UpdateWords.Status(view));
+    }
+
+    [Fact]
     public void UpdateNowFromNonParentModeIsRefused_AndFromParentModeSetsAsked()
     {
         Assert.Equal((false, false), UpdateControl.Request(UpdateRequestKind.Now, inParentMode: false, asked: false));
