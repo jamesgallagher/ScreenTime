@@ -587,6 +587,7 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
                         if (kind == UpdateRequestKind.Check) _forceCheck = true;
                         await s.Tray.SendAsync(PipeMessage.Reply(m.Id, SendResult.Sent));
                         await PublishUpdate(force: true);
+                        if (kind == UpdateRequestKind.Now) RunUpdateNow();
                         break;
                     }
                 case "ask" or "message" when m.Id is not null && Api(s.Sid) is { } api:
@@ -1087,6 +1088,28 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
         if (!force && view == _sentUpdate) return;
         _sentUpdate = view;
         foreach (var s in _sessions.Values.ToList()) await s.Tray.SendAsync(PipeMessage.UpdateOf(view));
+    }
+
+    /// <summary>A parent asked, so the next tick is now; automatic timing is untouched. Runs the update tick immediately in a background task.</summary>
+    private void RunUpdateNow()
+    {
+        _ = Task.Run(async () =>
+        {
+            if (_stopping.IsCancellationRequested) return;
+            try
+            {
+                await _sem.WaitAsync(_stopping);
+                try
+                {
+                    await UpdateTick(_stopping);
+                }
+                finally
+                {
+                    _sem.Release();
+                }
+            }
+            catch (OperationCanceledException) { }
+        });
     }
 
     /// <summary>
