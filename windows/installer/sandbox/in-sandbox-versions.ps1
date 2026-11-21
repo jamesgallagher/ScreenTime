@@ -304,19 +304,19 @@ $at3minVersion = $null
 for ($i = 0; $i -lt 72; $i++) {
   $elapsed = ((Get-Date) - $pressTime).TotalSeconds
   Say "  poll $i/72 installed: $installed (elapsed: $([Math]::Round($elapsed, 1)) s)"
-  
+
   # Record version at 3 minutes
   if ($elapsed -ge 180 -and $null -eq $at3minVersion) {
     $at3minVersion = $installed
     Say "  version at 3 min: $at3minVersion"
   }
-  
+
   if ($installed -eq $bVersion) {
     $installSeconds = [Math]::Round(((Get-Date) - $pressTime).TotalSeconds, 1)
     Say "  installed after $installSeconds s"
     break
   }
-  
+
   Start-Sleep 5
   $installed = ReadInstalledVersion
 }
@@ -399,22 +399,22 @@ for ($i = 0; $i -lt 3; $i++) {
   $trays = @(Get-CimInstance Win32_Process -Filter "Name = 'ScreenTime.Tray.exe'" | Where-Object { $_.SessionId -eq 1 })
   $trayCount = $trays.Count
   Say "  poll phase1 $($i+1)/3: service=$svcState, tray count in session 1 = $trayCount ($([int]((Get-Date) - $pressTime).TotalSeconds) s after Update now)"
-  
+
   if ($trayCount -gt 1) {
     $multiTray = $true
     break
   }
-  
+
   if ($svcState -eq "Running" -and $trayCount -eq 1) {
     $serviceOk = $true
     $trayOk = $true
     break
   }
-  
+
   if ($svcState -eq "Running" -and $trayCount -eq 0) {
     $needsRestart = $true
   }
-  
+
   Start-Sleep 5
 }
 
@@ -423,7 +423,7 @@ if ($needsRestart -and -not $multiTray -and -not $trayOk) {
   Say "no tray from the MSI-started service; restarting once with the flags set"
   Restart-Service ScreenTime
   Say "Restart-Service completed"
-  
+
   # Wait up to 60 seconds for exactly one tray
   for ($i = 0; $i -lt 12; $i++) {
     $svc = Get-Service ScreenTime -ErrorAction SilentlyContinue
@@ -431,18 +431,18 @@ if ($needsRestart -and -not $multiTray -and -not $trayOk) {
     $trays = @(Get-CimInstance Win32_Process -Filter "Name = 'ScreenTime.Tray.exe'" | Where-Object { $_.SessionId -eq 1 })
     $trayCount = $trays.Count
     Say "  poll phase2 $($i+1)/12: service=$svcState, tray count in session 1 = $trayCount ($([int]((Get-Date) - $pressTime).TotalSeconds) s after Update now)"
-    
+
     if ($trayCount -gt 1) {
       $multiTray = $true
       break
     }
-    
+
     if ($svcState -eq "Running" -and $trayCount -eq 1) {
       $serviceOk = $true
       $trayOk = $true
       break
     }
-    
+
     Start-Sleep 5
   }
 }
