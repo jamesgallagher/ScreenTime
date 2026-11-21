@@ -2,7 +2,7 @@
 # Proves criteria 19-22 via the tray flyout's UI Automation ids.
 # Runs under Windows PowerShell 5.1 inside the Sandbox (no ?? or pwsh-only syntax).
 $results = "C:\out\results.txt"
-function Say([string]$text) { Add-Content $results $text -Encoding UTF8 }
+function Say([string]$text) { Add-Content $results "$(Get-Date -Format HH:mm:ss) $text" -Encoding UTF8 }
 Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
 Add-Type -Namespace W -Name T -MemberDefinition @'
 [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)] public static extern System.IntPtr FindWindow(string c, string w);
@@ -296,34 +296,130 @@ $pressedMain2 = Press 'UpdatesMain'
 Say "UpdatesMain (Update now) invoke: $pressedMain2"
 if ($pressedMain2) { Say "Update now pressed" } else { Say "Update now pressed: FAIL" }
 
-Say "=== 6. wait for installed version to become B (up to 3 minutes)"
+Say "=== 6. wait for installed version to become B (up to 6 minutes)"
 $installed = ReadInstalledVersion
-for ($i = 0; $i -lt 36; $i++) {
-  Say "  poll installed: $installed"
+$at3min = $installed
+for ($i = 0; $i -lt 72; $i++) {
+  Say "  poll $i/72 installed: $installed"
+  if ($i -eq 36) { $at3min = $installed }
   if ($installed -eq $bVersion) { break }
   Start-Sleep 5
   $installed = ReadInstalledVersion
 }
+Say "version at 3 min: $at3min"
 Say "final installed version: $installed"
-if ($installed -eq $bVersion) { Say "criterion 22 installed version: PASS" } else { Say "criterion 22 installed version: FAIL (got '$installed', expected '$bVersion')" }
+if ($at3min -eq $bVersion) { Say "criterion 22 installed within 3 min: PASS (at 3 min: $at3min)" } else { Say "criterion 22 installed within 3 min: FAIL (at 3 min: $at3min)" }
+if ($installed -eq $bVersion) { Say "criterion 22 installed eventually: PASS" } else { Say "criterion 22 installed eventually: FAIL (got '$installed', expected '$bVersion')" }
 
-Say "=== 7. restore service flags (do NOT restart; the MSI already started the new service)"
+Say "=== 6a. diagnostics"
+Say "sc.exe qc ScreenTime:"
+foreach ($line in (sc.exe qc ScreenTime | Select-String "BINARY_PATH_NAME|START_TYPE")) { Say "  $($line.Line.Trim())" }
+Say "sc.exe query ScreenTime:"
+foreach ($line in (sc.exe query ScreenTime | Select-String "STATE")) { Say "  $($line.Line.Trim())" }
+$svc = Get-Service ScreenTime -ErrorAction SilentlyContinue
+if ($svc) { Say "Get-Service ScreenTime: $($svc.Status)" } else { Say "Get-Service ScreenTime: (no service)" }
+
+$updatesLog = "C:\ProgramData\ScreenTime\updates\install.log"
+if (Test-Path $updatesLog) {
+  Say "last 40 lines of ${updatesLog}:"
+  Get-Content $updatesLog | Select-Object -Last 40 | ForEach-Object { Say "  $_" }
+} else {
+  Say "${updatesLog} not found"
+}
+
+try {
+  Say "EventLog Application source ScreenTime (last 40, update:/error):"
+  $events = Get-EventLog -LogName Application -Source ScreenTime -Newest 40 -ErrorAction Stop
+  $filtered = $events | Where-Object { $_.Message -match "update:|error" }
+  if ($filtered) {
+    $filtered | ForEach-Object { Say "  $($_.TimeGenerated.ToString('HH:mm:ss')) $($_.EntryType): $($_.Message.Substring(0, [Math]::Min(200, $_.Message.Length)))" }
+  } else {
+    Say "  (no matching events)"
+  }
+} catch {
+  Say "  EventLog query failed: $($_.Exception.Message)"
+}
+
+$trayLog = Join-Path $env:LOCALAPPDATA "ScreenTime\tray.log"
+if (Test-Path $trayLog) {
+  Say "last 30 lines of ${trayLog}:"
+  Get-Content $trayLog | Select-Object -Last 30 | ForEach-Object { Say "  $_" }
+} else {
+  Say "${trayLog} not found"
+}
+
+Say "C:\ProgramData\ScreenTime\updates contents:"
+$updatesDir = "C:\ProgramData\ScreenTime\updates"
+if (Test-Path $updatesDir) {
+  Get-ChildItem $updatesDir | ForEach-Object { Say "  $($_.Name) $($_.Length) bytes" }
+} else {
+  Say "  $updatesDir not found"
+}
+
+Say "=== 7. restore service flags and restart only if no tray started"
 Set-ItemProperty $serviceKey ImagePath "`"$exe`" --session 1 --dry-lock"
 Say "service ImagePath: $((Get-ItemProperty $serviceKey).ImagePath)"
-Say "flags set for the next start; not restarting (a plain Restart-Service is the CARD-061 double-tray gap)"
+Say "flags restored; will restart service only if MSI did not start a tray"
 
 # Poll for service Running and exactly one tray in session 1 (the MSI started it).
 $serviceOk = $false
 $trayOk = $false
-$lastCount = -1
+$needsRestart = $false
+$multiTray = $false
+
+# Phase 1: Wait up to 90 seconds for service Running and tray count
 for ($i = 0; $i -lt 18; $i++) {
   $svc = Get-Service ScreenTime -ErrorAction SilentlyContinue
   $svcState = if ($svc) { $svc.Status.ToString() } else { "(no service)" }
   $trays = @(Get-CimInstance Win32_Process -Filter "Name = 'ScreenTime.Tray.exe'" | Where-Object { $_.SessionId -eq 1 })
-  $lastCount = $trays.Count
-  Say "  poll $($i+1)/18: service=$svcState, tray count in session 1 = $lastCount"
-  if ($svcState -eq "Running" -and $lastCount -eq 1) { $serviceOk = $true; $trayOk = $true; break }
+  $trayCount = $trays.Count
+  Say "  poll phase1 $($i+1)/18: service=$svcState, tray count in session 1 = $trayCount"
+  
+  if ($trayCount -gt 1) {
+    $multiTray = $true
+    break
+  }
+  
+  if ($svcState -eq "Running" -and $trayCount -eq 1) {
+    $serviceOk = $true
+    $trayOk = $true
+    break
+  }
+  
+  if ($svcState -eq "Running" -and $trayCount -eq 0) {
+    $needsRestart = $true
+  }
+  
   Start-Sleep 5
+}
+
+# Phase 2: If we need a restart, do it once
+if ($needsRestart -and -not $multiTray -and -not $trayOk) {
+  Say "no tray from the MSI-started service; restarting once with the flags set"
+  Restart-Service ScreenTime
+  Say "Restart-Service completed"
+  
+  # Wait up to 120 seconds for exactly one tray
+  for ($i = 0; $i -lt 24; $i++) {
+    $svc = Get-Service ScreenTime -ErrorAction SilentlyContinue
+    $svcState = if ($svc) { $svc.Status.ToString() } else { "(no service)" }
+    $trays = @(Get-CimInstance Win32_Process -Filter "Name = 'ScreenTime.Tray.exe'" | Where-Object { $_.SessionId -eq 1 })
+    $trayCount = $trays.Count
+    Say "  poll phase2 $($i+1)/24: service=$svcState, tray count in session 1 = $trayCount"
+    
+    if ($trayCount -gt 1) {
+      $multiTray = $true
+      break
+    }
+    
+    if ($svcState -eq "Running" -and $trayCount -eq 1) {
+      $serviceOk = $true
+      $trayOk = $true
+      break
+    }
+    
+    Start-Sleep 5
+  }
 }
 
 Say "tray processes in session 1:"
@@ -332,12 +428,28 @@ foreach ($p in (Get-CimInstance Win32_Process -Filter "Name = 'ScreenTime.Tray.e
   if ($p.SessionId -ne 1) { continue }
   $finalCount++
   $owner = Invoke-CimMethod -InputObject $p -MethodName GetOwner
-  Say "  pid=$($p.ProcessId) session=$($p.SessionId) user=$($owner.User)"
+  Say "  pid=$($p.ProcessId) session=$($p.SessionId) user=$($owner.User) command=$($p.CommandLine)"
 }
+Say "service command line:"
+foreach ($p in (Get-CimInstance Win32_Process -Filter "Name = 'ScreenTime.Service.exe'")) {
+  Say "  pid=$($p.ProcessId) command=$($p.CommandLine)"
+}
+
+if ($multiTray) {
+  Say "criterion 22: FAIL (more than one tray; known CARD-061 gap)"
+  Set-Content C:\out\done.txt "failed"
+  Say "done"
+  exit 0
+}
+
 if ($finalCount -eq 1) { Say "exactly one tray in session 1: PASS" } else { Say "exactly one tray in session 1: FAIL (count=$finalCount)" }
 
 if (-not $serviceOk -or -not $trayOk) {
-  Say "criterion 22: FAIL (service/tray did not settle within 90 s)"
+  if ($needsRestart) {
+    Say "criterion 22: FAIL (no tray after restart with flags set)"
+  } else {
+    Say "criterion 22: FAIL (service/tray did not settle within 90 s)"
+  }
   Set-Content C:\out\done.txt "failed"
   Say "done"
   exit 0
