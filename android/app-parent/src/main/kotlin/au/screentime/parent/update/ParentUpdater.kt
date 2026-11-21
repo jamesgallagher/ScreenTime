@@ -11,6 +11,7 @@ import android.util.Log
 import au.screentime.core.model.api.AppUpdateCheck
 import au.screentime.core.model.api.AppUpdateOffer
 import au.screentime.parent.BuildConfig
+import au.screentime.core.ui.update.UpdateState
 import au.screentime.parent.auth.Session
 import java.io.File
 import java.io.InputStream
@@ -39,7 +40,7 @@ private const val TAG = "ParentUpdate"
 class ParentUpdater(
     private val context: Context,
     private val session: Session,
-) : UpdateSource {
+) : ParentUpdateSource {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val _state = MutableStateFlow<UpdateState>(UpdateState.Unknown)
     override val state: StateFlow<UpdateState> = _state

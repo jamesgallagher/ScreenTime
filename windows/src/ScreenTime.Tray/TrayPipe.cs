@@ -97,6 +97,13 @@ internal sealed partial class TrayPipe(string pipeName, bool dryLock, TrayModel 
                             log($"parent-no: {message.Text}");
                             model.ParentModeNo(message.Text ?? "");
                             break;
+                        case "update":
+                            if (message.Update is { } update)
+                            {
+                                log($"update: {update.State} {update.Offered}");
+                                model.SetUpdates(update);
+                            }
+                            break;
                         case "games":
                             GameDesk.Apply(message.Games ?? [], log);
                             break;
@@ -146,6 +153,14 @@ internal sealed partial class TrayPipe(string pipeName, bool dryLock, TrayModel 
     /// <summary>End now; no when the pipe is down.</summary>
     public async Task<bool> EndParentModeAsync() =>
         await RequestAsync(PipeMessage.ParentEnd(Guid.NewGuid().ToString())) == SendResult.Sent;
+
+    /// <summary>"Check for updates"; false when the pipe is down or the service refused (not in parent mode).</summary>
+    public async Task<bool> CheckForUpdatesAsync() =>
+        await RequestAsync(PipeMessage.CheckForUpdates(Guid.NewGuid().ToString())) == SendResult.Sent;
+
+    /// <summary>"Update now"; false when the pipe is down or the service refused (not in parent mode).</summary>
+    public async Task<bool> UpdateNowAsync() =>
+        await RequestAsync(PipeMessage.UpdateNow(Guid.NewGuid().ToString())) == SendResult.Sent;
 
     private async Task<SendResult> RequestAsync(PipeMessage message)
     {

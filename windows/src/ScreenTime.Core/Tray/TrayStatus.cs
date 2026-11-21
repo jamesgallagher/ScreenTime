@@ -183,4 +183,7 @@ public enum SendResult
 
     /// <summary>No answer from the server: "Can't reach Mum or Dad right now. Check the internet and try again."</summary>
     Offline,
+
+    /// <summary>The service said no: this session is not in parent mode (the update lines, docs/SPEC.md §12.11).</summary>
+    Refused,
 }

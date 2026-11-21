@@ -6,6 +6,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Media;
 using ScreenTime.Core.Tray;
+using ScreenTime.Core.Update;
 using Windows.Graphics;
 
 namespace ScreenTime.Tray;
@@ -28,6 +29,8 @@ public sealed partial class FlyoutWindow : Window
     private long _hiddenAt;
     private int _askMinutes = 15;
     private TrayPreset? _preset;
+    private long _updateCheckEndedAt;
+    private string? _updatesPrevious;
 
     internal FlyoutWindow(TrayModel model)
     {
@@ -63,6 +66,7 @@ public sealed partial class FlyoutWindow : Window
         _answerTimer.IsRepeating = false;
         _answerTimer.Tick += (_, _) => AnswerCard.Visibility = Visibility.Collapsed;
         _model.Changed += Render;
+        _model.UpdatesChanged += RenderUpdates;
         _model.AnswerReceived += ShowAnswer;
         _model.ParentModeRefused += ShowParentNo;
         _model.CaughtReceived += ShowCaught;
@@ -108,6 +112,7 @@ public sealed partial class FlyoutWindow : Window
             case "ask": OpenAsk(); break;
             case "message": OpenMessage(); break;
             case "parent": OpenParent(); break;
+            case "updates": OpenUpdates(); break;
             default: ShowPanel(MainPanel); break;
         }
         AppWindow.Show();
@@ -165,6 +170,12 @@ public sealed partial class FlyoutWindow : Window
         EndNowButton.IsEnabled = canSend;
         // A parent said yes, or the code started it: the parent panel has done its job.
         if (s.ParentMode && ParentPanel.Visibility == Visibility.Visible) ShowPanel(MainPanel);
+        // The version and Updates are for a parent only: they go when parent mode ends (docs/SPEC.md §12.11).
+        var updates = _model.Updates;
+        var showVersion = s.ParentMode && updates is not null;
+        VersionLink.Visibility = showVersion ? Visibility.Visible : Visibility.Collapsed;
+        if (updates is not null) VersionLink.Content = UpdateWords.VersionLabel(updates);
+        if (!showVersion && UpdatesPanel.Visibility == Visibility.Visible) ShowPanel(MainPanel);
     }
 
     private void ShowPanel(FrameworkElement panel)
@@ -173,6 +184,65 @@ public sealed partial class FlyoutWindow : Window
         AskPanel.Visibility = panel == AskPanel ? Visibility.Visible : Visibility.Collapsed;
         MessagePanel.Visibility = panel == MessagePanel ? Visibility.Visible : Visibility.Collapsed;
         ParentPanel.Visibility = panel == ParentPanel ? Visibility.Visible : Visibility.Collapsed;
+        UpdatesPanel.Visibility = panel == UpdatesPanel ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    // ---- Updates (docs/SPEC.md §12.11): the version, one status line, one main button. Opening it checks at once. ----
+
+    private void OnVersion(object sender, RoutedEventArgs e) => OpenUpdates();
+
+    private async void OpenUpdates()
+    {
+        ShowPanel(UpdatesPanel);
+        RenderUpdates();
+        if (_model.Updates is not { } view) return;
+        long? seconds = _updateCheckEndedAt == 0 ? null : (Environment.TickCount64 - _updateCheckEndedAt) / 1000;
+        if (UpdateWords.CheckOnOpen(view, seconds)) await CheckNowAsync();
+    }
+
+    private async Task CheckNowAsync()
+    {
+        if (_model.Sender is not { } send) return;
+        // The service answers with update lines (checking, then the result); a service that cannot be reached is a failed check.
+        if (!await Safely(send.CheckForUpdatesAsync) && _model.Updates is { } view)
+        {
+            _model.SetUpdates(view with { State = UpdateStates.CheckFailed });
+        }
+    }
+
+    private async void OnUpdatesMain(object sender, RoutedEventArgs e)
+    {
+        if (_model.Updates is not { } view || _model.Sender is not { } send) return;
+        if (UpdateWords.MainButtonUpdates(view))
+        {
+            if (!await Safely(send.UpdateNowAsync)) _model.SetUpdates(view with { State = UpdateStates.Failed });
+        }
+        else
+        {
+            await CheckNowAsync();
+        }
+    }
+
+    private void RenderUpdates()
+    {
+        if (_model.Updates is not { } view) return;
+        if (_updatesPrevious == UpdateStates.Checking && view.State != UpdateStates.Checking) _updateCheckEndedAt = Environment.TickCount64;
+        _updatesPrevious = view.State;
+        VersionLink.Content = UpdateWords.VersionLabel(view);
+        UpdatesVersion.Text = $"Screen Time · {UpdateWords.VersionLabel(view)}";
+        var status = UpdateWords.Status(view);
+        UpdatesStatus.Text = status ?? "";
+        if (view.State is UpdateStates.Failed or UpdateStates.CheckFailed) UpdatesStatus.Foreground = Brush("StCriticalBrush");
+        else UpdatesStatus.ClearValue(TextBlock.ForegroundProperty);
+        var label = UpdateWords.MainButton(view);
+        var offers = UpdateWords.MainButtonUpdates(view);
+        UpdatesMain.Visibility = label is null ? Visibility.Collapsed : Visibility.Visible;
+        UpdatesMain.Content = label ?? "";
+        UpdatesSpinner.IsActive = label is null;
+        UpdatesSpinner.Visibility = label is null ? Visibility.Visible : Visibility.Collapsed;
+        UpdatesNote.Text = UpdateWords.WhatWillHappen;
+        UpdatesNote.Visibility = offers ? Visibility.Visible : Visibility.Collapsed;
+        UpdatesLater.Visibility = offers ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void OnParent(object sender, RoutedEventArgs e) => OpenParent();

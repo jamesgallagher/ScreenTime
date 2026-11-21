@@ -26,4 +26,10 @@ internal interface ITraySender
 
     /// <summary>"End now": parent mode stops at once.</summary>
     Task<bool> EndParentModeAsync() => Task.FromResult(false);
+
+    /// <summary>"Check for updates" in parent mode (docs/SPEC.md §12.11): true when the service took it; the answer comes as an update line.</summary>
+    Task<bool> CheckForUpdatesAsync() => Task.FromResult(false);
+
+    /// <summary>"Update now" in parent mode: true when the service took it; the progress comes as update lines.</summary>
+    Task<bool> UpdateNowAsync() => Task.FromResult(false);
 }

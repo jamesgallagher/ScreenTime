@@ -179,7 +179,7 @@ fun HomeScreen(
                     Tab.TODAY -> TodayScreen(today)
                     Tab.INBOX -> InboxScreen(inbox, familyZone)
                     Tab.KIDS -> KidsScreen(kids, familyZone)
-                    Tab.SETTINGS -> SettingsScreen(me, secure, onSignOut)
+                    Tab.SETTINGS -> SettingsScreen(me, secure, onSignOut, sosActive = !activeSos.isNullOrEmpty())
                 }
             }
         }

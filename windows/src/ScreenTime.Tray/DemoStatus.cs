@@ -1,6 +1,7 @@
 using Microsoft.UI.Dispatching;
 using ScreenTime.Core.Time;
 using ScreenTime.Core.Tray;
+using ScreenTime.Core.Update;
 
 namespace ScreenTime.Tray;
 
@@ -43,6 +44,7 @@ internal static class DemoStatus
     public static void Run(TrayModel model, DispatcherQueue ui, string? name)
     {
         model.Sender = new Sender(model, ui, name);
+        model.SetUpdates(new UpdateView(FakeUpdates.Running, UpdateStates.Unknown));
         if (name is not null)
         {
             model.Update(For(name));
@@ -69,8 +71,49 @@ internal static class DemoStatus
         timer.Start();
     }
 
+    /// <summary>
+    /// Pretends to be the service's update lines in <c>--demo</c> (docs/SPEC.md §12.11): <b>Check for updates</b> finds 0.1.131
+    /// (34 MB) after a second, and <b>Update now</b> gets it and "installs" it, then says it is up to date. The real tray
+    /// shows nothing until the service sends its own <c>update</c> lines (CARD-071).
+    /// </summary>
+    internal static class FakeUpdates
+    {
+        public const string Running = "0.1.130";
+        private const string Offered = "0.1.131";
+
+        public static async Task CheckAsync(TrayModel model)
+        {
+            model.SetUpdates(new UpdateView(Running, UpdateStates.Checking));
+            await Task.Delay(1_000);
+            model.SetUpdates(new UpdateView(Running, UpdateStates.Available, Offered, 34_000_000));
+        }
+
+        public static async Task UpdateAsync(TrayModel model)
+        {
+            model.SetUpdates(new UpdateView(Running, UpdateStates.Downloading, Offered));
+            await Task.Delay(2_000);
+            model.SetUpdates(new UpdateView(Running, UpdateStates.Installing, Offered));
+            await Task.Delay(2_000);
+            model.SetUpdates(new UpdateView(Offered, UpdateStates.UpToDate));
+        }
+    }
+
     private sealed class Sender(TrayModel model, DispatcherQueue ui, string? state) : ITraySender
     {
+        public async Task<bool> CheckForUpdatesAsync()
+        {
+            TrayLog.Write("demo: check for updates");
+            await FakeUpdates.CheckAsync(model);
+            return true;
+        }
+
+        public async Task<bool> UpdateNowAsync()
+        {
+            TrayLog.Write("demo: update now");
+            await FakeUpdates.UpdateAsync(model);
+            return true;
+        }
+
         public async Task<SendResult> AskAsync(int minutes, string? reason)
         {
             TrayLog.Write($"demo: ask {minutes} min, reason {reason ?? "(none)"}");

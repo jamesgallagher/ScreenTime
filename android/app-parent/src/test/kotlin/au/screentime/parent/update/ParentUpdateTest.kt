@@ -1,5 +1,7 @@
 package au.screentime.parent.update
 
+import au.screentime.core.ui.update.UpdateState
+import au.screentime.core.ui.update.megabytes
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
@@ -42,19 +44,6 @@ class ParentUpdateTest {
         assertTrue(updateButton(failed))
         assertFalse(updateButton(UpdateState.Downloading("0.1.3")))
         assertFalse(updateButton(UpdateState.Installing("0.1.3")))
-    }
-
-    @Test
-    fun settingsStatusAndCheck() {
-        assertNull(versionStatus(UpdateState.Unknown))
-        assertEquals("Checking for updates…", versionStatus(UpdateState.Checking))
-        assertEquals("Up to date", versionStatus(UpdateState.UpToDate))
-        assertEquals("0.1.3 is ready", versionStatus(ready))
-        assertEquals("0.1.3 didn't install", versionStatus(failed))
-        assertTrue(canCheck(UpdateState.Unknown))
-        assertTrue(canCheck(UpdateState.UpToDate))
-        assertFalse(canCheck(UpdateState.Checking))
-        assertFalse(canCheck(ready))
     }
 
     @Test

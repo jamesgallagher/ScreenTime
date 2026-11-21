@@ -24,6 +24,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import au.screentime.core.ui.ScreenTimeTheme
+import au.screentime.core.ui.update.UpdateState
 
 /**
  * "ST Parent 0.1.3 is ready · Update" (docs/SPEC.md §12.7, §16.4): one quiet row at the top of every tab, under
