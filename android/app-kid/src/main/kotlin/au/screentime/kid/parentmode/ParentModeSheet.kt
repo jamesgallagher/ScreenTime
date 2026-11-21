@@ -46,6 +46,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import au.screentime.core.ui.ScreenTimeTheme
+import au.screentime.core.ui.update.UpdatesSheet
+import au.screentime.core.ui.update.VersionLink
+import au.screentime.core.ui.update.WhatWillHappen
+import au.screentime.kid.BuildConfig
 import au.screentime.kid.ask.Choice
 import au.screentime.kid.ask.ErrorLine
 import au.screentime.kid.ask.Look
@@ -56,6 +60,7 @@ import au.screentime.kid.live.ParentModeNews
 import au.screentime.kid.service.KidService
 import au.screentime.kid.status.KidStatus
 import au.screentime.kid.status.StatusHub
+import au.screentime.kid.update.KidUpdates
 import au.screentime.kid.update.removeFromDevice
 import java.util.UUID
 import kotlinx.coroutines.launch
@@ -254,6 +259,20 @@ fun ParentModeBanner(status: KidStatus, modifier: Modifier = Modifier) {
             Text("Remove Screen Time", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         if (removing) RemoveSheet(status.parentCodeSecret) { removing = false }
+        // The version, only while parent mode is on (docs/SPEC.md §12.11): a quiet link that opens Updates.
+        var updating by remember { mutableStateOf(false) }
+        VersionLink(BuildConfig.VERSION_NAME, Modifier.align(Alignment.CenterHorizontally)) { updating = true }
+        if (updating) {
+            val sos by StatusHub.sos.collectAsState()
+            UpdatesSheet(
+                source = KidUpdates.source,
+                appName = "Screen Time",
+                versionName = BuildConfig.VERSION_NAME,
+                whatWillHappen = WhatWillHappen.KID,
+                onDismiss = { updating = false },
+                sosActive = sos != null,
+            )
+        }
     }
 }
 

@@ -1,0 +1,33 @@
+{
+  "description": "The words of the Updates sheet and panel (docs/SPEC.md 12.11). Kotlin (core-ui UpdateWordsTest) and C# (UpdateWordsTests) both read this file, so the three apps cannot drift apart. status is null when the sheet shows no status line; button is null when it shows a spinner instead.",
+  "states": [
+    { "state": "unknown", "version": null, "sizeBytes": null, "status": null, "button": "Check for updates" },
+    { "state": "checking", "version": null, "sizeBytes": null, "status": "Checking for updates…", "button": null },
+    { "state": "up-to-date", "version": null, "sizeBytes": null, "status": "You're up to date", "button": "Check for updates" },
+    { "state": "check-failed", "version": null, "sizeBytes": null, "status": "Couldn't check. Check the internet and try again.", "button": "Check for updates" },
+    { "state": "available", "version": "0.1.9", "sizeBytes": 34000000, "status": "0.1.9 is out (34 MB). Update now?", "button": "Update now" },
+    { "state": "available", "version": "0.1.9", "sizeBytes": 100, "status": "0.1.9 is out (1 MB). Update now?", "button": "Update now" },
+    { "state": "downloading", "version": "0.1.9", "sizeBytes": null, "status": "Getting 0.1.9…", "button": null },
+    { "state": "ready", "version": "0.1.9", "sizeBytes": null, "status": "0.1.9 is ready. Update now?", "button": "Update now" },
+    { "state": "installing", "version": "0.1.9", "sizeBytes": null, "status": "Updating…", "button": null },
+    { "state": "failed", "version": "0.1.9", "sizeBytes": null, "status": "0.1.9 didn't install.", "button": "Try again" }
+  ],
+  "whatWillHappen": {
+    "windows": "Screen Time closes for about a minute, then opens again. Parent mode stays on.",
+    "kid": "Screen Time restarts in a few seconds. Parent mode stays on.",
+    "parent": "Takes a few seconds. The app opens again by itself."
+  },
+  "later": "Later",
+  "checkOnOpen": [
+    { "state": "unknown", "secondsSinceLastCheck": null, "checks": true },
+    { "state": "up-to-date", "secondsSinceLastCheck": 61, "checks": true },
+    { "state": "up-to-date", "secondsSinceLastCheck": 59, "checks": false },
+    { "state": "check-failed", "secondsSinceLastCheck": null, "checks": true },
+    { "state": "available", "secondsSinceLastCheck": 600, "checks": true },
+    { "state": "checking", "secondsSinceLastCheck": null, "checks": false },
+    { "state": "downloading", "secondsSinceLastCheck": 600, "checks": false },
+    { "state": "ready", "secondsSinceLastCheck": 600, "checks": false },
+    { "state": "installing", "secondsSinceLastCheck": 600, "checks": false },
+    { "state": "failed", "secondsSinceLastCheck": 600, "checks": false }
+  ]
+}

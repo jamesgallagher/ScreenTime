@@ -15,6 +15,11 @@
         <None Include="..\..\..\test-vectors\engine\*.json" Link="vectors\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
 
+    <!-- The words of the Updates panel, shared with Android (docs/SPEC.md 12.11). -->
+    <ItemGroup>
+        <None Include="..\..\..\test-vectors\update-words.json" Link="words\update-words.json" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+
     <ItemGroup>
         <ProjectReference Include="..\..\src\ScreenTime.Core\ScreenTime.Core.csproj" />
     </ItemGroup>

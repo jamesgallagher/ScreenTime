@@ -1,6 +1,7 @@
 package au.screentime.parent.update
 
 import au.screentime.core.model.api.AppUpdateOffer
+import au.screentime.core.ui.update.UpdateState
 import java.io.ByteArrayInputStream
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse

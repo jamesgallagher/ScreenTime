@@ -1,5 +1,6 @@
 using Microsoft.UI.Dispatching;
 using ScreenTime.Core.Tray;
+using ScreenTime.Core.Update;
 
 namespace ScreenTime.Tray;
 
@@ -19,6 +20,19 @@ internal sealed class TrayModel(DispatcherQueue ui)
 
     /// <summary>A new status arrived (UI thread).</summary>
     public event Action? Changed;
+
+    /// <summary>Where the PC's own update stands (docs/SPEC.md §12.11); null until the service sends its first update line.</summary>
+    public UpdateView? Updates { get; private set; }
+
+    /// <summary>The update view changed (UI thread).</summary>
+    public event Action? UpdatesChanged;
+
+    /// <summary>Called by the pipe on every <c>update</c> message.</summary>
+    public void SetUpdates(UpdateView view) => ui.TryEnqueue(() =>
+    {
+        Updates = view;
+        UpdatesChanged?.Invoke();
+    });
 
     /// <summary>A toast to show (UI thread).</summary>
     public event Action<string>? ToastRequested;

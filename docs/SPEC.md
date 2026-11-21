@@ -1056,6 +1056,54 @@ A parent can see **which websites a kid or shared device visited**, in any brows
 
 **Later (not CARD-070):** blocking and alerts (the "worth a look" card raises nothing), the report in the Android parent app and in emails, browsers that ignore policies, Bark's lookups dropped on the phone.
 
+### 12.11 Version and updates on every app (James, 21 Nov 2026; CARD-071)
+
+James asked for every app to show which version it is running, with a way for a parent to check for an update and apply it straight away: the Windows tray and the Android kid app while in parent mode, and the parent app always. **The automatic updates (sections 12.1, 12.2, 12.7) do not change at all**: when they check, download and install, and every rule they follow, stay exactly as they are. This only adds a way to see the version running and a manual trigger: **Check for updates** and **Update now**, which force a check or an install straight away when a parent taps them. Without a tap, nothing behaves differently from before.
+
+**One pattern, the same in all three apps** (the way Chrome's About page, Windows Update and the Play Store work: open it and it checks; when there is something, one clear button applies it):
+
+1. **A quiet version link at the bottom**: "Version 0.1.8", small and muted, a link (Windows `HyperlinkButton`; Android a `TextButton` with a 48 dp touch target). Where it is:
+   - **Windows tray**: the flyout's footer, right-aligned on the line with "Synced just now", **only while parent mode is on** for that account.
+   - **Android kid app**: the main screen, under the parent mode banner (its **End now** and **Remove Screen Time**), **only while parent mode is on**.
+   - **Parent app**: the bottom of Settings, always (it replaces the CARD-064 footer, which had "Version" and **Check for updates** without a way to install from there).
+   A kid never sees the version or the update controls: outside parent mode the link is not there, and on Windows the service refuses the pipe lines too.
+2. **The link opens "Updates"**: on Android a bottom sheet (`ModalBottomSheet`, as **Remove Screen Time** uses), on Windows a panel inside the flyout with a Back arrow (as **Ask for more time** uses). It shows the app's name, "Version 0.1.8", one status line, and one main button. **Opening it checks at once**, unless something is already under way (getting, ready, updating) or a check finished in the last 60 seconds.
+3. **When there is a newer version, it asks**: "0.1.9 is ready. Update now?" with the main button **Update now**, a line under it saying what will happen, and **Later** (which only closes Updates; the automatic update still happens by itself later). The tap on **Update now** is the "yes": there is no second dialog.
+
+**States and words** (exactly these, in every app; `test-vectors/update-words.json` holds the table and the Kotlin and C# tests both read it, so the words cannot drift apart):
+
+| State | Status line | Main button |
+|---|---|---|
+| unknown | (none) | **Check for updates** |
+| checking | Checking for updates… | (none, a spinner) |
+| up-to-date | You're up to date | **Check for updates** |
+| check-failed | Couldn't check. Check the internet and try again. | **Check for updates** |
+| available | 0.1.9 is out (34 MB). Update now? | **Update now** (downloads, then installs) |
+| downloading | Getting 0.1.9… | (none, a spinner) |
+| ready | 0.1.9 is ready. Update now? | **Update now** |
+| installing | Updating… | (none, a spinner) |
+| failed | 0.1.9 didn't install. | **Try again** (the same as **Update now**) |
+
+**What will happen** (the line under **Update now**, per app):
+- Windows tray: "Screen Time closes for about a minute, then opens again. Parent mode stays on."
+- Android kid app: "Screen Time restarts in a few seconds. Parent mode stays on."
+- Parent app: "Takes a few seconds. The app opens again by itself." (as in section 12.7)
+
+**Rules behind it:**
+
+- **Check for updates** asks the server at once (`POST /v1/device/app-update/check`, or `/v1/me/app-update/check` for the parent app), whatever the 6-hour timer says, and leaves that timer alone (the next automatic check comes when it would have anyway). A check that fails gives `check-failed`, never `up-to-date`. An automatic check that fails still says nothing.
+- **Update now** downloads first when the file is not here yet (on Android also on mobile data: a parent asked, and the size is shown), checks its size and SHA-256 as always, then installs at once: on Windows even with a kid account in use (all trays close for about a minute: the parent asked), on the kid phone even with the screen on. Never while an SOS is on (Android: the button is not offered).
+- **Android kid app**: before an install that a parent asked for, the app notes the time (SharedPreferences `update_asked_at`). When the new version starts (`MY_PACKAGE_REPLACED`) within 10 minutes of that, it opens its main screen again (a Device Owner app may start an activity from the background) and clears the note. Parent mode is kept as before (SharedPreferences and the snapshot).
+- **Windows**: the tray sends `{"type":"update-check","id":"…"}` and `{"type":"update-now","id":"…"}`. The service answers each with `reply` (`result` `Sent`, or `Refused` when that session is not in parent mode, which also logs `update: refused, not in parent mode`), and sends `{"type":"update","update":{"version":"0.1.130","state":"ready","offered":"0.1.131","sizeBytes":41234567}}` to every tray on `hello` and whenever it changes. A parent's **Update now** installs at the next tick through the CARD-061 path (closes the trays with `quit`, the one-time SYSTEM task, msiexec), and tries even a version that has failed 3 times (one more attempt per tap). After the update the new service starts the trays again and parent mode is still on with the same end time.
+- **Parent app**: as section 12.7, plus `check-failed` after a parent-asked check fails, and Updates' **Update now** is the same as the top row's **Update**.
+- **Remote Update now (James, 21 Nov 2026; CARD-072)**, the way a work phone's MDM pushes an update. On a kid's page in the parent app, each kid device shows its version and, when the server has a newer one for it, **Update now**. It asks the device to do exactly what a tap on its own **Update now** does (CARD-071): download if needed and install at once, even with a kid using it (phone: the app restarts for a few seconds; PC: the trays close for about a minute). Never during an SOS. The automatic updates still do not change.
+  - `POST /v1/devices/{id}/app-update` (parent) → 202 `{ versionName, requestedAt }`: stores `devices.update_requested_at` and `devices.update_requested_code` (the version offered to that device now). 409 `no_update` when nothing newer is offered to it; 404 for a revoked device or another family's.
+  - The request lives in the **snapshot** (`appUpdate: { versionCode, requestedAt } | null`), so a device that is off or offline gets it when it next syncs; a `{ "type": "app_update" }` message (WebSocket, and FCM on Android) only makes it sync now. A device acts on a request once (it keeps the `requestedAt` it last acted on), and only when `versionCode` is above its own. The snapshot carries `null` once the device has reported that version or higher (`devices.app_version_code`, stored by every `POST /v1/device/app-update/check`).
+  - `Device` gains `appUpdate: { versionName, state: "available" | "requested", requestedAt } | null`: `available` when the server offers the device something newer and nothing is requested, `requested` while a request is open. The row says "Version 0.1.8 · Up to date", "0.1.9 is out" with **Update now**, or "Updating to 0.1.9 · asked 5 min ago" (with **Update now** again after 30 minutes, to ask once more).
+  - A remote install does not reopen the kid app (the kid may be in another app). A device that was blocked is blocked again as soon as the new version starts, as after any update.
+  - The parent app itself cannot be updated remotely: it is not Device Owner, so its install needs a parent's tap on that phone (section 12.7).
+- **Who builds what**: Claude builds the shared words and state (`android/core-ui/.../update/`, `windows/src/ScreenTime.Core/Update/UpdateView.cs`, the test vectors), the Updates sheet and panel and the version links, behind seams with fake data. CARD-071 wires them to the real updaters.
+
 ## 13. Notifications
 
 Parent notifications go to the Android parent app by FCM. The web app shows the same items in its inbox and as banners while open (polling `/v1/events` every 30 s), and sends no browser push in v1.

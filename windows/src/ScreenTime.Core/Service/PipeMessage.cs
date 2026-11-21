@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using ScreenTime.Core.Games;
 using ScreenTime.Core.Tray;
+using ScreenTime.Core.Update;
 
 namespace ScreenTime.Core.Service;
 
@@ -12,8 +13,17 @@ namespace ScreenTime.Core.Service;
 public sealed record PipeMessage(string Type, string? Id = null, string? Text = null, int? Pid = null,
     string? KidName = null, long? RemainingSec = null, [property: JsonPropertyName("locked")] bool? IsLocked = null, bool? Offline = null, TrayStatus? View = null,
     int? Minutes = null, string? Reason = null, string? PresetId = null, SendResult? Result = null, bool? Approved = null, IReadOnlyList<GameShortcut>? Games = null,
-    string? Program = null, string? Title = null)
+    string? Program = null, string? Title = null, UpdateView? Update = null)
 {
+    /// <summary>"Check for updates" (tray to service, parent mode only): one extra check at the next tick (docs/SPEC.md §12.11).</summary>
+    public static PipeMessage CheckForUpdates(string id) => new("update-check", Id: id);
+
+    /// <summary>"Update now" (tray to service, parent mode only): download if needed, then install at once.</summary>
+    public static PipeMessage UpdateNow(string id) => new("update-now", Id: id);
+
+    /// <summary>Where the update stands (service to tray, on hello and whenever it changes).</summary>
+    public static PipeMessage UpdateOf(UpdateView update) => new("update", Update: update);
+
     /// <summary>Lock the PC now (service to tray).</summary>
     public static PipeMessage Lock(string id) => new("lock", Id: id);
 
