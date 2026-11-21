@@ -46,12 +46,6 @@ public static class UpdateCheck
 
     /// <summary>True when a check is due now: the first, or <see cref="EveryMs"/> after the last.</summary>
     public static bool IsDue(long? lastCheckMs, long nowMs) => lastCheckMs is null || nowMs - lastCheckMs >= EveryMs;
-
-    /// <summary>
-    /// A parent's manual check never moves the 6-hour timer: it returns the last-check time unchanged so the
-    /// automatic check still happens at its original time.
-    /// </summary>
-    public static long? AfterManualCheck(long? lastCheckMs) => lastCheckMs;
 }
 
 /// <summary>Where a downloaded MSI goes: the data folder, under <c>updates</c>, by version name.</summary>

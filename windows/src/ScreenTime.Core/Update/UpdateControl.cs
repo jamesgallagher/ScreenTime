@@ -29,4 +29,10 @@ public static class UpdateControl
             _ => (false, asked),
         };
     }
+
+    /// <summary>
+    /// Clears the "asked" flag when the latest check found no offer, so a parent tapping "Update now" when there is
+    /// nothing to update is consumed and does not keep trying.
+    /// </summary>
+    public static bool AskedAfterNothing(bool hasOffer, bool asked) => hasOffer ? asked : false;
 }

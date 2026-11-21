@@ -1056,7 +1056,7 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
 
     /// <summary>The latest offer each account got, by SID: the download uses the token of the account it came from.</summary>
     private readonly Dictionary<string, Offer> _offers = new();
-    private long? _lastUpdateCheckMs;
+    private readonly UpdateTimer _updateTimer = new();
     private VerifiedDownload? _verified;
     private int? _verifiedVersionCode;
     private PendingUpdate? _pending;
@@ -1138,18 +1138,19 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
             var best = BestOffer(runningCode);
             var failures = best is { } b ? UpdateFailures.For(UpdateFailures.Decode(_store.GetValue(UpdateKey, "failures")), b.Offer.VersionCode) : 0;
             var action = UpdateDecision.Decide(new UpdateState(
-                _pending, _lastUpdateCheckMs, best?.Offer, _verifiedVersionCode, _verified?.VerifiedAtMs, failures,
+                _pending, _updateTimer.LastCheckMs, best?.Offer, _verifiedVersionCode, _verified?.VerifiedAtMs, failures,
                 AnySessionUsing(), options.UpdateAnytime, runningCode, now, _asked));
             switch (action)
             {
                 case UpdateAction.Nothing:
                     if (best is null && _pending is null) DropDownload();
+                    _asked = UpdateControl.AskedAfterNothing(best is not null, _asked);
                     await PublishUpdate();
                     return;
                 case UpdateAction.Check:
                     await CheckForUpdate(ct, moveTimer: true);
                     await PublishUpdate();
-                    if (_lastUpdateCheckMs is null) return;
+                    if (_updateTimer.LastCheckMs is null) return;
                     break;
                 case UpdateAction.Download:
                     var offered = best!.Value;
@@ -1232,15 +1233,9 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
             }
         }
         _lastCheck = answered ? LastCheckState.Ok : LastCheckState.Failed;
-        // A check that reached nobody is tried again at the next tick; a successful check moves the 6-hour timer.
-        if (moveTimer && answered)
-        {
-            _lastUpdateCheckMs = _clock.NowMs();
-        }
-        else
-        {
-            _lastUpdateCheckMs = UpdateCheck.AfterManualCheck(_lastUpdateCheckMs);
-        }
+        // A check that reached nobody is tried again at the next tick; a successful automatic check moves the 6-hour timer.
+        // A manual check never moves the timer.
+        _updateTimer.AfterCheck(_clock.NowMs(), manual: !moveTimer, answered);
         if (answered) logger.LogInformation("update: checked, {Count} offer(s)", _offers.Count);
         await PublishUpdate();
     }

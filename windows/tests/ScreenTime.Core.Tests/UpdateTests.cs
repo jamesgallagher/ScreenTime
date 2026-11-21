@@ -273,12 +273,30 @@ public class UpdateTests
     }
 
     [Fact]
-    public void ManualCheckDoesNotMoveTheNextAutomaticCheckTime()
+    public void UpdateTimerMovesOnlyOnAnsweredAutomaticChecks()
     {
         // Automatic check at 08:00 means the next one is due at 14:00.
         var eightAm = DateTimeOffset.Parse("2026-11-21T08:00:00Z").ToUnixTimeMilliseconds();
-        Assert.Equal(eightAm, UpdateCheck.AfterManualCheck(eightAm));
-        Assert.False(UpdateCheck.IsDue(UpdateCheck.AfterManualCheck(eightAm), TenAm));
-        Assert.True(UpdateCheck.IsDue(UpdateCheck.AfterManualCheck(eightAm), TwoPm));
+        var timer = new UpdateTimer();
+        timer.AfterCheck(eightAm, manual: false, answered: true);
+        Assert.Equal(eightAm, timer.LastCheckMs);
+        Assert.False(timer.IsDue(TenAm));
+        Assert.True(timer.IsDue(TwoPm));
+
+        // A manual check at 10:00 does not move the timer; the automatic one is still due at 14:00.
+        timer.AfterCheck(TenAm, manual: true, answered: true);
+        Assert.Equal(eightAm, timer.LastCheckMs);
+        Assert.False(timer.IsDue(TenAm));
+        Assert.True(timer.IsDue(TwoPm));
+
+        // An unanswered check at 10:00 also does not move it.
+        timer.AfterCheck(TenAm, manual: false, answered: false);
+        Assert.Equal(eightAm, timer.LastCheckMs);
+        Assert.False(timer.IsDue(TenAm));
+        Assert.True(timer.IsDue(TwoPm));
+
+        // A later automatic check moves it to 14:00.
+        timer.AfterCheck(TwoPm, manual: false, answered: true);
+        Assert.Equal(TwoPm, timer.LastCheckMs);
     }
 }

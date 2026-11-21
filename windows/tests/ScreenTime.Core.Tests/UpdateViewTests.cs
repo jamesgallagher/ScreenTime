@@ -142,4 +142,13 @@ public class UpdateViewTests
         Assert.Equal((true, false), UpdateControl.Request(UpdateRequestKind.Check, inParentMode: true, asked: false));
         Assert.Equal((false, false), UpdateControl.Request(UpdateRequestKind.Check, inParentMode: false, asked: false));
     }
+
+    [Fact]
+    public void AskedIsClearedWhenNoOfferTurnsUp()
+    {
+        Assert.False(UpdateControl.AskedAfterNothing(hasOffer: false, asked: true));
+        Assert.True(UpdateControl.AskedAfterNothing(hasOffer: true, asked: true));
+        Assert.False(UpdateControl.AskedAfterNothing(hasOffer: false, asked: false));
+        Assert.False(UpdateControl.AskedAfterNothing(hasOffer: true, asked: false));
+    }
 }
