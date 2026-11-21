@@ -68,14 +68,14 @@ public static class UpdateViewBuilder
             return new UpdateView(f.RunningVersionName, UpdateStates.Downloading, offer.VersionName, offer.SizeBytes);
         }
 
-        if (f.Downloaded)
-        {
-            return new UpdateView(f.RunningVersionName, UpdateStates.Ready, offer.VersionName, offer.SizeBytes);
-        }
-
         if (f.LastAttemptFailed)
         {
             return new UpdateView(f.RunningVersionName, UpdateStates.Failed, offer.VersionName, offer.SizeBytes);
+        }
+
+        if (f.Downloaded)
+        {
+            return new UpdateView(f.RunningVersionName, UpdateStates.Ready, offer.VersionName, offer.SizeBytes);
         }
 
         return new UpdateView(f.RunningVersionName, UpdateStates.Available, offer.VersionName, offer.SizeBytes);

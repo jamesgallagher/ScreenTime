@@ -1237,6 +1237,10 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
         {
             _lastUpdateCheckMs = _clock.NowMs();
         }
+        else
+        {
+            _lastUpdateCheckMs = UpdateCheck.AfterManualCheck(_lastUpdateCheckMs);
+        }
         if (answered) logger.LogInformation("update: checked, {Count} offer(s)", _offers.Count);
         await PublishUpdate();
     }

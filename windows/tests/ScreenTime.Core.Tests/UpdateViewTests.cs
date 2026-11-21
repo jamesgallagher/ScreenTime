@@ -98,6 +98,16 @@ public class UpdateViewTests
     }
 
     [Fact]
+    public void FailedAttemptWithTheVerifiedFileIsStillFailed()
+    {
+        var view = UpdateViewBuilder.Build(Facts(offer: Offer131, downloaded: true, lastAttemptFailed: true));
+        Assert.Equal(UpdateStates.Failed, view.State);
+        Assert.Equal("0.1.131", view.Offered);
+        Assert.Equal(34_000_000L, view.SizeBytes);
+        Assert.Equal("0.1.131 didn't install.", UpdateWords.Status(view));
+    }
+
+    [Fact]
     public void OfferEqualToRunningIsUpToDate()
     {
         var sameOffer = new Offer(130, "0.1.130", "sha130", 34_000_000);

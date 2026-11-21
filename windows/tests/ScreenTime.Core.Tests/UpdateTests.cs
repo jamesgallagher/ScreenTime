@@ -277,7 +277,8 @@ public class UpdateTests
     {
         // Automatic check at 08:00 means the next one is due at 14:00.
         var eightAm = DateTimeOffset.Parse("2026-11-21T08:00:00Z").ToUnixTimeMilliseconds();
-        Assert.False(UpdateCheck.IsDue(eightAm, TenAm));
-        Assert.True(UpdateCheck.IsDue(eightAm, TwoPm));
+        Assert.Equal(eightAm, UpdateCheck.AfterManualCheck(eightAm));
+        Assert.False(UpdateCheck.IsDue(UpdateCheck.AfterManualCheck(eightAm), TenAm));
+        Assert.True(UpdateCheck.IsDue(UpdateCheck.AfterManualCheck(eightAm), TwoPm));
     }
 }
