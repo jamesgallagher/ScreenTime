@@ -51,6 +51,9 @@ fun nextUpdateStep(
 fun checkDue(lastCheckElapsed: Long?, nowElapsed: Long, everyMs: Long): Boolean =
     lastCheckElapsed == null || nowElapsed - lastCheckElapsed >= everyMs
 
+/** A parent's manual check never moves the automatic 6-hour timer. */
+fun manualCheckKeepsAutomaticTimer(lastCheck: Long?): Long? = lastCheck
+
 /** Whether [stream] is what the offer said: its size and SHA-256 (lower-case hex). */
 fun matchesOffer(stream: InputStream, sizeBytes: Long, sha256: String): Boolean {
     val digest = MessageDigest.getInstance("SHA-256")
@@ -96,6 +99,7 @@ class AppUpdater(
         val o = api.postDeviceAppUpdateCheck(AppUpdateCheck(BuildConfig.VERSION_CODE, BuildConfig.VERSION_NAME)).offer
         offer = o
         o?.let { Log.i(TAG, "update: offered ${it.versionName} (${it.versionCode})") }
+        lastCheck = manualCheckKeepsAutomaticTimer(lastCheck)
         return o
     }
 

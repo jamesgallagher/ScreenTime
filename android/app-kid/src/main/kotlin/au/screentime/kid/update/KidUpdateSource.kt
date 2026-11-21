@@ -84,6 +84,10 @@ class KidUpdateSource(
                         _state.value = UpdateState.Failed(offer.versionName)
                         return@launch
                     }
+                    if (sosActive()) {
+                        _state.value = UpdateState.Ready(offer.versionName)
+                        return@launch
+                    }
                     _state.value = UpdateState.Installing(offer.versionName)
                     noteAsked()
                     try {
@@ -95,6 +99,10 @@ class KidUpdateSource(
                     }
                 }
                 ManualUpdateStep.INSTALL -> {
+                    if (sosActive()) {
+                        _state.value = UpdateState.Ready(offer.versionName)
+                        return@launch
+                    }
                     _state.value = UpdateState.Installing(offer.versionName)
                     noteAsked()
                     try {

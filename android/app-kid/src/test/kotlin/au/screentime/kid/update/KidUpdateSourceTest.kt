@@ -110,6 +110,22 @@ class KidUpdateSourceTest {
     }
 
     @Test
+    fun anSosThatStartsDuringTheDownloadStopsTheInstall() {
+        var sos = false
+        var installs = 0
+        val source = source(
+            downloaded = { false },
+            download = { sos = true; true },
+            install = { installs++ },
+            sosActive = { sos },
+        )
+        source.checkNow()
+        source.update()
+        assertEquals(0, installs)
+        assertEquals(UpdateState.Ready("0.9.1"), source.state.value)
+    }
+
+    @Test
     fun updateFailsWhenTheDownloadDoesNotMatch() {
         var downloads = 0
         val source = source(

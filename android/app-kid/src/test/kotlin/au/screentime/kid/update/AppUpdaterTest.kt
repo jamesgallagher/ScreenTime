@@ -92,8 +92,9 @@ class AppUpdaterTest {
         val autoAt08 = 8 * 60 * 60_000L
         val manualAt10 = 10 * 60 * 60_000L
         val autoDueAt14 = 14 * 60 * 60_000L
-        assertFalse(checkDue(autoAt08, manualAt10, sixHours))
-        assertTrue(checkDue(autoAt08, autoDueAt14, sixHours))
+        assertEquals(autoAt08, manualCheckKeepsAutomaticTimer(autoAt08))
+        assertFalse(checkDue(manualCheckKeepsAutomaticTimer(autoAt08), manualAt10, sixHours))
+        assertTrue(checkDue(manualCheckKeepsAutomaticTimer(autoAt08), autoDueAt14, sixHours))
     }
 
     // SHA-256 of "hello".
