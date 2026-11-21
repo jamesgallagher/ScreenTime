@@ -85,6 +85,17 @@ class AppUpdaterTest {
         assertTrue(checkDue(1_000, 61_000, 60_000))
     }
 
+    @Test
+    fun aManualCheckLeavesTheAutomaticTimerAlone() {
+        // Automatic check at 08:00, manual check at 10:00, next automatic check due at 14:00.
+        val sixHours = 6 * 60 * 60_000L
+        val autoAt08 = 8 * 60 * 60_000L
+        val manualAt10 = 10 * 60 * 60_000L
+        val autoDueAt14 = 14 * 60 * 60_000L
+        assertFalse(checkDue(autoAt08, manualAt10, sixHours))
+        assertTrue(checkDue(autoAt08, autoDueAt14, sixHours))
+    }
+
     // SHA-256 of "hello".
     private val hello = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
 
