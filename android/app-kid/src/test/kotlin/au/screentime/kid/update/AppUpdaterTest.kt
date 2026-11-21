@@ -86,15 +86,28 @@ class AppUpdaterTest {
     }
 
     @Test
-    fun aManualCheckLeavesTheAutomaticTimerAlone() {
+    fun theAutomaticTimerOnlyMovesOnAutomaticChecks() {
         // Automatic check at 08:00, manual check at 10:00, next automatic check due at 14:00.
         val sixHours = 6 * 60 * 60_000L
-        val autoAt08 = 8 * 60 * 60_000L
-        val manualAt10 = 10 * 60 * 60_000L
-        val autoDueAt14 = 14 * 60 * 60_000L
-        assertEquals(autoAt08, manualCheckKeepsAutomaticTimer(autoAt08))
-        assertFalse(checkDue(manualCheckKeepsAutomaticTimer(autoAt08), manualAt10, sixHours))
-        assertTrue(checkDue(manualCheckKeepsAutomaticTimer(autoAt08), autoDueAt14, sixHours))
+        val at08 = 8 * 60 * 60_000L
+        val at10 = 10 * 60 * 60_000L
+        val at14 = 14 * 60 * 60_000L
+        val timer = AutomaticCheckTimer(sixHours)
+
+        timer.afterCheck(at08, manual = false, answered = true)
+        assertEquals(at08, timer.lastCheckElapsed)
+
+        timer.afterCheck(at10, manual = true, answered = true)
+        assertEquals(at08, timer.lastCheckElapsed)
+
+        timer.afterCheck(at10, manual = false, answered = false)
+        assertEquals(at08, timer.lastCheckElapsed)
+
+        assertFalse(timer.due(at10))
+        assertTrue(timer.due(at14))
+
+        timer.afterCheck(at14, manual = false, answered = true)
+        assertEquals(at14, timer.lastCheckElapsed)
     }
 
     // SHA-256 of "hello".

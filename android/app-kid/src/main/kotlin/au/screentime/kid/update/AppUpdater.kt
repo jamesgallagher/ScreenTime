@@ -51,8 +51,17 @@ fun nextUpdateStep(
 fun checkDue(lastCheckElapsed: Long?, nowElapsed: Long, everyMs: Long): Boolean =
     lastCheckElapsed == null || nowElapsed - lastCheckElapsed >= everyMs
 
-/** A parent's manual check never moves the automatic 6-hour timer. */
-fun manualCheckKeepsAutomaticTimer(lastCheck: Long?): Long? = lastCheck
+class AutomaticCheckTimer(private val everyMs: Long) {
+    var lastCheckElapsed: Long? = null
+        private set
+
+    fun due(nowElapsed: Long): Boolean = checkDue(lastCheckElapsed, nowElapsed, everyMs)
+
+    fun afterCheck(nowElapsed: Long, manual: Boolean, answered: Boolean) {
+        if (!answered || manual) return
+        lastCheckElapsed = nowElapsed
+    }
+}
 
 /** Whether [stream] is what the offer said: its size and SHA-256 (lower-case hex). */
 fun matchesOffer(stream: InputStream, sizeBytes: Long, sha256: String): Boolean {
@@ -80,7 +89,7 @@ class AppUpdater(
     /** A checked file is ready: the service shows **Update now** (docs/SPEC.md §12.1), once per version. */
     private val onReady: (versionName: String) -> Unit = {},
 ) {
-    private var lastCheck: Long? = null
+    private val checkTimer = AutomaticCheckTimer(CHECK_EVERY_MS)
     private var lastInstall: Long? = null
     private var offer: AppUpdateOffer? = null
     private var announced: Int? = null
@@ -99,7 +108,7 @@ class AppUpdater(
         val o = api.postDeviceAppUpdateCheck(AppUpdateCheck(BuildConfig.VERSION_CODE, BuildConfig.VERSION_NAME)).offer
         offer = o
         o?.let { Log.i(TAG, "update: offered ${it.versionName} (${it.versionCode})") }
-        lastCheck = manualCheckKeepsAutomaticTimer(lastCheck)
+        checkTimer.afterCheck(SystemClock.elapsedRealtime(), manual = true, answered = true)
         return o
     }
 
@@ -125,9 +134,9 @@ class AppUpdater(
     suspend fun tick(screenOn: Boolean, sosActive: Boolean) {
         try {
             val now = SystemClock.elapsedRealtime()
-            if (checkDue(lastCheck, now, CHECK_EVERY_MS)) {
+            if (checkTimer.due(now)) {
                 offer = api.postDeviceAppUpdateCheck(AppUpdateCheck(BuildConfig.VERSION_CODE, BuildConfig.VERSION_NAME)).offer
-                lastCheck = now
+                checkTimer.afterCheck(now, manual = false, answered = true)
                 offer?.let { Log.i(TAG, "update: offered ${it.versionName} (${it.versionCode})") }
             }
             val o = offer
