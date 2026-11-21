@@ -200,7 +200,8 @@ public sealed record UpdateState(
     bool AnyoneUsing,
     bool Anytime,
     int RunningVersionCode,
-    long NowMs);
+    long NowMs,
+    bool Asked = false);
 
 /// <summary>
 /// The update loop's decision (docs/SPEC.md §12.2): from what it knows, the one next thing to do. The service runs it
@@ -219,6 +220,14 @@ public static class UpdateDecision
         }
         // Ask the server at the first tick after start, then every 6 hours.
         if (UpdateCheck.IsDue(state.LastCheckMs, state.NowMs)) return UpdateAction.Check;
+        // A parent's manual "Update now" installs straight away, even while someone is using the PC
+        // and even after three failures. It still needs the file to be downloaded and verified first.
+        if (state.Asked)
+        {
+            if (state.BestOffer is not { } askedOffer) return UpdateAction.Nothing;
+            if (state.VerifiedVersionCode != askedOffer.VersionCode || state.VerifiedAtMs is null) return UpdateAction.Download;
+            return UpdateAction.Install;
+        }
         if (state.BestOffer is not { } offer) return UpdateAction.Nothing;
         if (UpdateAttempt.GiveUp(state.Failures)) return UpdateAction.Nothing;
         if (state.VerifiedVersionCode != offer.VersionCode || state.VerifiedAtMs is not { } verifiedAt) return UpdateAction.Download;

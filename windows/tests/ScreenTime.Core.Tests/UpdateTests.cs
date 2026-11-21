@@ -189,4 +189,95 @@ public class UpdateTests
         var stored = new UpdateFailures(7, 3);
         Assert.Equal(UpdateAction.Download, UpdateDecision.Decide(State(offer: new Offer(8, "0.1.8", "sha", 200), failures: UpdateFailures.For(stored, 8))));
     }
+
+    // CARD-071: manual Check for updates / Update now from parent mode.
+
+    private static readonly long NineAm = DateTimeOffset.Parse("2026-11-21T09:00:00Z").ToUnixTimeMilliseconds();
+    private static readonly long TenAm = DateTimeOffset.Parse("2026-11-21T10:00:00Z").ToUnixTimeMilliseconds();
+    private static readonly long TwoPm = DateTimeOffset.Parse("2026-11-21T14:00:00Z").ToUnixTimeMilliseconds();
+    private static readonly Offer Offer131 = new(131, "0.1.131", "sha131", 34_000_000);
+
+    [Fact]
+    public void AskedFalseWaitsForThePc_AskedTrueInstallsEvenWhenSomeoneIsUsingIt()
+    {
+        var state = new UpdateState(
+            Pending: null,
+            LastCheckMs: NineAm,
+            BestOffer: Offer131,
+            VerifiedVersionCode: 131,
+            VerifiedAtMs: NineAm,
+            Failures: 0,
+            AnyoneUsing: true,
+            Anytime: false,
+            RunningVersionCode: 130,
+            NowMs: TenAm);
+
+        Assert.Equal(UpdateAction.Nothing, UpdateDecision.Decide(state with { Asked = false }));
+        Assert.Equal(UpdateAction.Install, UpdateDecision.Decide(state with { Asked = true }));
+    }
+
+    [Fact]
+    public void AskedTrueDownloadsWhenNotVerified_AndInstallsWhenVerified()
+    {
+        var state = new UpdateState(
+            Pending: null,
+            LastCheckMs: NineAm,
+            BestOffer: Offer131,
+            VerifiedVersionCode: null,
+            VerifiedAtMs: null,
+            Failures: 0,
+            AnyoneUsing: true,
+            Anytime: false,
+            RunningVersionCode: 130,
+            NowMs: TenAm);
+
+        Assert.Equal(UpdateAction.Download, UpdateDecision.Decide(state with { Asked = true }));
+        Assert.Equal(UpdateAction.Install, UpdateDecision.Decide(state with { VerifiedVersionCode = 131, VerifiedAtMs = NineAm, Asked = true }));
+    }
+
+    [Fact]
+    public void AskedTrueInstallsEvenAfterThreeFailures()
+    {
+        var state = new UpdateState(
+            Pending: null,
+            LastCheckMs: NineAm,
+            BestOffer: Offer131,
+            VerifiedVersionCode: 131,
+            VerifiedAtMs: NineAm,
+            Failures: 3,
+            AnyoneUsing: false,
+            Anytime: false,
+            RunningVersionCode: 130,
+            NowMs: TenAm);
+
+        Assert.Equal(UpdateAction.Nothing, UpdateDecision.Decide(state with { Asked = false }));
+        Assert.Equal(UpdateAction.Install, UpdateDecision.Decide(state with { Asked = true }));
+    }
+
+    [Fact]
+    public void AskedTrueWithNoOfferDoesNothing_AndViewShowsUpToDateAfterSuccessfulCheck()
+    {
+        var state = new UpdateState(
+            Pending: null,
+            LastCheckMs: TenAm,
+            BestOffer: null,
+            VerifiedVersionCode: null,
+            VerifiedAtMs: null,
+            Failures: 0,
+            AnyoneUsing: false,
+            Anytime: false,
+            RunningVersionCode: 130,
+            NowMs: TenAm);
+
+        Assert.Equal(UpdateAction.Nothing, UpdateDecision.Decide(state with { Asked = true }));
+    }
+
+    [Fact]
+    public void ManualCheckDoesNotMoveTheNextAutomaticCheckTime()
+    {
+        // Automatic check at 08:00 means the next one is due at 14:00.
+        var eightAm = DateTimeOffset.Parse("2026-11-21T08:00:00Z").ToUnixTimeMilliseconds();
+        Assert.False(UpdateCheck.IsDue(eightAm, TenAm));
+        Assert.True(UpdateCheck.IsDue(eightAm, TwoPm));
+    }
 }
