@@ -61,7 +61,7 @@ class KidUpdateSourceTest {
     }
 
     @Test
-    fun updateDownloadsAndInstallsWhenTheFileIsNotHereYet() {
+    fun updateDownloadsEvenOnAMeteredNetworkBecauseAParentAsked() {
         var downloads = 0
         var installs = 0
         var noted = 0

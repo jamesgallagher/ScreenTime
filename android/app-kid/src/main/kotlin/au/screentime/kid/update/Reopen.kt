@@ -8,4 +8,4 @@ private const val REOPEN_WINDOW_MS = 10 * 60 * 1_000L
  * true only when a parent-asked install was noted and the replacement happened within 10 minutes.
  */
 fun shouldReopen(askedAtMs: Long?, nowMs: Long): Boolean =
-    askedAtMs != null && nowMs - askedAtMs <= REOPEN_WINDOW_MS
+    askedAtMs != null && nowMs - askedAtMs in 0..REOPEN_WINDOW_MS
