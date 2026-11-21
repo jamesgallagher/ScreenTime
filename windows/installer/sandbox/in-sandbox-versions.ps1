@@ -292,23 +292,48 @@ Say "UpdatesStatus: $ups21"
 if (($ups21 -eq $expected21a) -or ($ups21 -like "$bVersion is out*")) { Say "criterion 21: PASS ('$ups21')" } else { Say "criterion 21: FAIL (got '$ups21')" }
 
 Say "=== 5. criterion 22: invoke Update now"
+$pressTime = Get-Date
 $pressedMain2 = Press 'UpdatesMain'
 Say "UpdatesMain (Update now) invoke: $pressedMain2"
-if ($pressedMain2) { Say "Update now pressed" } else { Say "Update now pressed: FAIL" }
+if ($pressedMain2) { Say "Update now pressed at $($pressTime.ToString('HH:mm:ss'))" } else { Say "Update now pressed: FAIL" }
 
 Say "=== 6. wait for installed version to become B (up to 6 minutes)"
 $installed = ReadInstalledVersion
-$at3min = $installed
+$installSeconds = $null
+$at3minVersion = $null
 for ($i = 0; $i -lt 72; $i++) {
-  Say "  poll $i/72 installed: $installed"
-  if ($i -eq 36) { $at3min = $installed }
-  if ($installed -eq $bVersion) { break }
+  $elapsed = ((Get-Date) - $pressTime).TotalSeconds
+  Say "  poll $i/72 installed: $installed (elapsed: $([Math]::Round($elapsed, 1)) s)"
+  
+  # Record version at 3 minutes
+  if ($elapsed -ge 180 -and $null -eq $at3minVersion) {
+    $at3minVersion = $installed
+    Say "  version at 3 min: $at3minVersion"
+  }
+  
+  if ($installed -eq $bVersion) {
+    $installSeconds = [Math]::Round(((Get-Date) - $pressTime).TotalSeconds, 1)
+    Say "  installed after $installSeconds s"
+    break
+  }
+  
   Start-Sleep 5
   $installed = ReadInstalledVersion
 }
-Say "version at 3 min: $at3min"
+
 Say "final installed version: $installed"
-if ($at3min -eq $bVersion) { Say "criterion 22 installed within 3 min: PASS (at 3 min: $at3min)" } else { Say "criterion 22 installed within 3 min: FAIL (at 3 min: $at3min)" }
+
+# Criterion 22: installed within 3 min
+if ($null -ne $installSeconds -and $installSeconds -le 180) {
+  Say "criterion 22 installed within 3 min: PASS (installed after $installSeconds s)"
+} elseif ($null -ne $installSeconds) {
+  $at3minText = if ($null -ne $at3minVersion) { $at3minVersion } else { "not yet" }
+  Say "criterion 22 installed within 3 min: FAIL (installed after $installSeconds s; at 3 min: $at3minText)"
+} else {
+  $at3minText = if ($null -ne $at3minVersion) { $at3minVersion } else { "not yet" }
+  Say "criterion 22 installed within 3 min: FAIL (not installed within 6 min; at 3 min: $at3minText)"
+}
+
 if ($installed -eq $bVersion) { Say "criterion 22 installed eventually: PASS" } else { Say "criterion 22 installed eventually: FAIL (got '$installed', expected '$bVersion')" }
 
 Say "=== 6a. diagnostics"
@@ -368,12 +393,12 @@ $needsRestart = $false
 $multiTray = $false
 
 # Phase 1: Wait up to 90 seconds for service Running and tray count
-for ($i = 0; $i -lt 18; $i++) {
+for ($i = 0; $i -lt 3; $i++) {
   $svc = Get-Service ScreenTime -ErrorAction SilentlyContinue
   $svcState = if ($svc) { $svc.Status.ToString() } else { "(no service)" }
   $trays = @(Get-CimInstance Win32_Process -Filter "Name = 'ScreenTime.Tray.exe'" | Where-Object { $_.SessionId -eq 1 })
   $trayCount = $trays.Count
-  Say "  poll phase1 $($i+1)/18: service=$svcState, tray count in session 1 = $trayCount"
+  Say "  poll phase1 $($i+1)/3: service=$svcState, tray count in session 1 = $trayCount ($([int]((Get-Date) - $pressTime).TotalSeconds) s after Update now)"
   
   if ($trayCount -gt 1) {
     $multiTray = $true
@@ -399,13 +424,13 @@ if ($needsRestart -and -not $multiTray -and -not $trayOk) {
   Restart-Service ScreenTime
   Say "Restart-Service completed"
   
-  # Wait up to 120 seconds for exactly one tray
-  for ($i = 0; $i -lt 24; $i++) {
+  # Wait up to 60 seconds for exactly one tray
+  for ($i = 0; $i -lt 12; $i++) {
     $svc = Get-Service ScreenTime -ErrorAction SilentlyContinue
     $svcState = if ($svc) { $svc.Status.ToString() } else { "(no service)" }
     $trays = @(Get-CimInstance Win32_Process -Filter "Name = 'ScreenTime.Tray.exe'" | Where-Object { $_.SessionId -eq 1 })
     $trayCount = $trays.Count
-    Say "  poll phase2 $($i+1)/24: service=$svcState, tray count in session 1 = $trayCount"
+    Say "  poll phase2 $($i+1)/12: service=$svcState, tray count in session 1 = $trayCount ($([int]((Get-Date) - $pressTime).TotalSeconds) s after Update now)"
     
     if ($trayCount -gt 1) {
       $multiTray = $true
@@ -435,6 +460,7 @@ foreach ($p in (Get-CimInstance Win32_Process -Filter "Name = 'ScreenTime.Servic
   Say "  pid=$($p.ProcessId) command=$($p.CommandLine)"
 }
 
+Say "time from Update now to one tray: $([int]((Get-Date) - $pressTime).TotalSeconds) s"
 if ($multiTray) {
   Say "criterion 22: FAIL (more than one tray; known CARD-061 gap)"
   Set-Content C:\out\done.txt "failed"
