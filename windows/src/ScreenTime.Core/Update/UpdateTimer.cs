@@ -6,7 +6,7 @@ namespace ScreenTime.Core.Update;
 /// </summary>
 public sealed class UpdateTimer
 {
-    /// <summary>When the last successful automatic check happened, in ms since boot.</summary>
+    /// <summary>When the last successful automatic check happened, on the service's trusted clock (wall-clock ms).</summary>
     public long? LastCheckMs { get; private set; }
 
     /// <summary>True when an automatic check is due: the first since start, or 6 hours after the last.</summary>
