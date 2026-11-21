@@ -5,7 +5,7 @@ $results = "C:\out\results.txt"
 function Say([string]$text) { Add-Content $results $text -Encoding UTF8 }
 Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
 Add-Type -Namespace W -Name T -MemberDefinition @'
-[System.Runtime.InteropServices.DllImport("user32.dll")] public static extern System.IntPtr FindWindowW(string c, string w);
+[System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)] public static extern System.IntPtr FindWindow(string c, string w);
 [System.Runtime.InteropServices.DllImport("user32.dll")] public static extern bool PostMessageW(System.IntPtr h, uint m, System.IntPtr w, System.IntPtr l);
 '@
 $A = [System.Windows.Automation.AutomationElement]
@@ -41,8 +41,9 @@ function Flyout {
 }
 # Open/toggle the flyout by posting to the tray icon's hidden callback window.
 function OpenFlyout {
-  $hwnd = [W.T]::FindWindowW("ScreenTime.TrayIcon", "ScreenTime.TrayIcon")
-  if ($hwnd -eq [IntPtr]::Zero) { return $false }
+  $hwnd = [W.T]::FindWindow("ScreenTime.TrayIcon", "ScreenTime.TrayIcon")
+  if ($hwnd -eq [IntPtr]::Zero) { Say "    FindWindow returned 0 (HWND not found)"; return $false }
+  Say "    FindWindow returned HWND=$hwnd"
   [W.T]::PostMessageW($hwnd, 0x8001, [IntPtr]1, [IntPtr]0x400) | Out-Null
   $true
 }
@@ -148,21 +149,51 @@ if (-not $w) {
   $vl19 = IsVisible 'VersionLink'
   if ($vl19) { Say "criterion 19: FAIL (VersionLink visible outside parent mode)" } else { Say "criterion 19: PASS (VersionLink not visible)" }
 }
-# Parent button presence
-$w = Flyout
+# Poll for "I'm the parent" button to become enabled (up to 30 s)
 $parentBtn = $null
-if ($w) {
-  try { $parentBtn = $w.FindFirst("Descendants", (New-Object System.Windows.Automation.PropertyCondition($A::NameProperty, "I'm the parent"))) } catch { }
+$parentEnabled = $false
+for ($i = 1; $i -le 30; $i++) {
+  $w = EnsureFlyout
+  if ($w) {
+    try {
+      $candidate = $w.FindFirst("Descendants", (New-Object System.Windows.Automation.PropertyCondition($A::NameProperty, "I'm the parent")))
+      if ($candidate) {
+        $parentBtn = $candidate
+        $isEnabled = $candidate.Current.IsEnabled
+        if ($isEnabled) {
+          $parentEnabled = $true
+          Say "  poll $i/30: I'm the parent found and enabled"
+          break
+        } else {
+          Say "  poll $i/30: I'm the parent found but disabled"
+        }
+      } else {
+        Say "  poll $i/30: I'm the parent not found"
+      }
+    } catch {
+      Say "  poll $i/30: error finding I'm the parent: $($_.Exception.Message)"
+    }
+  } else {
+    Say "  poll $i/30: flyout not open"
+  }
+  Start-Sleep 1
 }
-if ($parentBtn) { Say "I'm the parent button: present" } else { Say "I'm the parent button: absent" }
+
+if (-not $parentEnabled) {
+  Say "criterion 20: FAIL (I'm the parent never enabled)"
+  Say "criterion 21: FAIL (skipped - parent button not enabled)"
+  Say "criterion 22: FAIL (skipped - parent button not enabled)"
+  Set-Content C:\out\step20-failed.txt "parent button never enabled"
+  Set-Content C:\out\done.txt "failed"
+  Say "done"
+  exit 0
+}
+
+Say "I'm the parent button: enabled"
 
 Say "=== 3. start parent mode"
 $parentPressed = $false
-if ($parentBtn) {
-  try { $parentBtn.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke(); Say "pressed I'm the parent"; $parentPressed = $true } catch { Say "I'm the parent invoke failed: $($_.Exception.Message)" }
-} else {
-  Say "criterion 20: FAIL (I'm the parent button not found)"
-}
+try { $parentBtn.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke(); Say "pressed I'm the parent"; $parentPressed = $true } catch { Say "I'm the parent invoke failed: $($_.Exception.Message)" }
 
 if ($parentPressed) {
   Start-Sleep 1

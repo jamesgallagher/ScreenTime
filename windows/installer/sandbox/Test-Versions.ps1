@@ -163,8 +163,25 @@ if (-not $wsbId) { "NOT RUN: could not get the Sandbox id"; exit 1 }
 
 "--- 4. wait for the guest to ask for parent mode, then approve it"
 $waited = 0
-while (-not (Test-Path (Join-Path $out "parent-mode-asked.txt")) -and $waited -lt 600) { Start-Sleep 5; $waited += 5 }
-if (-not (Test-Path (Join-Path $out "parent-mode-asked.txt"))) { "NOT RUN: the guest never asked for parent mode"; exit 1 }
+$earlyExit = $false
+while ($waited -lt 600) {
+  if (Test-Path (Join-Path $out "parent-mode-asked.txt")) { break }
+  if (Test-Path (Join-Path $out "step20-failed.txt")) { $earlyExit = $true; break }
+  if (Test-Path (Join-Path $out "done.txt")) { $earlyExit = $true; break }
+  Start-Sleep 5; $waited += 5
+}
+if ($earlyExit) {
+  "--- guest exited early before asking for parent mode (step20-failed.txt or done.txt found)"
+  Show-SandboxDiagnostics
+  Stop-SandboxIfRunning
+  exit 1
+}
+if (-not (Test-Path (Join-Path $out "parent-mode-asked.txt"))) {
+  "NOT RUN: the guest never asked for parent mode within 600 s"
+  Show-SandboxDiagnostics
+  Stop-SandboxIfRunning
+  exit 1
+}
 "--- guest asked for parent mode; approving"
 Push-Location $root
 try {
