@@ -14,6 +14,10 @@ var dataFolder = Win.DefaultDataFolder();
 var secure = true;
 var command = "";
 var dryLock = false;
+// Dev only, for the Windows Sandbox (CARD-073): the Sandbox has no console session, so a test of the real lock needs
+// --session without --dry-lock. This says "yes, that is on purpose": it only unlocks the guard below and changes
+// nothing else, so a real run locks and disconnects for real.
+var realLockTest = false;
 var updateAnytime = false;
 var flags = new Dictionary<string, string>();
 var i = 0;
@@ -37,6 +41,11 @@ while (i < args.Length)
         updateAnytime = true;
         i++;
     }
+    else if (arg == "--real-lock-test")
+    {
+        realLockTest = true;
+        i++;
+    }
     else if (arg.StartsWith("--"))
     {
         var key = arg[2..];
@@ -57,6 +66,10 @@ switch (command)
         {
             var builder = Host.CreateApplicationBuilder(args);
             builder.Services.AddWindowsService(o => o.ServiceName = "ScreenTime");
+            // AddWindowsService sends Warning and worse to the Windows event log; the service's own lines (which are
+            // Information: what the lock loop decided and why) are what a PC's event log is read for after a fault
+            // (docs/SPEC.md §12.2 "Stall guard", CARD-073).
+            builder.Logging.AddFilter<Microsoft.Extensions.Logging.EventLog.EventLogLoggerProvider>("ScreenTime.Service", LogLevel.Information);
             builder.Services.AddSingleton<SessionEvents>();
             // --tray <path>: the tray exe. Without it, Tray\ScreenTime.Tray.exe next to the service when it runs as a service (the
             // installer's layout); none in a console run.
@@ -76,12 +89,23 @@ switch (command)
             flags.TryGetValue("fake-timezone-file", out var fakeZone);
             // Dev only: --games-root <folder> is the only place the game finder looks, instead of every fixed drive (docs/SPEC.md §12.6).
             flags.TryGetValue("games-root", out var gamesRoot);
-            if ((session is not null || trayOpen is not null || fakeClock is not null || fakeZone is not null || gamesRoot is not null || updateAnytime) && !dryLock)
+            // Dev only (CARD-073): --stall-test-file <path> makes the 1-second lock loop sleep while the file exists,
+            // so the watchdog's restart can be tried in Windows Sandbox.
+            flags.TryGetValue("stall-test-file", out var stallTestFile);
+            // Dev only (CARD-073): --hold-lock-test-file <path> makes a background operation take the service lock
+            // and keep it while the file exists, so the lock loop's 2 s bound and its no-lock pass can be seen.
+            flags.TryGetValue("hold-lock-test-file", out var holdLockTestFile);
+            if ((session is not null || stallTestFile is not null || holdLockTestFile is not null) && !dryLock && !realLockTest)
             {
-                Console.Error.WriteLine("--session, --tray-open, --fake-clock-file, --fake-timezone-file, --games-root and --update-anytime are for testing and need --dry-lock.");
+                Console.Error.WriteLine("--session, --stall-test-file and --hold-lock-test-file are for testing and need --dry-lock (or --real-lock-test for a Sandbox run that must lock for real).");
                 return 2;
             }
-            builder.Services.AddSingleton(new ServiceOptions(dataFolder, secure, trayExe, dryLock, WindowsServiceHelpers.IsWindowsService(), session, trayOpen, fakeClock, fakeZone, gamesRoot, updateAnytime));
+            if ((trayOpen is not null || fakeClock is not null || fakeZone is not null || gamesRoot is not null || updateAnytime) && !dryLock)
+            {
+                Console.Error.WriteLine("--tray-open, --fake-clock-file, --fake-timezone-file, --games-root and --update-anytime are for testing and need --dry-lock.");
+                return 2;
+            }
+            builder.Services.AddSingleton(new ServiceOptions(dataFolder, secure, trayExe, dryLock, WindowsServiceHelpers.IsWindowsService(), session, trayOpen, fakeClock, fakeZone, gamesRoot, updateAnytime, stallTestFile, holdLockTestFile));
             if (WindowsServiceHelpers.IsWindowsService())
             {
                 builder.Services.AddSingleton<IHostLifetime, SessionLifetime>();
