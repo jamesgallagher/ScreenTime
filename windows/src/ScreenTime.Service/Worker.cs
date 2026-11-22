@@ -104,6 +104,8 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
         public bool Unlocked { get; set; }
         public WarningTracker Warnings { get; } = new();
         public bool? SentLocked { get; set; }
+        /// <summary>True once the out-of-time line was logged, so it is logged on the transition whoever sent the last view.</summary>
+        public bool LoggedOutOfTime { get; set; }
         public bool? SentParentMode { get; set; }
         public bool InParentMode { get; set; }
         /// <summary>The minute of the last "N s left" line, so the lock loop says the numbers once a minute (CARD-073).</summary>
@@ -261,7 +263,17 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
                                     s.LoggedMinute = now / 60_000;
                                     logger.LogInformation("{Kid}: {Left} s left, locked {Locked}, parent mode {ParentMode}", KidName(s.Sid), view.LeftSec, view.Locked, view.ParentMode);
                                 }
-                                if (view.Locked && s.SentLocked != true) logger.LogInformation("{Kid}: out of time, the engine says locked", KidName(s.Sid));
+                                // The transition, not "who sent the last view": the 60 s sync sends its own view, and
+                                // gating on SentLocked hid this line whenever the sync won that race (CARD-073).
+                                if (view.Locked && !s.LoggedOutOfTime)
+                                {
+                                    s.LoggedOutOfTime = true;
+                                    logger.LogInformation("{Kid}: out of time, the engine says locked", KidName(s.Sid));
+                                }
+                                else if (!view.Locked)
+                                {
+                                    s.LoggedOutOfTime = false;
+                                }
                                 if (s.Warnings.Check(view) is { } warning) await SendToast(s, warning);
                                 if (s.SentLocked != view.Locked || s.SentParentMode != view.ParentMode) await SendView(s, view);
                             }

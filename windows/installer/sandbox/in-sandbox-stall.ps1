@@ -291,7 +291,11 @@ if ($Stage -eq 1) {
     } else {
         # The service logs the Lock step just before the view that says out of time, in the same pass, so look a
         # few seconds before the used-up line (the gap printed below is then 0 or -1, which still means "at once").
-        $lockLine = WaitLog ($tUsed.AddSeconds(-5)) "locking session" 20
+        # Two honest paths to the same thing while the tray is frozen: the lock loop's own steps (on a normal pass), or
+        # its no-lock pass when another operation held the service lock over the 2 s bound (CARD-073 criterion 11).
+        # The card accepts either the real state or the service's own disconnect line, so both are matched and the one
+        # that happened is printed.
+        $lockLine = WaitLog ($tUsed.AddSeconds(-5)) "locking session|disconnecting session \d+ without the service lock" 20
         if ($lockLine) {
             $tLock = $lockLine.TimeCreated
             Say "  locking session at $(T $tLock): $(OneLine $lockLine)"
@@ -301,11 +305,12 @@ if ($Stage -eq 1) {
         # Under --dry-lock the disconnect step logs 'dry run: would disconnect session'; the card's real wording
         # 'tray did not lock, disconnecting session' appears only without --dry-lock. Both are matched, so the
         # same script works unchanged the day Program.cs allows the real run; which one was seen is printed.
-        $discLine = WaitLog $tUsed "tray did not lock, disconnecting session|dry run: would disconnect session" 20
+        $discLine = WaitLog $tUsed "tray did not lock, disconnecting session|dry run: would disconnect session|disconnecting session \d+ without the service lock" 20
         if ($discLine) {
             $tDisc = $discLine.TimeCreated
             Say "  disconnect step at $(T $tDisc): $(OneLine $discLine)"
             if ("$(OneLine $discLine)" -match "dry run") { Say "  (the dry-run wording, not the card's real one: Program.cs forced --dry-lock)" }
+            if ("$(OneLine $discLine)" -match "without the service lock") { Say "  (the lock loop's no-lock pass: another operation held the service lock over the 2 s bound, so it disconnected without it)" } else { Say "  (the lock loop's own steps: the tray was told, then the 2 s fallback ran)" }
         } else {
             Say "  FAIL: no disconnect line within 20 s of the minute being used up"
         }
