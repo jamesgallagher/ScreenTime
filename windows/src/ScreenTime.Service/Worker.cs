@@ -25,7 +25,7 @@ namespace ScreenTime.Service;
 /// <c>UpdateAnytime</c> (<c>--update-anytime</c>) installs the update as soon as it is verified, without waiting for the PC to be free.
 /// <c>StallTestFile</c> (<c>--stall-test-file</c>) is a test-only switch: while the file exists the 1-second lock loop
 /// sleeps instead of working, so the watchdog's restart can be tried in Windows Sandbox (CARD-073 criterion 8). It
-/// does nothing when the switch is absent, and it needs <c>--dry-lock</c>.
+/// does nothing when the switch is absent, and it needs <c>--dry-lock</c> or the Sandbox run's <c>--real-lock-test</c>.
 /// </summary>
 public sealed record ServiceOptions(string DataFolder, bool SecureFolder, string? TrayExe, bool DryLock, bool AsService, uint? Session = null,
     string? TrayOpen = null, string? FakeClockFile = null, string? FakeTimezoneFile = null, string? GamesRoot = null, bool UpdateAnytime = false,

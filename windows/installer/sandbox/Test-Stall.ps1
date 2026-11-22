@@ -128,6 +128,13 @@ $missingDone = @()
 foreach ($n in 1..3) {
     "--- stage $n of 3 (a fresh Sandbox VM; the guest runs in-sandbox-stall.ps1 -Stage $n)"
     if ($n -gt 1) {
+        # Criterion 8's own setup: the session must be unlocked and ALREADY out of time when the stall flag goes on, so
+        # today's allowance is 0 minutes for stage 2 and back to 1 minute for stage 3 (the guest creates the flag before
+        # the service is started in stage 2).
+        $allowance = 0
+        if ($n -eq 3) { $allowance = 1 }
+        $bed = pnpm --silent --filter '@screentime/server' exec tsx scripts/dev-bedtime.ts Sam 120 $allowance 2>&1
+        $bed | ForEach-Object { "  $_" }
         # The stage's device enrols fresh under the same kid Sam: without this delete it would inherit the
         # earlier devices' minutes and start already out of time.
         $q = "delete from usage_segments where device_id in (select id from devices where platform='windows')"

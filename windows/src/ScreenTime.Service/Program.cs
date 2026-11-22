@@ -92,9 +92,14 @@ switch (command)
             // Dev only (CARD-073): --stall-test-file <path> makes the 1-second lock loop sleep while the file exists,
             // so the watchdog's restart can be tried in Windows Sandbox.
             flags.TryGetValue("stall-test-file", out var stallTestFile);
-            if ((session is not null || trayOpen is not null || fakeClock is not null || fakeZone is not null || gamesRoot is not null || updateAnytime || stallTestFile is not null) && !dryLock && !realLockTest)
+            if ((session is not null || stallTestFile is not null) && !dryLock && !realLockTest)
             {
-                Console.Error.WriteLine("--session, --tray-open, --fake-clock-file, --fake-timezone-file, --games-root, --update-anytime and --stall-test-file are for testing and need --dry-lock (or --real-lock-test for a Sandbox run that must lock for real).");
+                Console.Error.WriteLine("--session and --stall-test-file are for testing and need --dry-lock (or --real-lock-test for a Sandbox run that must lock for real).");
+                return 2;
+            }
+            if ((trayOpen is not null || fakeClock is not null || fakeZone is not null || gamesRoot is not null || updateAnytime) && !dryLock)
+            {
+                Console.Error.WriteLine("--tray-open, --fake-clock-file, --fake-timezone-file, --games-root and --update-anytime are for testing and need --dry-lock.");
                 return 2;
             }
             builder.Services.AddSingleton(new ServiceOptions(dataFolder, secure, trayExe, dryLock, WindowsServiceHelpers.IsWindowsService(), session, trayOpen, fakeClock, fakeZone, gamesRoot, updateAnytime, stallTestFile));

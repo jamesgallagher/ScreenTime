@@ -351,6 +351,14 @@ elseif ($Stage -eq 2) {
     Remove-Item $trayLog -Force -ErrorAction SilentlyContinue
     Say "  tray.log cleared (the next pipe: connected line must come from this service run's tray)"
     SyncOnce
+    # Criterion 8's setup as the card words it: the session is unlocked and ALREADY out of time when the file is
+    # created. The host sets today's allowance to 0 minutes for this stage, and the flag goes on BEFORE the service is
+    # started, so the lock loop's first pass sleeps and no lock or disconnect is ever attempted: the session stays
+    # unlocked and out of time for the watchdog.
+    Say "the session is unlocked and out of time (today's allowance is 0 min); creating the stall flag before the service starts"
+    try { Set-Content $flag "1" } catch { Say "  FAIL: could not create the stall flag ($flag): $($_.Exception.Message)" }
+    Say "  stall flag created ($flag) at $(Get-Date -Format HH:mm:ss), before the service starts"
+    SaySessionLock " (unlocked and out of time, before the service starts)"
     Say "the service in this session, with the stall switch on the ImagePath"
     $t0 = SetImagePath " --stall-test-file $flag"
     SayDryNote "--stall-test-file (and --session)"
@@ -358,13 +366,6 @@ elseif ($Stage -eq 2) {
     $tray = $got.Tray
     $trayPidBefore = 0
     if ($tray) { $trayPidBefore = $tray.Id }
-    $counting = WaitLog ($t0.AddSeconds(-15)) "counting \(session" 90   # the line can be written just before Restart-Service returns
-    if ($counting) {
-        Say "  counting at $(T $counting.TimeCreated): $(OneLine $counting)"
-    } else {
-        Say "  FAIL: no counting line within 90 s of the restart"
-    }
-    SaySessionLock " (unlocked while the stall is not on yet)"
     $svcPidBefore = 0
     $svc = Get-Process -Name ScreenTime.Service -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($svc) {
@@ -373,10 +374,9 @@ elseif ($Stage -eq 2) {
     } else {
         Say "  FAIL: no ScreenTime.Service process found"
     }
-    # The stall flag goes on before the minute is used up, so the watchdog is tested on a live session.
-    try { Set-Content $flag "1" } catch { Say "  FAIL: could not create the stall flag ($flag): $($_.Exception.Message)" }
+
     $tFlag = Get-Date
-    Say "  stall flag created ($flag) at $(T $tFlag), before the minute is used up"
+    Say "  the service has run with the stall flag since $(T $t0); the watchdog is counted from here ($(T $tFlag))"
     $wdLine = $null
     $wdTime = $null
     $newPid = 0
