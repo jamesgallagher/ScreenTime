@@ -118,6 +118,7 @@ class KidService : Service() {
     private lateinit var states: FileStateStore
     private lateinit var syncer: Syncer
     private var updater: AppUpdater? = null
+    private var kidSource: KidUpdateSource? = null
     private lateinit var remoteNote: RemoteUpdateNote
     private lateinit var notifier: Notifier
     private lateinit var parentStore: ParentModeStore
@@ -253,7 +254,7 @@ class KidService : Service() {
         apps = AppWatcher(this, client)
         updater = AppUpdater(this, client, enrolment.serverUrl, token = { enrolment.deviceToken }, onReady = notifier::showUpdate)
         remoteNote = RemoteUpdateNote(this)
-        KidUpdates.source = KidUpdateSource(
+        val source = KidUpdateSource(
             currentCode = { BuildConfig.VERSION_CODE },
             check = updater!!::checkNow,
             downloaded = updater!!::downloaded,
@@ -263,6 +264,8 @@ class KidService : Service() {
             sosActive = { sos.pending || sos.active },
             scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
         )
+        kidSource = source
+        KidUpdates.source = source
         // This version may be the update that notice was about.
         notifier.cancelUpdate()
         kidName = enrolment.kidName
@@ -602,15 +605,9 @@ class KidService : Service() {
         if (offer == null || offer.versionCode != request.versionCode) {
             Log.w(TAG, "update: remote request ${request.versionCode} is not offered now"); return
         }
-        if (!updater.downloaded(offer) && !updater.download(offer)) {
-            Log.w(TAG, "update: remote request ${request.versionCode} could not be downloaded"); return
-        }
-        // Never install during an SOS: the same request is acted on after it ends.
-        if (sos.pending || sos.active) return
-        // Acted on once per requestedAt; written before the install commit, and NOT update_asked_at (no reopen).
-        remoteNote.write(Instant.parse(request.requestedAt).toEpochMilli())
-        Log.i(TAG, "update: remote request ${request.versionCode} installing")
-        updater.installNow(offer)
+        // The CARD-071 manual path, with the remote note instead of update_asked_at (the app must not reopen).
+        val handledAtMs = Instant.parse(request.requestedAt).toEpochMilli()
+        kidSource?.updateForRequest(offer) { remoteNote.write(handledAtMs) }
     }
 
     /** Sends the tamper events in the queue. An attempt recorded while they were on the way stays for the next sync. */
