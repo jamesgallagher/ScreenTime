@@ -81,7 +81,7 @@ class ParentUpdater(
                 throw e
             } catch (e: Exception) {
                 Log.w(TAG, "update: check failed: $e")
-                _state.value = stateAfterFailedCheck(before)
+                _state.value = stateAfterFailedCheck(before, asked)
                 return@launch
             }
             val s = parentState(offer, BuildConfig.VERSION_CODE, downloaded(offer), metered())
@@ -211,9 +211,13 @@ fun parentState(offer: AppUpdateOffer?, currentCode: Int, downloaded: Boolean, m
     else -> UpdateState.Downloading(offer.versionName)
 }
 
-/** A failed check changes nothing that was shown; only its own `Checking` goes back to `Unknown`. */
-fun stateAfterFailedCheck(before: UpdateState): UpdateState =
-    if (before == UpdateState.Checking) UpdateState.Unknown else before
+/**
+ * A failed check changes nothing that was shown, unless a parent asked for this check.
+ * When [asked] is true the screen shows `CheckFailed`; otherwise only the `Checking` that the
+ * parent's tap showed goes back to `Unknown`.
+ */
+fun stateAfterFailedCheck(before: UpdateState, asked: Boolean = false): UpdateState =
+    if (asked) UpdateState.CheckFailed else if (before == UpdateState.Checking) UpdateState.Unknown else before
 
 /** What **Update** does from [state]: download first when the checked file is not here, then install. */
 fun nextAction(state: UpdateState, downloaded: Boolean): UpdateAction = when (state) {

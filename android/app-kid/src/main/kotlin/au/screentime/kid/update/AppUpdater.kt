@@ -51,6 +51,18 @@ fun nextUpdateStep(
 fun checkDue(lastCheckElapsed: Long?, nowElapsed: Long, everyMs: Long): Boolean =
     lastCheckElapsed == null || nowElapsed - lastCheckElapsed >= everyMs
 
+class AutomaticCheckTimer(private val everyMs: Long) {
+    var lastCheckElapsed: Long? = null
+        private set
+
+    fun due(nowElapsed: Long): Boolean = checkDue(lastCheckElapsed, nowElapsed, everyMs)
+
+    fun afterCheck(nowElapsed: Long, manual: Boolean, answered: Boolean) {
+        if (!answered || manual) return
+        lastCheckElapsed = nowElapsed
+    }
+}
+
 /** Whether [stream] is what the offer said: its size and SHA-256 (lower-case hex). */
 fun matchesOffer(stream: InputStream, sizeBytes: Long, sha256: String): Boolean {
     val digest = MessageDigest.getInstance("SHA-256")
@@ -77,7 +89,7 @@ class AppUpdater(
     /** A checked file is ready: the service shows **Update now** (docs/SPEC.md §12.1), once per version. */
     private val onReady: (versionName: String) -> Unit = {},
 ) {
-    private var lastCheck: Long? = null
+    private val checkTimer = AutomaticCheckTimer(CHECK_EVERY_MS)
     private var lastInstall: Long? = null
     private var offer: AppUpdateOffer? = null
     private var announced: Int? = null
@@ -85,19 +97,46 @@ class AppUpdater(
 
     private fun fileFor(o: AppUpdateOffer) = File(File(context.cacheDir, "update"), "kid-${o.versionCode}.apk")
 
-    /** Someone tapped **Update now**: the next [tick] installs, even with the screen on. */
+    /** Someone tapped **Update now** on the notification: the next [tick] installs, even with the screen on. */
     fun askNow() {
         asked = true
         lastInstall = null
+    }
+
+    /** A parent-asked check: asks the server now and updates [offer], but does not move the automatic 6-hour timer. */
+    suspend fun checkNow(): AppUpdateOffer? {
+        val o = api.postDeviceAppUpdateCheck(AppUpdateCheck(BuildConfig.VERSION_CODE, BuildConfig.VERSION_NAME)).offer
+        offer = o
+        o?.let { Log.i(TAG, "update: offered ${it.versionName} (${it.versionCode})") }
+        checkTimer.afterCheck(SystemClock.elapsedRealtime(), manual = true, answered = true)
+        return o
+    }
+
+    /** Whether the checked file for [o] exists in cache. */
+    fun downloaded(o: AppUpdateOffer): Boolean = fileFor(o).exists()
+
+    /** A parent-asked install: commits the checked file at once and returns whether the commit was made. */
+    suspend fun installNow(o: AppUpdateOffer): Boolean {
+        val file = fileFor(o)
+        if (!file.exists()) return false
+        return try {
+            install(file)
+            true
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "update: install failed: $e")
+            false
+        }
     }
 
     /** Called after each sync. Failures are logged and tried again later. */
     suspend fun tick(screenOn: Boolean, sosActive: Boolean) {
         try {
             val now = SystemClock.elapsedRealtime()
-            if (checkDue(lastCheck, now, CHECK_EVERY_MS)) {
+            if (checkTimer.due(now)) {
                 offer = api.postDeviceAppUpdateCheck(AppUpdateCheck(BuildConfig.VERSION_CODE, BuildConfig.VERSION_NAME)).offer
-                lastCheck = now
+                checkTimer.afterCheck(now, manual = false, answered = true)
                 offer?.let { Log.i(TAG, "update: offered ${it.versionName} (${it.versionCode})") }
             }
             val o = offer
@@ -106,7 +145,7 @@ class AppUpdater(
             val metered = !BuildConfig.DEBUG && context.getSystemService(ConnectivityManager::class.java).isActiveNetworkMetered
             when (nextUpdateStep(o, BuildConfig.VERSION_CODE, file?.exists() == true, metered, screenOn, sosActive, asked)) {
                 UpdateStep.NOTHING -> Unit
-                UpdateStep.DOWNLOAD -> download(o!!, file!!)
+                UpdateStep.DOWNLOAD -> download(o!!)
                 UpdateStep.INSTALL -> if (lastInstall == null || now - lastInstall!! >= CHECK_EVERY_MS) {
                     lastInstall = now
                     asked = false
@@ -125,8 +164,9 @@ class AppUpdater(
         }
     }
 
-    /** Fetches the file; it only gets its real name once its size and hash are right. */
-    private suspend fun download(o: AppUpdateOffer, file: File) = withContext(Dispatchers.IO) {
+    /** Fetches the file; returns true only when its size and SHA-256 match the offer. */
+    suspend fun download(o: AppUpdateOffer): Boolean = withContext(Dispatchers.IO) {
+        val file = fileFor(o)
         file.parentFile?.deleteRecursively()
         file.parentFile?.mkdirs()
         val part = File(file.parentFile, "part")
@@ -137,7 +177,7 @@ class AppUpdater(
         try {
             if (connection.responseCode != 200) {
                 Log.w(TAG, "update: download said ${connection.responseCode}")
-                return@withContext
+                return@withContext false
             }
             connection.inputStream.use { input -> part.outputStream().use { input.copyTo(it) } }
         } finally {
@@ -146,9 +186,11 @@ class AppUpdater(
         if (part.inputStream().use { matchesOffer(it, o.sizeBytes.toLong(), o.sha256) }) {
             part.renameTo(file)
             Log.i(TAG, "update: downloaded ${o.versionName}")
+            true
         } else {
             part.delete()
             Log.w(TAG, "update: the file does not match the offer")
+            false
         }
     }
 
@@ -185,5 +227,6 @@ class UpdateResultReceiver : BroadcastReceiver() {
         val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)
         val message = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
         Log.i(TAG, "update: install said $status $message")
+        KidUpdates.installResult(status)
     }
 }

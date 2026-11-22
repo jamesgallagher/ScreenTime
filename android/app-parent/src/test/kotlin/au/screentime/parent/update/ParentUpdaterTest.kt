@@ -82,6 +82,20 @@ class ParentUpdaterTest {
     }
 
     @Test
+    fun aParentAskedFailedCheckGivesCheckFailed() {
+        assertEquals(UpdateState.CheckFailed, stateAfterFailedCheck(UpdateState.UpToDate, asked = true))
+        assertEquals(UpdateState.CheckFailed, stateAfterFailedCheck(UpdateState.Ready("1.4.0"), asked = true))
+        assertEquals(UpdateState.CheckFailed, stateAfterFailedCheck(UpdateState.Unknown, asked = true))
+    }
+
+    @Test
+    fun anAutomaticFailedCheckKeepsTheStateAsItWas() {
+        assertEquals(UpdateState.Ready("1.4.0"), stateAfterFailedCheck(UpdateState.Ready("1.4.0"), asked = false))
+        assertEquals(UpdateState.UpToDate, stateAfterFailedCheck(UpdateState.UpToDate, asked = false))
+        assertEquals(UpdateState.Unknown, stateAfterFailedCheck(UpdateState.Unknown, asked = false))
+    }
+
+    @Test
     fun aDeclinedQuestionIsFailed() {
         // Cancel on "Update this app?", or Don't install in Play Protect.
         assertEquals(UpdateState.Failed("1.4.0"), stateAfterInstall(android.content.pm.PackageInstaller.STATUS_FAILURE_ABORTED, "1.4.0"))
