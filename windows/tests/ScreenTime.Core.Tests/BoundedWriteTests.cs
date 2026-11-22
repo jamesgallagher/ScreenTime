@@ -52,18 +52,43 @@ public class BoundedWriteTests
     }
 
     [Fact]
+    public async Task AWriteToAStreamThatThrowsDropsTheLink()
+    {
+        var link = new TrayLink();
+        using var stream = new FakeStream();
+        stream.SetBehavior(FakeStream.Behavior.Throw);
+        link.Connect(stream);
+
+        var outcome = await link.SendAsync(Line);
+
+        Assert.Equal(WriteOutcome.Failed, outcome);
+        Assert.False(link.Connected);
+    }
+
+    [Fact]
     public async Task AfterAGivenUpWriteTheNextMessageGoesOutWhenTheStreamReadsAgain()
     {
-        using var stream = new FakeStream();
-        stream.SetBehavior(FakeStream.Behavior.NeverComplete);
-        var givenUp = await BoundedWrite.LineAsync(stream, Line);
+        var link = new TrayLink();
+        using var stuck = new FakeStream();
+        stuck.SetBehavior(FakeStream.Behavior.NeverComplete);
+
+        link.Connect(stuck);
+        var givenUp = await link.SendAsync(Line);
         Assert.Equal(WriteOutcome.GivenUp, givenUp);
+        Assert.False(link.Connected);
 
-        stream.SetBehavior(FakeStream.Behavior.Complete);
-        var next = await BoundedWrite.LineAsync(stream, Line);
+        var sw = Stopwatch.StartNew();
+        var again = await link.SendAsync(Line);
+        sw.Stop();
+        Assert.Equal(WriteOutcome.GivenUp, again);
+        Assert.True(sw.ElapsedMilliseconds < 500, $"second send took {sw.ElapsedMilliseconds} ms");
 
+        using var fresh = new FakeStream();
+        fresh.SetBehavior(FakeStream.Behavior.Complete);
+        link.Connect(fresh);
+        var next = await link.SendAsync(Line);
         Assert.Equal(WriteOutcome.Written, next);
-        Assert.Equal(Line.ToArray(), stream.WrittenBytes);
+        Assert.Equal(Line.ToArray(), fresh.WrittenBytes);
     }
 
     /// <summary>Fake stream with settable per-write behaviour. Never a production type.</summary>

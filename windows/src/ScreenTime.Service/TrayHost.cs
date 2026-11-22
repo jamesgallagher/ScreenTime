@@ -17,15 +17,7 @@ public sealed class TrayHost(uint sessionId, string kidSid, string? trayExe, boo
     private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
     private volatile int _trayPid;
 
-    /// <summary>One connection to the tray's pipe: writes go through it, and a write given up drops the whole link.</summary>
-    private sealed class Link
-    {
-        public Stream? Stream;                 // the connected pipe; null once it is dropped
-        public readonly SemaphoreSlim Gate = new(1, 1);
-        public volatile bool Dropped;          // a write was given up: this link is never used again
-    }
-
-    private volatile Link? _link;
+    private readonly TrayLink _link = new();
     private volatile NamedPipeServerStream? _server;
 
     /// <summary>The PID of the tray this host started, or 0 when none is running.</summary>
@@ -49,45 +41,23 @@ public sealed class TrayHost(uint sessionId, string kidSid, string? trayExe, boo
     {
         try
         {
-            var link = _link;
-            if (link is null || link.Dropped) return;
-            var stream = link.Stream;
-            if (stream is null) return;
-            if (!await link.Gate.WaitAsync(BoundedWrite.GiveUpMs))
+            if (!_link.Connected) return;
+            var bytes = Encoding.UTF8.GetBytes(PipeMessage.Encode(message) + "\n");
+            var outcome = await _link.SendAsync(bytes);
+            if (outcome != WriteOutcome.Written)
             {
-                Drop(link, "a write before it has not finished");
-                return;
-            }
-            try
-            {
-                var outcome = await BoundedWrite.LineAsync(stream, Encoding.UTF8.GetBytes(PipeMessage.Encode(message) + "\n"));
-                if (outcome != WriteOutcome.Written) Drop(link, outcome == WriteOutcome.GivenUp ? "3 s without the tray reading it" : "the pipe write failed");
-            }
-            finally
-            {
-                // The gate is released only when the link was not dropped: a dropped link is never used again.
-                if (!link.Dropped) link.Gate.Release();
+                var why = outcome == WriteOutcome.GivenUp ? "3 s without the tray reading it" : "the pipe write failed";
+                logger.LogWarning("tray {Session}: pipe write given up ({Why}), disconnecting the pipe", sessionId, why);
+                try
+                {
+                    var server = _server;
+                    if (server is not null && server.IsConnected) server.Disconnect();
+                }
+                catch (IOException) { }
+                catch (InvalidOperationException) { }
             }
         }
         catch (Exception) { }
-    }
-
-    /// <summary>
-    /// Drops <paramref name="link"/>: it is never used again, and the pipe is disconnected so the tray reconnects
-    /// as it does after any pipe loss.
-    /// </summary>
-    private void Drop(Link link, string why)
-    {
-        link.Dropped = true;
-        if (ReferenceEquals(_link, link)) _link = null;
-        logger.LogWarning("tray {Session}: pipe write given up ({Why}), disconnecting the pipe", sessionId, why);
-        try
-        {
-            var server = _server;
-            if (server is not null && server.IsConnected) server.Disconnect();
-        }
-        catch (IOException) { }
-        catch (InvalidOperationException) { }
     }
 
     private async Task PipeLoopAsync(CancellationToken ct)
@@ -105,7 +75,7 @@ public sealed class TrayHost(uint sessionId, string kidSid, string? trayExe, boo
                 var reader = new StreamReader(server, Utf8, detectEncodingFromByteOrderMarks: false, bufferSize: 1024, leaveOpen: true);
                 // The bytes are written straight to the stream, never through a StreamWriter, so BoundedWrite sees the real pipe write.
                 _server = server;
-                _link = new Link { Stream = server };
+                _link.Connect(server);
                 try
                 {
                     while (await reader.ReadLineAsync(ct) is { } line)
@@ -115,7 +85,7 @@ public sealed class TrayHost(uint sessionId, string kidSid, string? trayExe, boo
                 }
                 catch (IOException) { }
                 logger.LogInformation("tray {Session}: pipe closed", sessionId);
-                _link = null;
+                _link.Disconnect();
                 _server = null;
                 reader.Dispose();
                 if (server.IsConnected) server.Disconnect();
@@ -124,7 +94,7 @@ public sealed class TrayHost(uint sessionId, string kidSid, string? trayExe, boo
         catch (OperationCanceledException) { }
         finally
         {
-            _link = null;
+            _link.Disconnect();
             _server = null;
         }
     }
