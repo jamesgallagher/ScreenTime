@@ -3,6 +3,7 @@ package au.screentime.kid.update
 import au.screentime.core.model.api.AppUpdateOffer
 import au.screentime.core.ui.update.UpdateSource
 import au.screentime.core.ui.update.UpdateState
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -50,6 +51,9 @@ class KidUpdateSource(
 
     private var lastOffer: AppUpdateOffer? = null
 
+    /** A manual update is running (downloading or committing): a second one must not start, or it would delete the first one's download. */
+    private val running = AtomicBoolean(false)
+
     override fun checkNow() {
         scope.launch {
             _state.value = UpdateState.Checking
@@ -68,50 +72,74 @@ class KidUpdateSource(
 
     override fun update() {
         val offer = lastOffer ?: return
+        launchManual(offer, writeAsked = true, onActed = {})
+    }
+
+    /**
+     * A parent's remote "Update now" (docs/SPEC.md §12.11): the same manual path as [update], but it calls [onActed] just
+     * before the install commit instead of [noteAsked], so the app does not reopen after the restart. The caller writes the
+     * remote request's requestedAt there, which is what makes a request act once.
+     */
+    fun updateForRequest(offer: AppUpdateOffer, onActed: () -> Unit) {
+        lastOffer = offer
+        launchManual(offer, writeAsked = false, onActed = onActed)
+    }
+
+    /** Runs [runManual] unless one is already running; the sync that asks again a minute later must not start a second download. */
+    private fun launchManual(offer: AppUpdateOffer, writeAsked: Boolean, onActed: () -> Unit) {
+        if (!running.compareAndSet(false, true)) return
         scope.launch {
-            when (manualUpdateStep(offer, currentCode(), downloaded(offer), sosActive())) {
-                ManualUpdateStep.NOTHING -> Unit
-                ManualUpdateStep.DOWNLOAD -> {
-                    _state.value = UpdateState.Downloading(offer.versionName)
-                    val ok = try {
-                        download(offer)
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        false
-                    }
-                    if (!ok) {
-                        _state.value = UpdateState.Failed(offer.versionName)
-                        return@launch
-                    }
-                    if (sosActive()) {
-                        _state.value = UpdateState.Ready(offer.versionName)
-                        return@launch
-                    }
-                    _state.value = UpdateState.Installing(offer.versionName)
-                    noteAsked()
-                    try {
-                        install(offer)
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        _state.value = UpdateState.Failed(offer.versionName)
-                    }
+            try {
+                runManual(offer, writeAsked, onActed)
+            } finally {
+                running.set(false)
+            }
+        }
+    }
+
+    private suspend fun runManual(offer: AppUpdateOffer, writeAsked: Boolean, onActed: () -> Unit) {
+        when (manualUpdateStep(offer, currentCode(), downloaded(offer), sosActive())) {
+            ManualUpdateStep.NOTHING -> Unit
+            ManualUpdateStep.DOWNLOAD -> {
+                _state.value = UpdateState.Downloading(offer.versionName)
+                val ok = try {
+                    download(offer)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    false
                 }
-                ManualUpdateStep.INSTALL -> {
-                    if (sosActive()) {
-                        _state.value = UpdateState.Ready(offer.versionName)
-                        return@launch
-                    }
-                    _state.value = UpdateState.Installing(offer.versionName)
-                    noteAsked()
-                    try {
-                        install(offer)
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        _state.value = UpdateState.Failed(offer.versionName)
-                    }
+                if (!ok) {
+                    _state.value = UpdateState.Failed(offer.versionName)
+                    return
+                }
+                if (sosActive()) {
+                    _state.value = UpdateState.Ready(offer.versionName)
+                    return
+                }
+                _state.value = UpdateState.Installing(offer.versionName)
+                if (writeAsked) noteAsked() else onActed()
+                try {
+                    install(offer)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    _state.value = UpdateState.Failed(offer.versionName)
+                }
+            }
+            ManualUpdateStep.INSTALL -> {
+                if (sosActive()) {
+                    _state.value = UpdateState.Ready(offer.versionName)
+                    return
+                }
+                _state.value = UpdateState.Installing(offer.versionName)
+                if (writeAsked) noteAsked() else onActed()
+                try {
+                    install(offer)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    _state.value = UpdateState.Failed(offer.versionName)
                 }
             }
         }

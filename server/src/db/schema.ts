@@ -193,6 +193,7 @@ export const devices = pgTable(
     model: text('model'),
     osVersion: text('os_version'),
     appVersion: text('app_version'),
+    appVersionCode: integer('app_version_code'),
     machineId: text('machine_id'),
     windowsUserSid: text('windows_user_sid'),
     windowsUserName: text('windows_user_name'),
@@ -201,6 +202,8 @@ export const devices = pgTable(
     enrolledAt: ts('enrolled_at').notNull().defaultNow(),
     lastSeenAt: ts('last_seen_at'),
     revokedAt: ts('revoked_at'),
+    updateRequestedAt: ts('update_requested_at'),
+    updateRequestedCode: integer('update_requested_code'),
   },
   (t) => [
     uniqueIndex('devices_token_hash_key').on(t.tokenHash),

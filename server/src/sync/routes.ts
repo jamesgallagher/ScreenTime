@@ -257,6 +257,12 @@ export function registerSyncRoutes(app: Router, deps: AppDeps) {
             alwaysAllowed,
           },
           games,
+          appUpdate:
+            device.updateRequestedCode != null &&
+            device.updateRequestedAt != null &&
+            (device.appVersionCode == null || device.appVersionCode < device.updateRequestedCode)
+              ? { versionCode: device.updateRequestedCode, requestedAt: device.updateRequestedAt.toISOString() }
+              : null,
         },
       };
     });

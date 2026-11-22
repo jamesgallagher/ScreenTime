@@ -26,6 +26,7 @@ class SharedTest {
         windowsUserName = null,
         enrolledAt = "2026-11-19T00:00:00Z",
         lastSeenAt = null,
+        appUpdate = null,
     )
 
     @Test

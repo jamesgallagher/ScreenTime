@@ -8,6 +8,15 @@ import { AvatarColor, KidKind, Schedule } from './kids.js';
 export const LockReason = z.enum(['out_of_time', 'bedtime', 'before_wake']).meta({ id: 'LockReason' });
 export type LockReason = z.infer<typeof LockReason>;
 
+/** A parent's request for this device to update now (docs/SPEC.md §12.11). Null when nothing is open. */
+export const StateAppUpdate = z
+  .object({
+    versionCode: z.int(),
+    requestedAt: z.iso.datetime(),
+  })
+  .meta({ id: 'StateAppUpdate' });
+export type StateAppUpdate = z.infer<typeof StateAppUpdate>;
+
 /** A grant as devices see it. `minutes` is negative for a removal or "lock now". */
 export const StateGrant = z
   .object({
@@ -89,6 +98,12 @@ export const DeviceState = z
      * sends it; it is optional so a device can still read a snapshot it saved before this field existed.
      */
     games: z.array(StateGame).optional(),
+    /**
+     * A parent's "Update now" for this device (docs/SPEC.md §12.11). Null when nothing is requested or when the
+     * device has already reached the requested code. Optional so a device can still read a snapshot it saved before
+     * this field existed; the server always sends it.
+     */
+    appUpdate: StateAppUpdate.nullable().optional(),
   })
   .meta({ id: 'DeviceState' });
 

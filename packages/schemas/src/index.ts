@@ -2,6 +2,8 @@ export { AuthResponse, Me, OtpRequest, OtpVerifyRequest, RefreshRequest, Role } 
 export { ErrorCode, ErrorResponse } from './errors.js';
 export {
   Device,
+  DeviceAppUpdate,
+  DeviceAppUpdateState,
   DeviceForm,
   DeviceMe,
   DevicePatch,
@@ -46,6 +48,7 @@ export {
   DeviceState,
   LockReason,
   PoolSegment,
+  StateAppUpdate,
   StateGrant,
   Today,
   TodayBedtime,
@@ -115,7 +118,7 @@ export {
   KidApps,
   KidAppSettings,
 } from './apps.js';
-export { AppUpdateAnswer, AppUpdateCheck, AppUpdateOffer } from './appupdate.js';
+export { AppUpdateAnswer, AppUpdateCheck, AppUpdateOffer, AppUpdateRequested } from './appupdate.js';
 export {
   CustomGameIn,
   DeviceGame,

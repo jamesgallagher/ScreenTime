@@ -129,7 +129,8 @@ public sealed record DeviceState(
     [property: JsonPropertyName("pendingRequest")] DeviceStatePendingRequest? PendingRequest,
     [property: JsonPropertyName("activeSos")] DeviceStateActiveSos? ActiveSos,
     [property: JsonPropertyName("apps")] DeviceStateApps Apps,
-    [property: JsonPropertyName("games"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<StateGame>? Games = null);
+    [property: JsonPropertyName("games"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<StateGame>? Games = null,
+    [property: JsonPropertyName("appUpdate"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateAppUpdate? AppUpdate = null);
 
 public sealed record DeviceStateDevice(
     [property: JsonPropertyName("id")] string Id,
@@ -221,6 +222,10 @@ public sealed record StateGame(
     [property: JsonPropertyName("id")] string Id,
     [property: JsonPropertyName("label")] string Label,
     [property: JsonPropertyName("exePath")] string ExePath);
+
+public sealed record StateAppUpdate(
+    [property: JsonPropertyName("versionCode")] int VersionCode,
+    [property: JsonPropertyName("requestedAt")] string RequestedAt);
 
 public sealed record UsageReceipt(
     [property: JsonPropertyName("received")] int Received);
@@ -531,6 +536,7 @@ public sealed record PushTokenPut(
 [JsonSerializable(typeof(PoolSegment))]
 [JsonSerializable(typeof(AppRuleMode))]
 [JsonSerializable(typeof(StateGame))]
+[JsonSerializable(typeof(StateAppUpdate))]
 [JsonSerializable(typeof(UsageReceipt))]
 [JsonSerializable(typeof(UsageUpload))]
 [JsonSerializable(typeof(UsageSegmentIn))]

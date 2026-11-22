@@ -866,6 +866,20 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
         if (cached is { } c)
         {
             var now = _clock.NowMs();
+            if (synced && c.State.AppUpdate is { } remote)
+            {
+                var (runningCode, _) = Win.AppVersion();
+                var (act, asked) = RemoteUpdate.Decide(remote.VersionCode, remote.RequestedAt, runningCode,
+                    _store.GetValue(UpdateKey, "remote-handled"), _asked);
+                if (act)
+                {
+                    logger.LogInformation("{Kid}: remote update asked for {Version} at {At}", device.KidName, remote.VersionCode, remote.RequestedAt);
+                    _store.SetValue(UpdateKey, "remote-handled", remote.RequestedAt);
+                    _asked = asked;
+                    _forceCheck = true;
+                    RunUpdateNow();
+                }
+            }
             var result = Engine.Evaluate(TodayInput.For(c.State, _store.SegmentsSince(sid, TodayInput.DayStartMs(c.State, now)), now));
             logger.LogInformation("{Kid}: {Minutes} min left, locked {Locked}", device.KidName, result.RemainingSec / 60, result.Locked);
             while (_skipGrants.TryDequeue(out var skip))

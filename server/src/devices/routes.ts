@@ -2,6 +2,7 @@ import { createRoute, z } from '@hono/zod-openapi';
 import { and, asc, desc, eq, gt, isNull, sql } from 'drizzle-orm';
 import {
   Device,
+  type DeviceAppUpdate,
   type DeviceForm,
   DeviceMe,
   DevicePatch,
@@ -23,6 +24,7 @@ import { bearer, deviceBearer, errorResponses, jsonBody, jsonResponse } from '..
 import type { createRouter } from '../router.js';
 import { requireDevice } from './auth.js';
 import { hashDeviceToken, newDeviceToken, newEnrolmentCode } from './token.js';
+import { offerFor, releaseVersionName } from '../appupdate/offer.js';
 
 type Router = ReturnType<typeof createRouter>;
 
@@ -36,7 +38,7 @@ const FORM_TEXT: Record<DeviceForm, string> = { phone: 'an Android phone', table
 const IdParam = z.object({ id: z.uuid() });
 const KidParam = z.object({ kidId: z.uuid() });
 
-function toDevice(row: typeof devices.$inferSelect): Device {
+function toDeviceBase(row: typeof devices.$inferSelect) {
   return {
     id: row.id,
     kidId: row.kidId,
@@ -51,6 +53,45 @@ function toDevice(row: typeof devices.$inferSelect): Device {
     windowsUserName: row.windowsUserName,
     enrolledAt: row.enrolledAt.toISOString(),
     lastSeenAt: row.lastSeenAt?.toISOString() ?? null,
+  };
+}
+
+/**
+ * The appUpdate value for a device row: a requested update, an available one, or null when nothing is offered or
+ * requested. Async because it reads the release files for the version name.
+ */
+async function appUpdateOf(
+  row: typeof devices.$inferSelect,
+  releasesDir: string | null,
+): Promise<DeviceAppUpdate | null> {
+  const open =
+    row.updateRequestedCode != null &&
+    row.updateRequestedAt != null &&
+    (row.appVersionCode == null || row.appVersionCode < row.updateRequestedCode);
+  if (open) {
+    const versionName =
+      (await releaseVersionName(releasesDir, row.platform, row.updateRequestedCode!)) ?? String(row.updateRequestedCode);
+    return {
+      versionName,
+      state: 'requested',
+      requestedAt: row.updateRequestedAt!.toISOString(),
+    };
+  }
+  const offer = await offerFor(releasesDir, row.platform, row.id, row.appVersionCode);
+  if (offer) {
+    return {
+      versionName: offer.versionName,
+      state: 'available',
+      requestedAt: null,
+    };
+  }
+  return null;
+}
+
+async function toDevice(row: typeof devices.$inferSelect, releasesDir: string | null): Promise<Device> {
+  return {
+    ...toDeviceBase(row),
+    appUpdate: await appUpdateOf(row, releasesDir),
   };
 }
 
@@ -177,7 +218,7 @@ export function registerDeviceRoutes(app: Router, deps: AppDeps) {
     const rows = await withFamily(db, familyId, (tx) =>
       tx.select().from(devices).where(isNull(devices.revokedAt)).orderBy(asc(devices.enrolledAt), asc(devices.id)),
     );
-    return c.json(rows.map(toDevice), 200);
+    return c.json(await Promise.all(rows.map((r) => toDevice(r, config.releasesDir))), 200);
   });
 
   app.openapi(patchDeviceRoute, async (c) => {
@@ -193,7 +234,7 @@ export function registerDeviceRoutes(app: Router, deps: AppDeps) {
     if (!row) throw deviceNotFound();
     // A new name or pool changes what the device shows and counts.
     if (Object.keys(patch).length > 0) await stateChanged(deps, familyId, { deviceId: id });
-    return c.json(toDevice(row), 200);
+    return c.json(await toDevice(row, config.releasesDir), 200);
   });
 
   app.openapi(revokeDeviceRoute, async (c) => {

@@ -748,6 +748,17 @@ class ApiClient(
     }
 
     /**
+     * Ask a kid device to update now.
+     *
+     * `POST /v1/devices/{id}/app-update`
+     */
+    suspend fun postDevicesAppUpdate(
+        id: String,
+    ): AppUpdateRequested {
+        return call(HttpMethod.Post, "/v1/devices/${segment(id)}/app-update", auth = true).body()
+    }
+
+    /**
      * Send every known game the PC finds now.
      *
      * `PUT /v1/device/games`

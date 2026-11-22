@@ -127,6 +127,13 @@
       "when": 1795213030689,
       "tag": "0017_site_classes",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1795311292469,
+      "tag": "0018_sticky_roland_deschain",
+      "breakpoints": true
     }
   ]
 }

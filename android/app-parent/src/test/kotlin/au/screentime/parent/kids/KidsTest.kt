@@ -15,7 +15,7 @@ class KidsTest {
 
     private fun device(id: String, kidId: String = "k1", form: DeviceForm = DeviceForm.PHONE) = Device(
         id, kidId, Platform.ANDROID, form, if (form == DeviceForm.PHONE) Pool.PHONE else Pool.SCREENS, "Pixel 7",
-        true, "Pixel 7", "Android 14", "0.1.0", null, "2026-10-20T00:00:00Z", null,
+        true, "Pixel 7", "Android 14", "0.1.0", null, "2026-10-20T00:00:00Z", null, null,
     )
 
     @Test
