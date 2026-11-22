@@ -101,6 +101,8 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
         public bool? SentLocked { get; set; }
         public bool? SentParentMode { get; set; }
         public bool InParentMode { get; set; }
+        /// <summary>The minute of the last "N s left" line, so the lock loop says the numbers once a minute (CARD-073).</summary>
+        public long LoggedMinute { get; set; } = -1;
         public long? CodeOkAt { get; set; }
         public TrayKillWatch TrayKills { get; } = new();
         public bool CaughtPending { get; set; }
@@ -247,6 +249,13 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
                                 else if (s.InParentMode && !parentMode) LeaveParentMode(s);
                                 if (s.Unlocked) await Apply(s, s.Keeper.Check(OutOfTime(s.Sid, now), now), now);
                                 if (View(s.Sid, now) is not { } view) continue;
+                                // Once a minute, the numbers behind the decision: a PC's event log that only has warnings
+                                // cannot say why a lock did or did not happen (CARD-073; the run reads this line).
+                                if (now / 60_000 != s.LoggedMinute)
+                                {
+                                    s.LoggedMinute = now / 60_000;
+                                    logger.LogInformation("{Kid}: {Left} s left, locked {Locked}, parent mode {ParentMode}", KidName(s.Sid), view.LeftSec, view.Locked, view.ParentMode);
+                                }
                                 if (view.Locked && s.SentLocked != true) logger.LogInformation("{Kid}: out of time, the engine says locked", KidName(s.Sid));
                                 if (s.Warnings.Check(view) is { } warning) await SendToast(s, warning);
                                 if (s.SentLocked != view.Locked || s.SentParentMode != view.ParentMode) await SendView(s, view);

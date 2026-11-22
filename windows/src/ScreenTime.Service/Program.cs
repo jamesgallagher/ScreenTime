@@ -57,6 +57,10 @@ switch (command)
         {
             var builder = Host.CreateApplicationBuilder(args);
             builder.Services.AddWindowsService(o => o.ServiceName = "ScreenTime");
+            // AddWindowsService sends Warning and worse to the Windows event log; the service's own lines (which are
+            // Information: what the lock loop decided and why) are what a PC's event log is read for after a fault
+            // (docs/SPEC.md §12.2 "Stall guard", CARD-073).
+            builder.Logging.AddFilter<Microsoft.Extensions.Logging.EventLog.EventLogLoggerProvider>("ScreenTime.Service", LogLevel.Information);
             builder.Services.AddSingleton<SessionEvents>();
             // --tray <path>: the tray exe. Without it, Tray\ScreenTime.Tray.exe next to the service when it runs as a service (the
             // installer's layout); none in a console run.
