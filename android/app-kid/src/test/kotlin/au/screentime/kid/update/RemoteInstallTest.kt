@@ -103,4 +103,25 @@ class RemoteInstallTest {
         assertNull(acted)
         assertEquals(UpdateState.Ready("0.9.1"), source.state.value)
     }
+
+    @Test
+    fun aSecondRequestWhileTheFirstIsDownloadingDoesNotStartAnotherDownload() {
+        // The service asks again on every sync until the note is written, which only happens just before the install.
+        var downloads = 0
+        var installs = 0
+        val gate = kotlinx.coroutines.CompletableDeferred<Boolean>()
+        val source = source(
+            downloaded = { false },
+            download = { downloads++; gate.await() },
+            install = { installs++ },
+        )
+        source.updateForRequest(offer901) {}
+        source.updateForRequest(offer901) {}
+        assertEquals(1, downloads)
+        gate.complete(true)
+        assertEquals(1, installs)
+        // Finished: a later request (a new requestedAt) can run again.
+        source.updateForRequest(offer901) {}
+        assertEquals(2, downloads)
+    }
 }

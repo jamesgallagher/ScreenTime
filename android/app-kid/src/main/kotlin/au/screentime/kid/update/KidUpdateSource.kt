@@ -3,6 +3,7 @@ package au.screentime.kid.update
 import au.screentime.core.model.api.AppUpdateOffer
 import au.screentime.core.ui.update.UpdateSource
 import au.screentime.core.ui.update.UpdateState
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -50,6 +51,9 @@ class KidUpdateSource(
 
     private var lastOffer: AppUpdateOffer? = null
 
+    /** A manual update is running (downloading or committing): a second one must not start, or it would delete the first one's download. */
+    private val running = AtomicBoolean(false)
+
     override fun checkNow() {
         scope.launch {
             _state.value = UpdateState.Checking
@@ -68,7 +72,7 @@ class KidUpdateSource(
 
     override fun update() {
         val offer = lastOffer ?: return
-        scope.launch { runManual(offer, writeAsked = true, onActed = {}) }
+        launchManual(offer, writeAsked = true, onActed = {})
     }
 
     /**
@@ -78,7 +82,19 @@ class KidUpdateSource(
      */
     fun updateForRequest(offer: AppUpdateOffer, onActed: () -> Unit) {
         lastOffer = offer
-        scope.launch { runManual(offer, writeAsked = false, onActed = onActed) }
+        launchManual(offer, writeAsked = false, onActed = onActed)
+    }
+
+    /** Runs [runManual] unless one is already running; the sync that asks again a minute later must not start a second download. */
+    private fun launchManual(offer: AppUpdateOffer, writeAsked: Boolean, onActed: () -> Unit) {
+        if (!running.compareAndSet(false, true)) return
+        scope.launch {
+            try {
+                runManual(offer, writeAsked, onActed)
+            } finally {
+                running.set(false)
+            }
+        }
     }
 
     private suspend fun runManual(offer: AppUpdateOffer, writeAsked: Boolean, onActed: () -> Unit) {
