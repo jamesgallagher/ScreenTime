@@ -619,6 +619,21 @@ else {
     } else {
         Say "criterion 11 the lock loop locked the session without the service lock, and kept doing it: FAIL (waited at $(T $tWait), disconnected at $(T $tDisc11) and $(T $tDisc11b), gaps $gapFirst s and $gapRepeat s, WTS SessionFlags $($lock11.Flags) / WTSConnectState $($lock11.State), restart lines $($restart.Count), pid $svcPid -> $svcPidNow)"
     }
+    if (-not $tDisc11) {
+        # The lock loop never got the lock (the break-it case): keep the hold file and show what the watchdog does, which
+        # must be to end the service after 60 s. The passing path has already locked, so this wait only runs on failure.
+        Say "  the lock loop made no pass: keeping the hold file and waiting up to 90 s for the watchdog (the break-it case)"
+        $wd = WaitLog $tHold "watchdog:.*restarting the service" 90
+        if ($wd) {
+            $svcAfter = Get-Process -Name ScreenTime.Service -ErrorAction SilentlyContinue | Select-Object -First 1
+            $pidAfter = 0
+            if ($svcAfter) { $pidAfter = $svcAfter.Id }
+            Say "  the watchdog restarted the service at $(T $wd.TimeCreated): $(OneLine $wd)"
+            Say "  seconds from the hold file to the restart: $(Gap $tHold $wd.TimeCreated); service pid $svcPid -> $pidAfter"
+        } else {
+            Say "  FAIL: the watchdog did not restart the service within 90 s of the hold file"
+        }
+    }
     if (Test-Path $holdFlag) { Remove-Item $holdFlag -Force -ErrorAction SilentlyContinue }
     Say "  hold file deleted at $(Get-Date -Format HH:mm:ss); the service lock is free again"
     SayServiceSince $t0 "every ScreenTime.Service line since the restart at $(T $t0):"
