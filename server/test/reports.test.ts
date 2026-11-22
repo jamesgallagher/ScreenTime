@@ -177,9 +177,11 @@ describe.skipIf(!url)('reports', () => {
   // Criterion 3: apps
   it('sums app time per package across devices, ordered by totalSec descending', async () => {
     const today = localDate();
-    const tomorrow = new Date(Date.now() + 86_400_000);
-    const tomorrowDate = new Intl.DateTimeFormat('en-CA', { timeZone: zone }).format(tomorrow);
-    // YouTube: 4200 s on the phone today, 1800 s on the tablet today, 300 s on the phone tomorrow.
+    // Another day of the same Monday-to-Sunday week: tomorrow, except on a Sunday (tomorrow is then next week) when it is yesterday.
+    const noon = new Date(`${today}T12:00:00Z`);
+    const otherDay = new Date(noon.getTime() + (noon.getUTCDay() === 0 ? -86_400_000 : 86_400_000));
+    const tomorrowDate = otherDay.toISOString().slice(0, 10);
+    // YouTube: 4200 s on the phone today, 1800 s on the tablet today, 300 s on the phone on that other day.
     await db.insert(appUsageDaily).values([
       { familyId: family, kidId: kid, deviceId: phone.id, package: 'com.google.android.youtube', day: today, seconds: 4200 },
       { familyId: family, kidId: kid, deviceId: tablet.id, package: 'com.google.android.youtube', day: today, seconds: 1800 },
