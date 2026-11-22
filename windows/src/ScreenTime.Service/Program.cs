@@ -76,12 +76,15 @@ switch (command)
             flags.TryGetValue("fake-timezone-file", out var fakeZone);
             // Dev only: --games-root <folder> is the only place the game finder looks, instead of every fixed drive (docs/SPEC.md §12.6).
             flags.TryGetValue("games-root", out var gamesRoot);
-            if ((session is not null || trayOpen is not null || fakeClock is not null || fakeZone is not null || gamesRoot is not null || updateAnytime) && !dryLock)
+            // Dev only (CARD-073): --stall-test-file <path> makes the 1-second lock loop sleep while the file exists,
+            // so the watchdog's restart can be tried in Windows Sandbox.
+            flags.TryGetValue("stall-test-file", out var stallTestFile);
+            if ((session is not null || trayOpen is not null || fakeClock is not null || fakeZone is not null || gamesRoot is not null || updateAnytime || stallTestFile is not null) && !dryLock)
             {
-                Console.Error.WriteLine("--session, --tray-open, --fake-clock-file, --fake-timezone-file, --games-root and --update-anytime are for testing and need --dry-lock.");
+                Console.Error.WriteLine("--session, --tray-open, --fake-clock-file, --fake-timezone-file, --games-root, --update-anytime and --stall-test-file are for testing and need --dry-lock.");
                 return 2;
             }
-            builder.Services.AddSingleton(new ServiceOptions(dataFolder, secure, trayExe, dryLock, WindowsServiceHelpers.IsWindowsService(), session, trayOpen, fakeClock, fakeZone, gamesRoot, updateAnytime));
+            builder.Services.AddSingleton(new ServiceOptions(dataFolder, secure, trayExe, dryLock, WindowsServiceHelpers.IsWindowsService(), session, trayOpen, fakeClock, fakeZone, gamesRoot, updateAnytime, stallTestFile));
             if (WindowsServiceHelpers.IsWindowsService())
             {
                 builder.Services.AddSingleton<IHostLifetime, SessionLifetime>();

@@ -23,9 +23,13 @@ namespace ScreenTime.Service;
 /// (log instead of locking or disconnecting) and whether it runs as a Windows service. <c>Session</c> and <c>TrayOpen</c>
 /// are for test runs (<c>--session</c>, <c>--tray-open</c>). <c>FakeClockFile</c>, <c>FakeTimezoneFile</c> and <c>GamesRoot</c> are for test runs too.
 /// <c>UpdateAnytime</c> (<c>--update-anytime</c>) installs the update as soon as it is verified, without waiting for the PC to be free.
+/// <c>StallTestFile</c> (<c>--stall-test-file</c>) is a test-only switch: while the file exists the 1-second lock loop
+/// sleeps instead of working, so the watchdog's restart can be tried in Windows Sandbox (CARD-073 criterion 8). It
+/// does nothing when the switch is absent, and it needs <c>--dry-lock</c>.
 /// </summary>
 public sealed record ServiceOptions(string DataFolder, bool SecureFolder, string? TrayExe, bool DryLock, bool AsService, uint? Session = null,
-    string? TrayOpen = null, string? FakeClockFile = null, string? FakeTimezoneFile = null, string? GamesRoot = null, bool UpdateAnytime = false);
+    string? TrayOpen = null, string? FakeClockFile = null, string? FakeTimezoneFile = null, string? GamesRoot = null, bool UpdateAnytime = false,
+    string? StallTestFile = null);
 
 /// <summary>
 /// The service's worker: it opens the store, the clock and the config, starts the tracker, and runs four loops (session
@@ -37,7 +41,9 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
     private const string OutOfTimeToast = "Out of Screens time. Ask Mum or Dad.";
 
     private readonly Dictionary<string, Syncer> _syncers = new();
-    private readonly Dictionary<uint, KidSession> _sessions = new();
+    // Concurrent (CARD-073) so the 1-second lock loop's degraded pass can look at the sessions without the service
+    // lock: a stuck holder must not stop the lock. Every mutation still happens under the service lock.
+    private readonly ConcurrentDictionary<uint, KidSession> _sessions = new();
     private readonly Dictionary<string, Task> _live = new();
     private readonly Channel<string> _syncRequests = Channel.CreateUnbounded<string>();
     private readonly SemaphoreSlim _sem = new(1, 1);
@@ -45,7 +51,8 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
     private readonly Dictionary<string, GrantToasts> _grantToasts = new();
     private readonly Dictionary<string, ApiClient> _apis = new();
     private readonly ConcurrentQueue<(string Sid, string GrantId)> _skipGrants = new();
-    private readonly Dictionary<string, LocalParentMode> _parentLocal = new();
+    // Concurrent (CARD-073) because the lock loop's degraded pass reads it lock-free through OutOfTime -> StateNow -> Local.
+    private readonly ConcurrentDictionary<string, LocalParentMode> _parentLocal = new();
     private readonly Dictionary<string, string> _parentAsks = new();
     private readonly ClockWatch _clockWatch = new();
     private readonly TimeZoneWatch _zoneWatch = new();
@@ -58,6 +65,14 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
     private SessionTracker _tracker = null!;
     private string _configPath = null!;
     private CancellationToken _stopping;
+
+    // The stall guard (CARD-073, docs/SPEC.md §12.2 "Stall guard"): who holds the service lock, when the lock loop
+    // last finished a pass, and whether a kid session is using the PC (only the watchdog's log words).
+    private volatile string _semHolder = "";
+    private volatile bool _anyoneUsing;
+    private long _lastPassTick;
+    private bool _loggedLockWait;
+    private readonly HashSet<uint> _degradedSessions = new();
 
     /// <summary>True while an update is starting: the tray restart loop and exit judging are off for all sessions.</summary>
     private volatile bool _updateInProgress;
@@ -118,10 +133,9 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
             logger.LogWarning("Not enrolled yet: run ScreenTime.Service.exe enrol.");
         }
 
-        var sem = _sem;
         var lastSid = new Dictionary<uint, string>();
 
-        await sem.WaitAsync(stoppingToken);
+        await TakeServiceLockAsync("start", Timeout.Infinite, stoppingToken);
         try
         {
             // Only closes what a crash left open: counting starts with the keeper's StartCounting.
@@ -136,7 +150,7 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
         }
         finally
         {
-            sem.Release();
+            LeaveServiceLock();
         }
 
         var eventsTask = Task.Run(async () =>
@@ -155,14 +169,14 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
                         lastSid[e.SessionId] = sid;
                     }
                     var isConsole = e.SessionId == ConsoleSession();
-                    await sem.WaitAsync(stoppingToken);
+                    await TakeServiceLockAsync("session event", Timeout.Infinite, stoppingToken);
                     try
                     {
                         await OnSessionEvent(e, sid, isConsole, stoppingToken);
                     }
                     finally
                     {
-                        sem.Release();
+                        LeaveServiceLock();
                     }
                 }
             }
@@ -176,7 +190,7 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
             {
                 while (await timer.WaitForNextTickAsync(stoppingToken))
                 {
-                    await sem.WaitAsync(stoppingToken);
+                    await TakeServiceLockAsync("60 s timer", Timeout.Infinite, stoppingToken);
                     try
                     {
                         tracker.Tick(clock.NowMs());
@@ -192,13 +206,15 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
                     }
                     finally
                     {
-                        sem.Release();
+                        LeaveServiceLock();
                     }
                 }
             }
             catch (OperationCanceledException) { }
         });
 
+        // The 1-second lock loop (CARD-073, docs/SPEC.md §12.2 "Stall guard"): a pass waits at most 2 s for the
+        // service lock, and without the lock it still disconnects an out-of-time session.
         var lockTask = Task.Run(async () =>
         {
             using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
@@ -206,25 +222,67 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
             {
                 while (await timer.WaitForNextTickAsync(stoppingToken))
                 {
-                    await sem.WaitAsync(stoppingToken);
-                    try
+                    // The test-only stall switch (CARD-073 criterion 8): while the file exists the loop sleeps instead
+                    // of working, before the lock is taken, so the rest of the service keeps working and the run proves
+                    // the watchdog alone notices.
+                    if (options.StallTestFile is { } stall && File.Exists(stall))
                     {
-                        var now = clock.NowMs();
-                        await CheckTamper(now);
-                        foreach (var s in _sessions.Values.Where(s => s.Unlocked || s.InParentMode).ToList())
-                        {
-                            var parentMode = ParentModeOn(s.Sid, now);
-                            if (s.Unlocked && parentMode) EnterParentMode(s, now);
-                            else if (s.InParentMode && !parentMode) LeaveParentMode(s);
-                            if (s.Unlocked) await Apply(s, s.Keeper.Check(OutOfTime(s.Sid, now), now), now);
-                            if (View(s.Sid, now) is not { } view) continue;
-                            if (s.Warnings.Check(view) is { } warning) await SendToast(s, warning);
-                            if (s.SentLocked != view.Locked || s.SentParentMode != view.ParentMode) await SendView(s, view);
-                        }
+                        logger.LogWarning("stall test: the lock loop is sleeping while {File} exists", stall);
+                        while (File.Exists(stall) && !stoppingToken.IsCancellationRequested) await Task.Delay(1_000, stoppingToken);
+                        logger.LogInformation("stall test: {File} is gone, the lock loop carries on", stall);
                     }
-                    finally
+                    if (await TakeServiceLockAsync("lock loop", 2_000, stoppingToken))
                     {
-                        sem.Release();
+                        try
+                        {
+                            var now = clock.NowMs();
+                            await CheckTamper(now);
+                            // Anyone using is only the watchdog's log words (§12.2 "Stall guard").
+                            var open = _sessions.Values.Where(s => s.Unlocked || s.InParentMode).ToList();
+                            _anyoneUsing = open.Count > 0;
+                            foreach (var s in open)
+                            {
+                                var parentMode = ParentModeOn(s.Sid, now);
+                                if (s.Unlocked && parentMode) EnterParentMode(s, now);
+                                else if (s.InParentMode && !parentMode) LeaveParentMode(s);
+                                if (s.Unlocked) await Apply(s, s.Keeper.Check(OutOfTime(s.Sid, now), now), now);
+                                if (View(s.Sid, now) is not { } view) continue;
+                                if (view.Locked && s.SentLocked != true) logger.LogInformation("{Kid}: out of time, the engine says locked", KidName(s.Sid));
+                                if (s.Warnings.Check(view) is { } warning) await SendToast(s, warning);
+                                if (s.SentLocked != view.Locked || s.SentParentMode != view.ParentMode) await SendView(s, view);
+                            }
+                            // The stall, if there was one, is over.
+                            _loggedLockWait = false;
+                            _degradedSessions.Clear();
+                        }
+                        finally
+                        {
+                            LeaveServiceLock();
+                        }
+                        Volatile.Write(ref _lastPassTick, Environment.TickCount64);
+                    }
+                    else
+                    {
+                        if (!_loggedLockWait)
+                        {
+                            _loggedLockWait = true;
+                            logger.LogWarning("lock loop: waited for the service lock ({Holder})", _semHolder);
+                        }
+                        // The degraded pass needs no service lock: _sessions is concurrent, and LocalStore locks every call.
+                        var now = clock.NowMs();
+                        _anyoneUsing = _sessions.Values.Any(s => s.Unlocked || s.InParentMode);
+                        foreach (var s in _sessions.Values)
+                        {
+                            if (!(s.Unlocked || s.InParentMode)) continue;
+                            if (!OutOfTime(s.Sid, now)) continue;
+                            // The keeper and s.Unlocked are not touched here: Windows sends the matching session
+                            // event, which resets them under the lock.
+                            if (!_degradedSessions.Add(s.SessionId)) continue;
+                            logger.LogWarning("{Kid}: out of time, disconnecting session {Session} without the service lock", KidName(s.Sid), s.SessionId);
+                            if (options.DryLock) logger.LogWarning("dry run: would disconnect session {Session}", s.SessionId);
+                            else Win.Disconnect(s.SessionId);
+                        }
+                        Volatile.Write(ref _lastPassTick, Environment.TickCount64);
                     }
                 }
             }
@@ -237,14 +295,14 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
             {
                 await foreach (var sid in _syncRequests.Reader.ReadAllAsync(stoppingToken))
                 {
-                    await sem.WaitAsync(stoppingToken);
+                    await TakeServiceLockAsync("sync", Timeout.Infinite, stoppingToken);
                     try
                     {
                         await SyncAccount(sid, stoppingToken);
                     }
                     finally
                     {
-                        sem.Release();
+                        LeaveServiceLock();
                     }
                 }
             }
@@ -275,7 +333,7 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
             {
                 await foreach (var (lookup, program) in _dnsChannel.Reader.ReadAllAsync(stoppingToken))
                 {
-                    await sem.WaitAsync(stoppingToken);
+                    await TakeServiceLockAsync("dns", Timeout.Infinite, stoppingToken);
                     try
                     {
                         var now = clock.NowMs();
@@ -284,12 +342,50 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
                     }
                     finally
                     {
-                        sem.Release();
+                        LeaveServiceLock();
                     }
                 }
             }
             catch (OperationCanceledException) { }
         });
+
+        // The stall watchdog (CARD-073, docs/SPEC.md §12.2 "Stall guard"): it never uses the service lock. Every 5 s
+        // it looks at when the lock loop last finished a pass: 30 s means an error line naming the last holder, 60 s
+        // means the process ends with a non-zero exit code, so Windows counts it as a failure and runs the recovery
+        // action the MSI registered (restart, 0 s). The restarted service locks an out-of-time session as at any start.
+        _lastPassTick = Environment.TickCount64;
+        var watchdog = new Thread(() =>
+        {
+            var logged = false;
+            var lastSeen = Volatile.Read(ref _lastPassTick);
+            while (true)
+            {
+                Thread.Sleep(5_000);
+                if (stoppingToken.IsCancellationRequested) return;
+                var last = Volatile.Read(ref _lastPassTick);
+                if (last != lastSeen)
+                {
+                    lastSeen = last;
+                    logged = false;
+                }
+                var now = Environment.TickCount64;
+                var verdict = StallWatch.Check(last, now, _anyoneUsing, logged);
+                if (verdict == StallVerdict.Log)
+                {
+                    logged = true;
+                    logger.LogError("watchdog: the lock loop has made no pass for {Seconds} s ({Situation}); the last to hold the service lock was {Holder}", (now - last) / 1000, StallWatch.Situation(_anyoneUsing), _semHolder);
+                }
+                else if (verdict == StallVerdict.Restart)
+                {
+                    // Not on a normal shutdown: stoppingToken cancelled means the host is stopping on purpose.
+                    if (stoppingToken.IsCancellationRequested) return;
+                    logger.LogCritical("watchdog: the lock loop has made no pass for {Seconds} s ({Situation}); the last to hold the service lock was {Holder}, restarting the service", (now - last) / 1000, StallWatch.Situation(_anyoneUsing), _semHolder);
+                    Environment.Exit(1);
+                }
+            }
+        })
+        { IsBackground = true, Name = "stall-watch" };
+        watchdog.Start();
 
         await Task.WhenAll(eventsTask, timerTask, lockTask, syncTask, gamesTask, dnsTask);
 
@@ -297,6 +393,34 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
         tracker.OnChange(SessionChange.Shutdown, null, false, clock.NowMs());
         _dns.Dispose();
         store.Dispose();
+    }
+
+    /// <summary>
+    /// Takes the service lock, naming the operation that holds it, so a stall can say who it was waiting for
+    /// (CARD-073). An infinite <paramref name="timeoutMs"/> never gives up; otherwise the wait gives up after
+    /// <paramref name="timeoutMs"/> and returns false without the lock.
+    /// </summary>
+    private async Task<bool> TakeServiceLockAsync(string holder, int timeoutMs, CancellationToken ct)
+    {
+        if (timeoutMs == Timeout.Infinite)
+        {
+            await _sem.WaitAsync(ct);
+        }
+        else
+        {
+            if (!await _sem.WaitAsync(timeoutMs, ct)) return false;
+        }
+        _semHolder = holder;
+        return true;
+    }
+
+    /// <summary>
+    /// Releases the service lock. <see cref="_semHolder"/> is not cleared: it must still name the operation that
+    /// held the lock when another operation times out waiting for it.
+    /// </summary>
+    private void LeaveServiceLock()
+    {
+        _sem.Release();
     }
 
     /// <summary>
@@ -348,7 +472,7 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
                     if (e.Change == SessionChange.Logoff)
                     {
                         s.Cts.Cancel();
-                        _sessions.Remove(e.SessionId);
+                        _sessions.TryRemove(e.SessionId, out _);
                     }
                 }
                 break;
@@ -475,7 +599,7 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
     /// <summary>The tray of a session exited: three times in 10 minutes is an attempt, caught when the tray is back.</summary>
     private void OnTrayExit(uint sessionId) => _ = Task.Run(async () =>
     {
-        await _sem.WaitAsync();
+        await TakeServiceLockAsync("tray exit", Timeout.Infinite, CancellationToken.None);
         try
         {
             if (!_sessions.TryGetValue(sessionId, out var s)) return;
@@ -489,7 +613,7 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
         }
         finally
         {
-            _sem.Release();
+            LeaveServiceLock();
         }
     });
 
@@ -530,10 +654,13 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
             {
                 case LockStep.StartCounting:
                     _tracker.OnChange(SessionChange.Unlock, s.Sid, true, now);
+                    logger.LogInformation("{Kid}: counting (session {Session})", KidName(s.Sid), s.SessionId);
                     break;
                 case LockStep.Lock:
                     logger.LogInformation("{Kid}: locking session {Session}", KidName(s.Sid), s.SessionId);
-                    await s.Tray.SendAsync(PipeMessage.Lock(Guid.NewGuid().ToString()));
+                    // Not awaited: the tray write is bounded at 3 s in the tray host, and the 2 s and the Disconnect
+                    // step must happen even while that write is stuck (card §5 item 2).
+                    _ = s.Tray.SendAsync(PipeMessage.Lock(Guid.NewGuid().ToString()));
                     break;
                 case LockStep.Disconnect:
                     if (options.DryLock)
@@ -555,7 +682,7 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
 
     private async Task OnTrayMessage(uint sessionId, PipeMessage m)
     {
-        await _sem.WaitAsync();
+        await TakeServiceLockAsync("tray message", Timeout.Infinite, CancellationToken.None);
         try
         {
             if (!_sessions.TryGetValue(sessionId, out var s)) return;
@@ -647,7 +774,7 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
         }
         finally
         {
-            _sem.Release();
+            LeaveServiceLock();
         }
     }
 
@@ -721,7 +848,7 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
     /// <summary>A parent said no to this PC's latest "I'm the parent": "Dad said no." to its trays.</summary>
     private async Task SendParentNo(string sid, string requestId, string? byName)
     {
-        await _sem.WaitAsync();
+        await TakeServiceLockAsync("parent no", Timeout.Infinite, CancellationToken.None);
         try
         {
             if (!_parentAsks.TryGetValue(sid, out var asked) || asked != requestId) return;
@@ -732,7 +859,7 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
         }
         finally
         {
-            _sem.Release();
+            LeaveServiceLock();
         }
     }
 
@@ -787,7 +914,7 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
     /// <summary>Logs the answer and sends it to every tray of the SID.</summary>
     private async Task SendAnswer(string sid, RequestAnswer answer)
     {
-        await _sem.WaitAsync();
+        await TakeServiceLockAsync("answer", Timeout.Infinite, CancellationToken.None);
         try
         {
             var text = answer.Text();
@@ -796,7 +923,7 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
         }
         finally
         {
-            _sem.Release();
+            LeaveServiceLock();
         }
     }
 
@@ -1112,14 +1239,16 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
             if (_stopping.IsCancellationRequested) return;
             try
             {
-                await _sem.WaitAsync(_stopping);
-                try
+                if (await TakeServiceLockAsync("update now", Timeout.Infinite, _stopping))
                 {
-                    await UpdateTick(_stopping);
-                }
-                finally
-                {
-                    _sem.Release();
+                    try
+                    {
+                        await UpdateTick(_stopping);
+                    }
+                    finally
+                    {
+                        LeaveServiceLock();
+                    }
                 }
             }
             catch (OperationCanceledException) { }
