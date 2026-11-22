@@ -83,7 +83,7 @@ function T($d) { if ($d) { $d.ToString("HH:mm:ss") } else { "never" } }
 function Gap($a, $b) { if ($a -and $b) { [int](($b - $a).TotalSeconds) } else { -1 } }
 function OneLine($e) {
     $m = "$($e.Message)" -replace '\s+', ' '
-    $m.Substring(0, [Math]::Min(160, $m.Length))
+    $m.Substring(0, [Math]::Min(320, $m.Length))   # 320: the watchdog line names the holder at about 160 characters in
 }
 function SayImagepath {
     $bin = (sc.exe qc ScreenTime | Select-String "BINARY_PATH_NAME") | Select-Object -First 1
