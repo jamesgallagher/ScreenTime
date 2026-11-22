@@ -19,7 +19,7 @@ Screen Time is a self-hosted parental screen-time limiter for one family. Kid de
 
 CARD-071 gave each kid device a manual **Update now** (in parent mode, on the device): on Android `KidUpdates.source.update()`, on Windows the `Asked` input of `UpdateDecision`. This card lets a parent press the same button **from the parent app**, the way a work phone's MDM pushes an update. The kid app is Device Owner and the PC service runs as SYSTEM, so both install without asking.
 
-**Claude built the front end** (rule 10 of `AGENTS.md`: do not change these files; write problems under "Blockers / questions"): the device row on the kid screen (`android/app-parent/.../kids/` : version, status and **Update now**), its words, and `FakeDeviceUpdates` in `kids/RemoteUpdateSeam.kt`, **which you replace and delete**. The row reads `Device.appUpdate` and calls one function to request the update.
+**Claude built the front end** (rule 10 of `AGENTS.md`: do not change these files; write problems under "Blockers / questions"): the device row on the kid screen (`android/app-parent/.../kids/KidScreen.kt`'s `DeviceRow`: version line, status and **Update now**), its words and button rule (`kids/RemoteUpdate.kt`: `DeviceUpdate`, the `DeviceUpdates` interface, the `RemoteUpdates.source` holder, `updateLine`, `showsUpdateNow`), and `FakeDeviceUpdates` in `kids/RemoteUpdateSeam.kt`, **which you replace and delete**. The row asks `RemoteUpdates.source.of(device)` for a `DeviceUpdate?` and calls `RemoteUpdates.source.request(deviceId)` on **Update now**, then refreshes the devices. The fake is set in one line of `ParentApp.kt` (`RemoteUpdates.source = FakeDeviceUpdates()`), which you replace with your real class. The generated `Device` has no `appUpdate` until your `pnpm contract`: your real `DeviceUpdates.of(device)` maps `device.appUpdate` (`versionName`, `state` `available` / `requested`, `requestedAt`) to a `DeviceUpdate`. CARD-071's merged code that this card builds on: kid `KidUpdates.source` / `KidUpdateSource` (`update/KidUpdateSource.kt`), `AskedNote`, `Reopen`; Windows `Worker` (`_asked`, `RunUpdateNow()`), `UpdateControl`, `UpdateTimer`, `UpdateViewBuilder`.
 
 ## 2. Goal
 
@@ -36,7 +36,7 @@ On a kid's page in the parent app, a parent taps **Update now** on a device; the
 - `pwsh` 7 only. UTF-8 without BOM. Generated clients only via `pnpm contract`.
 - New migration: the next free number in `server/drizzle/`, adding columns only (no new table, so no RLS policy to copy).
 - Devices get messages with `sendToDevices(...)` (`server/src/notify/dispatch.ts`); copy how `tellDevice` in `server/src/parentmode/routes.ts` sends `parent_mode` (high priority). The kid app reads messages in `android/app-kid/.../live/Live.kt` and the FCM service; the PC in `windows/src/ScreenTime.Core/Service/Live.cs`.
-- The offer for a device must be computed by **the same function** the check route uses (`server/src/appupdate/routes.ts`): do not write a second copy of the offer rules.
+- **There is no shared offer function yet.** `POST /v1/device/app-update/check` in `server/src/appupdate/routes.ts` has the offer rules inline, twice (Android reads `kid.json`, Windows reads `windows.json`: newer than the device's version code, and `deviceIds` when set). First **extract one function** (for example `offerFor(releasesDir, device: { id, platform }, versionCode)`) and make the check route call it with no change in behaviour (the existing app-update tests must pass unchanged), then call the same function from the new route and from the devices list. Do not write a second copy of the rules.
 - A kid debug build cannot be updated silently: build with `-PkidTestOnly=false` (see `docs/cards/CARD-059-run.ps1`). Emulator: `Medium_Phone_API_37.0`. Windows runs only in Windows Sandbox (copy CARD-071's `Test-Versions.ps1` pair).
 
 ## 5. Design (what to build)
@@ -51,22 +51,22 @@ On a kid's page in the parent app, a parent taps **Update now** on a device; the
 
 ### 5.2 Kid app
 
-- On `app_update` (live or FCM): sync now. After each sync, if the snapshot's `appUpdate` has `versionCode` above `BuildConfig.VERSION_CODE` and a `requestedAt` different from the one kept in SharedPreferences (`remote_update_handled_at`), keep it and call the CARD-071 update path (download even on mobile data, install now, not during an SOS: then it waits until the SOS is over). Do **not** write `update_asked_at` (no reopening).
+- On `app_update` (live or FCM): sync now. After each sync, if the snapshot's `appUpdate` has `versionCode` above `BuildConfig.VERSION_CODE` and a `requestedAt` different from the one kept in SharedPreferences (`remote_update_handled_at`), keep it and run CARD-071's manual update (`KidUpdates.source` / `KidUpdateSource`: check, then download even on mobile data, then install now; not during an SOS: it stays `Ready` and is tried again when the SOS is over). Do not write a second install path. `KidUpdateSource.update()` calls its `noteAsked` lambda just before the install, which writes `update_asked_at` and makes the app reopen: the remote path must **not** do that, so give the source a way to skip it (a parameter) and test that the remote path does not write the note.
 - After the new version starts, enforcement comes back as after any update: a blocked device is blocked again.
 
 ### 5.3 Windows service
 
-- On `app_update`: sync now. After each sync, the same rule as 5.2 per PC (one PC acts once for a `requestedAt`, kept in the store's key-value table), which sets `Asked` in `UpdateDecision`. The parent-mode guard of CARD-071 applies only to the tray's pipe lines, not to this.
+- On `app_update`: sync now. After each sync, the same rule as 5.2 per PC (one PC acts once for a `requestedAt`, kept in the store's key-value table), which sets `Worker._asked` and runs `RunUpdateNow()` exactly as the tray's `update-now` does (CARD-071's `UpdateControl.Request` guard applies only to the tray's pipe lines, not to this). A request for a version the PC already has, or already handled, changes nothing.
 
 ### 5.4 Parent app
 
-- Replace `FakeDeviceUpdates` with a real implementation: call `POST /v1/devices/{id}/app-update`, then refresh the kid's devices; a 409 refreshes too (the row then shows the truth). Delete `RemoteUpdateSeam.kt`.
+- Write the real `DeviceUpdates` (a new file in `kids/`, not Claude's `RemoteUpdate.kt`): `of(device)` maps `device.appUpdate`; `request(deviceId)` calls `POST /v1/devices/{id}/app-update` and returns true for 202, false for 409 or a failure (the row refreshes the devices either way). Set it in `ParentApp.kt` in place of `FakeDeviceUpdates()`, and delete `RemoteUpdateSeam.kt`. A test for `of` (every `appUpdate` shape, and null) in `android/app-parent/src/test/.../kids/`.
 
 ## 6. Acceptance criteria
 
 Server (`server/test/remote-update.test.ts`, new; fixed times: freeze the clock at `2026-11-21T10:00:00Z`, family time zone `UTC`):
 
-1. Fixture: kid PC on `0.1.130` (code 130), `windows.json` offers 131. `POST /v1/devices/{pc}/app-update` → 202 `{ versionName: "0.1.131", requestedAt: "2026-11-21T10:00:00.000Z" }`; the row has `update_requested_code = 131`; one `app_update` message was sent to that device and no other (assert on the fake sender the tests already use).
+1. Fixture: kid PC on `0.1.130` (its check has reported `versionCode` 130, so `app_version_code` is 130), `windows.json` offers 131. `POST /v1/devices/{pc}/app-update` → 202 `{ versionName: "0.1.131", requestedAt: "2026-11-21T10:00:00.000Z" }`; the row has `update_requested_code = 131`; one `app_update` message was sent to that device and no other (assert on the fake sender the tests already use).
 2. Same PC, nothing newer offered → 409 `no_update`, nothing stored, nothing sent.
 3. `windows.json` with `deviceIds: [otherPc]` → 409 for this PC (the offer function is shared: prove it by this case).
 4. Revoked device → 404; device of another family → 404; kid device token → 401.
@@ -74,6 +74,7 @@ Server (`server/test/remote-update.test.ts`, new; fixed times: freeze the clock 
 6. `GET` the kid's devices: no offer → `appUpdate: null`; offer, no request → `state: "available"`; after the request → `state: "requested"` with its `requestedAt`; after the device reports 131 → `null`.
 7. A second request at `10:30:00Z` replaces `requestedAt`.
 8. Android kid phone (`kid.json` offers 901 to 900): criteria 1 and 5 hold for it too (one test).
+8b. A device that has **never reported a version code** (`app_version_code` null, as every device is right after this migration until its next check): the devices list gives `appUpdate: null` for it (the server cannot tell whether it is behind), and `POST` gives 409 `no_update`. After its first check reports 130 against an offer of 131 it gets `available`.
 
 Kid app unit (`android/app-kid/src/test/.../update/RemoteUpdateTest.kt`):
 
@@ -100,7 +101,7 @@ Windows Sandbox run (`windows/installer/sandbox/Test-Remote.ps1` + `in-sandbox-r
 
 Whole card:
 
-20. Section 8 passes; `Select-String -Path android -Pattern 'FakeDeviceUpdates' -Recurse -Include *.kt` prints nothing; `git status --short contract android/core-model windows/src/ScreenTime.Core/Api` prints nothing after `pnpm contract`; the last `git diff --name-only main` lists only `server/`, `packages/schemas/`, `contract/`, the generated clients, the kid app's `update/`, `live/`, `push/` or `service/` files, `windows/src/ScreenTime.Core/` (not `Api/`, not `UpdateView.cs`), `windows/src/ScreenTime.Service/Worker.cs`, the parent app's real replacement for the seam, your tests and the run scripts.
+20. Section 8 passes; `Get-ChildItem android -Recurse -Include *.kt | Select-String -Pattern 'FakeDeviceUpdates'` prints nothing; `git status --short contract android/core-model windows/src/ScreenTime.Core/Api` prints nothing after `pnpm contract`; the last `git diff --name-only main` lists only `server/`, `packages/schemas/`, `contract/`, the generated clients, the kid app's `update/`, `live/`, `push/` or `service/` files, `windows/src/ScreenTime.Core/` (not `Api/`, not `UpdateView.cs`), `windows/src/ScreenTime.Service/Worker.cs`, the parent app's real `DeviceUpdates` (new file in `kids/`), `ParentApp.kt` (the one line) and the deleted `RemoteUpdateSeam.kt`, your tests and the run scripts. Not `kids/RemoteUpdate.kt`, `KidScreen.kt` or any other Claude file.
 
 **Break it yourself** (paste each failing test; restore with `git checkout -- <file>`):
 - Send the message to every device of the kid instead of the one → criterion 1 fails.
@@ -129,7 +130,7 @@ pnpm test *> C:\Users\james\OpenCode\Testing\temp\card072-test.txt; "exit $LASTE
 cd windows; dotnet test *> C:\Users\james\OpenCode\Testing\temp\card072-dotnet.txt; "exit $LASTEXITCODE"; cd ..
 cd android; $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"; .\gradlew.bat assembleDebug test *> C:\Users\james\OpenCode\Testing\temp\card072-gradle.txt; "exit $LASTEXITCODE"; .\gradlew.bat --stop; cd ..
 Select-String -Path C:\Users\james\OpenCode\Testing\temp\card072-*.txt -Pattern 'Test Files|Tests |FAIL|Passed!|Failed!|BUILD (SUCCESSFUL|FAILED)'
-Select-String -Path android -Pattern 'FakeDeviceUpdates' -Recurse -Include *.kt
+Get-ChildItem android -Recurse -Include *.kt | Select-String -Pattern 'FakeDeviceUpdates'
 pwsh -File docs\cards\CARD-072-run.ps1
 pwsh -File windows\installer\sandbox\Test-Remote.ps1
 git diff --name-only main
