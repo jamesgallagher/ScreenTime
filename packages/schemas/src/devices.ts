@@ -10,6 +10,20 @@ export type DeviceForm = z.infer<typeof DeviceForm>;
 export const Pool = z.enum(['screens', 'phone']).meta({ id: 'Pool' });
 export type Pool = z.infer<typeof Pool>;
 
+/** `available` when a newer version is offered; `requested` when a parent asked for it. */
+export const DeviceAppUpdateState = z.enum(['available', 'requested']).meta({ id: 'DeviceAppUpdateState' });
+export type DeviceAppUpdateState = z.infer<typeof DeviceAppUpdateState>;
+
+/** What the parent app shows on the device row about its update (docs/SPEC.md §12.11). */
+export const DeviceAppUpdate = z
+  .object({
+    versionName: z.string(),
+    state: DeviceAppUpdateState,
+    requestedAt: z.iso.datetime().nullable(),
+  })
+  .meta({ id: 'DeviceAppUpdate' });
+export type DeviceAppUpdate = z.infer<typeof DeviceAppUpdate>;
+
 /** A kid device as parents see it. */
 export const Device = z
   .object({
@@ -26,6 +40,7 @@ export const Device = z
     windowsUserName: z.string().nullable(),
     enrolledAt: z.iso.datetime(),
     lastSeenAt: z.iso.datetime().nullable(),
+    appUpdate: DeviceAppUpdate.nullable(),
   })
   .meta({ id: 'Device' });
 

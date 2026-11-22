@@ -26,3 +26,13 @@ export type AppUpdateOffer = z.infer<typeof AppUpdateOffer>;
 export const AppUpdateAnswer = z.object({ offer: AppUpdateOffer.nullable() }).meta({ id: 'AppUpdateAnswer' });
 
 export type AppUpdateAnswer = z.infer<typeof AppUpdateAnswer>;
+
+/** Answer of POST /v1/devices/{id}/app-update: the remote update request was stored (docs/SPEC.md §12.11). */
+export const AppUpdateRequested = z
+  .object({
+    versionName: z.string(),
+    requestedAt: z.iso.datetime(),
+  })
+  .meta({ id: 'AppUpdateRequested' });
+
+export type AppUpdateRequested = z.infer<typeof AppUpdateRequested>;

@@ -721,6 +721,9 @@
               "null"
             ],
             "format": "date-time"
+          },
+          "appUpdate": {
+            "$ref": "#/components/schemas/DeviceAppUpdate"
           }
         },
         "required": [
@@ -736,7 +739,8 @@
           "appVersion",
           "windowsUserName",
           "enrolledAt",
-          "lastSeenAt"
+          "lastSeenAt",
+          "appUpdate"
         ]
       },
       "Platform": {
@@ -751,6 +755,39 @@
         "enum": [
           "screens",
           "phone"
+        ]
+      },
+      "DeviceAppUpdate": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "versionName": {
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/DeviceAppUpdateState"
+          },
+          "requestedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "versionName",
+          "state",
+          "requestedAt"
+        ]
+      },
+      "DeviceAppUpdateState": {
+        "type": "string",
+        "enum": [
+          "available",
+          "requested"
         ]
       },
       "DevicePatch": {
@@ -1246,6 +1283,9 @@
             "items": {
               "$ref": "#/components/schemas/StateGame"
             }
+          },
+          "appUpdate": {
+            "$ref": "#/components/schemas/StateAppUpdate"
           }
         },
         "required": [
@@ -1351,6 +1391,25 @@
       "GameId": {
         "type": "string",
         "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+      },
+      "StateAppUpdate": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "versionCode": {
+            "type": "integer"
+          },
+          "requestedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "versionCode",
+          "requestedAt"
+        ]
       },
       "UsageReceipt": {
         "type": "object",
@@ -3257,6 +3316,22 @@
         "required": [
           "versionCode",
           "versionName"
+        ]
+      },
+      "AppUpdateRequested": {
+        "type": "object",
+        "properties": {
+          "versionName": {
+            "type": "string"
+          },
+          "requestedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "versionName",
+          "requestedAt"
         ]
       },
       "DeviceGamesPut": {
@@ -8700,6 +8775,83 @@
           },
           "422": {
             "description": "The request is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/devices/{id}/app-update": {
+      "post": {
+        "tags": [
+          "devices"
+        ],
+        "summary": "Ask a kid device to update now",
+        "description": "Stores the request and tells the device at once. 409 when there is nothing newer for it. A second request replaces the first.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Requested.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppUpdateRequested"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the code or token is wrong or expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Signed in, but not allowed to do this.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicts with existing data.",
             "content": {
               "application/json": {
                 "schema": {

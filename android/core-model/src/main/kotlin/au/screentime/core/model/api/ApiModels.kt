@@ -274,6 +274,7 @@ data class Device(
     val windowsUserName: String?,
     val enrolledAt: String,
     val lastSeenAt: String?,
+    val appUpdate: DeviceAppUpdate?,
 )
 
 @Serializable
@@ -286,6 +287,19 @@ enum class Platform(override val wire: String) : ApiEnum {
 enum class Pool(override val wire: String) : ApiEnum {
     @SerialName("screens") SCREENS("screens"),
     @SerialName("phone") PHONE("phone");
+}
+
+@Serializable
+data class DeviceAppUpdate(
+    val versionName: String,
+    val state: DeviceAppUpdateState,
+    val requestedAt: String?,
+)
+
+@Serializable
+enum class DeviceAppUpdateState(override val wire: String) : ApiEnum {
+    @SerialName("available") AVAILABLE("available"),
+    @SerialName("requested") REQUESTED("requested");
 }
 
 @Serializable
@@ -372,6 +386,7 @@ data class DeviceState(
     val activeSos: DeviceStateActiveSos?,
     val apps: DeviceStateApps,
     val games: List<StateGame>? = null,
+    val appUpdate: Opt<StateAppUpdate> = Opt.Absent,
 )
 
 @Serializable
@@ -494,6 +509,12 @@ data class StateGame(
     val id: String,
     val label: String,
     val exePath: String,
+)
+
+@Serializable
+data class StateAppUpdate(
+    val versionCode: Int,
+    val requestedAt: String,
 )
 
 @Serializable
@@ -1066,6 +1087,12 @@ data class AppUpdateOffer(
 data class AppUpdateCheck(
     val versionCode: Int,
     val versionName: String,
+)
+
+@Serializable
+data class AppUpdateRequested(
+    val versionName: String,
+    val requestedAt: String,
 )
 
 @Serializable

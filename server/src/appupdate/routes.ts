@@ -4,70 +4,19 @@ import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import { createRoute, z } from '@hono/zod-openapi';
 import { eq, sql } from 'drizzle-orm';
-import { AppUpdateAnswer, AppUpdateCheck, AppUpdateOffer } from '@screentime/schemas';
+import { AppUpdateAnswer, AppUpdateCheck, AppUpdateOffer, AppUpdateRequested } from '@screentime/schemas';
 import type { AppDeps } from '../app.js';
 import { requireFamilyParent } from '../auth/guards.js';
 import { withFamily } from '../db/family.js';
-import { devices, events, parentSessions } from '../db/schema.js';
+import { devices, events, kids, parentSessions } from '../db/schema.js';
 import { requireDevice } from '../devices/auth.js';
 import { ApiError } from '../errors.js';
-import { disconnectDevices, notifyParents } from '../notify/dispatch.js';
+import { disconnectDevices, notifyParents, sendToDevices } from '../notify/dispatch.js';
 import { bearer, deviceBearer, errorResponses, jsonBody, jsonResponse } from '../openapi.js';
 import type { createRouter } from '../router.js';
+import { offerFor, readKidRelease, readWindowsRelease } from './offer.js';
 
 type Router = ReturnType<typeof createRouter>;
-
-/** `kid.json` in the releases folder, written by `android/publish-kid.ps1` after the APK is in place. */
-const KidRelease = AppUpdateOffer.extend({
-  file: z.string().regex(/^[A-Za-z0-9._-]+\.apk$/),
-  /** Only these devices, to try a version on one device first. Left out: every Android device. */
-  deviceIds: z.array(z.uuid()).optional(),
-});
-
-type KidRelease = z.infer<typeof KidRelease>;
-
-/** `windows.json` in the releases folder, written by `deploy/publish-downloads.ps1 -Windows` after the MSI is in place. */
-const WindowsRelease = AppUpdateOffer.extend({
-  file: z.string().regex(/^[A-Za-z0-9._-]+\.msi$/),
-  /** Only these devices, to try a version on one PC first. Left out: every Windows device. */
-  deviceIds: z.array(z.uuid()).optional(),
-});
-
-type WindowsRelease = z.infer<typeof WindowsRelease>;
-
-/** The published release, or null when there is none or `kid.json` is not valid (which is logged). */
-async function readKidRelease(dir: string | null): Promise<KidRelease | null> {
-  if (!dir) return null;
-  let text: string;
-  try {
-    text = await readFile(join(dir, 'kid.json'), 'utf8');
-  } catch {
-    return null;
-  }
-  try {
-    return KidRelease.parse(JSON.parse(text));
-  } catch (err) {
-    console.error('kid.json is not valid', err);
-    return null;
-  }
-}
-
-/** The published release, or null when there is none or `windows.json` is not valid (which is logged). */
-async function readWindowsRelease(dir: string | null): Promise<WindowsRelease | null> {
-  if (!dir) return null;
-  let text: string;
-  try {
-    text = await readFile(join(dir, 'windows.json'), 'utf8');
-  } catch {
-    return null;
-  }
-  try {
-    return WindowsRelease.parse(JSON.parse(text));
-  } catch (err) {
-    console.error('windows.json is not valid', err);
-    return null;
-  }
-}
 
 /** `parent.json` in the releases folder, written by `deploy/publish-downloads.ps1 -Parent` after the APK is in place. */
 const ParentRelease = AppUpdateOffer.extend({
@@ -140,42 +89,40 @@ const parentCheckRoute = createRoute({
   },
 });
 
-/** Self-update of the kid app, the PC, and their removal (docs/SPEC.md §12.1, §12.2). */
+const IdParam = z.object({ id: z.uuid() });
+
+const requestUpdateRoute = createRoute({
+  method: 'post',
+  path: '/v1/devices/{id}/app-update',
+  tags: ['devices'],
+  summary: 'Ask a kid device to update now',
+  description:
+    'Stores the request and tells the device at once. 409 when there is nothing newer for it. A second request replaces the first.',
+  security: bearer,
+  request: { params: IdParam },
+  responses: {
+    202: jsonResponse('Requested.', AppUpdateRequested),
+    ...errorResponses(401, 403, 404, 409),
+  },
+});
+
+/** Self-update of the kid app, the PC, their removal and the remote "Update now" (docs/SPEC.md §12.1, §12.2, §12.11). */
 export function registerAppUpdateRoutes(app: Router, deps: AppDeps) {
   const { db, config } = deps;
+  const caller = (c: Parameters<typeof requireFamilyParent>[0]) => requireFamilyParent(c, db, config.jwtSecret);
 
   app.openapi(checkRoute, async (c) => {
     const { deviceId, familyId } = await requireDevice(c, db);
     const body = c.req.valid('json');
     const [device] = await withFamily(db, familyId, (tx) =>
-      tx.update(devices).set({ appVersion: body.versionName }).where(eq(devices.id, deviceId)).returning({ platform: devices.platform }),
+      tx
+        .update(devices)
+        .set({ appVersion: body.versionName, appVersionCode: body.versionCode })
+        .where(eq(devices.id, deviceId))
+        .returning({ platform: devices.platform }),
     );
-    const platform = device?.platform;
-    if (platform === 'android') {
-      const release = await readKidRelease(config.releasesDir);
-      if (
-        !release ||
-        release.versionCode <= body.versionCode ||
-        (release.deviceIds && !release.deviceIds.includes(deviceId))
-      ) {
-        return c.json({ offer: null }, 200);
-      }
-      const { versionCode, versionName, sha256, sizeBytes } = release;
-      return c.json({ offer: { versionCode, versionName, sha256, sizeBytes } }, 200);
-    }
-    if (platform === 'windows') {
-      const release = await readWindowsRelease(config.releasesDir);
-      if (
-        !release ||
-        release.versionCode <= body.versionCode ||
-        (release.deviceIds && !release.deviceIds.includes(deviceId))
-      ) {
-        return c.json({ offer: null }, 200);
-      }
-      const { versionCode, versionName, sha256, sizeBytes } = release;
-      return c.json({ offer: { versionCode, versionName, sha256, sizeBytes } }, 200);
-    }
-    return c.json({ offer: null }, 200);
+    const offer = await offerFor(config.releasesDir, device?.platform ?? '', deviceId, body.versionCode);
+    return c.json({ offer }, 200);
   });
 
   // Plain bytes, so it is not in the contract: the kid app fetches it with its own HTTP call.
@@ -276,5 +223,46 @@ export function registerAppUpdateRoutes(app: Router, deps: AppDeps) {
     return new Response(Readable.toWeb(createReadStream(path)) as ReadableStream, {
       headers: { 'Content-Type': 'application/vnd.android.package-archive', 'Content-Length': String(size) },
     });
+  });
+
+  app.openapi(requestUpdateRoute, async (c) => {
+    const { familyId } = await caller(c);
+    const { id } = c.req.valid('param');
+    const requestedAt = new Date();
+
+    const offer = await withFamily(db, familyId, async (tx) => {
+      // Find the device inside this family, not revoked, with a kid that is not archived.
+      const [device] = await tx
+        .select({ id: devices.id, platform: devices.platform, appVersionCode: devices.appVersionCode })
+        .from(devices)
+        .innerJoin(kids, eq(kids.id, devices.kidId))
+        .where(eq(devices.id, id));
+      if (!device) throw new ApiError('not_found', 'No such device in your family.');
+      const [extra] = await tx
+        .select({ revoked: devices.revokedAt, archived: kids.archivedAt })
+        .from(devices)
+        .innerJoin(kids, eq(kids.id, devices.kidId))
+        .where(eq(devices.id, id));
+      if (!extra || extra.revoked !== null || extra.archived !== null) {
+        throw new ApiError('not_found', 'No such device in your family.');
+      }
+      const o = await offerFor(config.releasesDir, device.platform, device.id, device.appVersionCode);
+      if (!o) throw new ApiError('conflict', 'No newer version is offered to this device.', { code: 'no_update' });
+      await tx
+        .update(devices)
+        .set({ updateRequestedAt: requestedAt, updateRequestedCode: o.versionCode })
+        .where(eq(devices.id, id));
+      return o;
+    });
+
+    await sendToDevices(
+      deps,
+      familyId,
+      { deviceId: id },
+      { v: 1, type: 'app_update', at: requestedAt.toISOString(), data: {} },
+      { high: true, ttlSec: 24 * 3600 },
+    );
+
+    return c.json({ versionName: offer.versionName, requestedAt: requestedAt.toISOString() }, 202);
   });
 }
