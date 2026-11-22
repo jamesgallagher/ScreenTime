@@ -156,7 +156,19 @@ fun KidScreen(kid: Kid, vm: KidsViewModel, onBack: () -> Unit, onAdd: (DeviceFor
                                     if (index > 0) {
                                         HorizontalDivider(color = ScreenTimeTheme.colors.outline)
                                     }
-                                    DeviceRow(d, now, onRename = { renaming = d }, onRemove = { removing = d })
+                                    DeviceRow(
+                                        d,
+                                        now,
+                                        onRename = { renaming = d },
+                                        onRemove = { removing = d },
+                                        onUpdateNow = {
+                                            scope.launch {
+                                                RemoteUpdates.source.request(d.id)
+                                                // A 409 refreshes too: the row then shows the truth.
+                                                vm.refreshDevices()
+                                            }
+                                        },
+                                    )
                                 }
                             }
                         }
@@ -280,8 +292,10 @@ fun KidScreen(kid: Kid, vm: KidsViewModel, onBack: () -> Unit, onAdd: (DeviceFor
 
 /** One device row: the form's badge, the name, the form and last seen, and a menu with Rename and Remove. */
 @Composable
-private fun DeviceRow(d: Device, now: Instant, onRename: () -> Unit, onRemove: () -> Unit) {
+private fun DeviceRow(d: Device, now: Instant, onRename: () -> Unit, onRemove: () -> Unit, onUpdateNow: () -> Unit) {
     var menu by remember { mutableStateOf(false) }
+    val update = RemoteUpdates.source.of(d)
+    var asking by remember(update) { mutableStateOf(false) }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -312,6 +326,25 @@ private fun DeviceRow(d: Device, now: Instant, onRename: () -> Unit, onRemove: (
                 style = MaterialTheme.typography.bodyMedium,
                 color = ScreenTimeTheme.colors.muted,
             )
+            // The app's version and update (docs/SPEC.md §12.11): up to date, a newer one offered, or asked for.
+            Text(
+                text = updateLine(d.appVersion, update, now),
+                style = MaterialTheme.typography.bodyMedium,
+                color = ScreenTimeTheme.colors.muted,
+            )
+            if (showsUpdateNow(update, now)) {
+                TextButton(
+                    onClick = {
+                        asking = true
+                        onUpdateNow()
+                    },
+                    enabled = !asking,
+                    modifier = Modifier.heightIn(min = 48.dp),
+                    contentPadding = PaddingValues(horizontal = 0.dp),
+                ) {
+                    Text("Update now")
+                }
+            }
         }
         Box {
             IconButton(
