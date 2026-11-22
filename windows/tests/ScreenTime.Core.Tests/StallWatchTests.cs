@@ -54,4 +54,16 @@ public class StallWatchTests
         Assert.Equal("a kid is using the PC", StallWatch.Situation(anyoneUsing: true));
         Assert.Equal("nobody is using the PC", StallWatch.Situation(anyoneUsing: false));
     }
+
+    [Fact]
+    public void AFiveSecondSleepLooks()
+    {
+        Assert.False(StallWatch.Slept(T, T + 5_000));
+    }
+
+    [Fact]
+    public void AFourHourSleepIsAResume()
+    {
+        Assert.True(StallWatch.Slept(T, T + 4 * 60 * 60 * 1_000));
+    }
 }

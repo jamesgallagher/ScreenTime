@@ -103,7 +103,8 @@ public sealed class TrayHost(uint sessionId, string kidSid, string? trayExe, boo
     {
         var arguments = $"--pipe ScreenTime.{sessionId}" + (dryLock ? " --dry-lock" : "") + (trayOpen is null ? "" : $" --open {trayOpen}");
         // Before this host starts its own tray: a restarted service must not leave two trays in a session (CARD-049b).
-        CloseOtherTrays();
+        // Only the installed service with real locking may look: never in a dev run (CARD-073).
+        if (asService && !dryLock) CloseOtherTrays();
         try
         {
             while (!ct.IsCancellationRequested)

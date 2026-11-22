@@ -1,5 +1,5 @@
 # Runs inside Windows Sandbox at one logon (as WDAGUtilityAccount), for Test-Stall.ps1 (CARD-073). One file,
-# three stages: the host starts a fresh VM per stage and the .wsb LogonCommand passes -Stage, because a real
+# four stages: the host starts a fresh VM per stage and the .wsb LogonCommand passes -Stage, because a real
 # lock or disconnect ends that VM's usefulness (after one the Sandbox never comes back to a logon).
 #   stage 1 (criteria 5, 6, 7): install the MSI, enrol as Sam with 1 minute of Screens time, freeze the tray
 #     with NtSuspendProcess, prove the out-of-time lock decision and the disconnect decision still happen
@@ -8,7 +8,10 @@
 #     switch, prove the watchdog logs and the service restarts with a new process id and re-locks the
 #     out-of-time session, and exactly one tray is left after the restart;
 #   stage 3 (criterion 10): a normal run with a healthy tray, the lock decision within 5 s of the minute
-#     being used up.
+#     being used up;
+#   stage 4 (criterion 11): another operation holds the service lock (--hold-lock-test-file) while the session is
+#     unlocked and out of time, so the lock loop must time out (2 s), disconnect without the lock, and do it again
+#     10 s later, with the watchdog NOT restarting the service.
 # Every stage ends with Stop-Computer -Force after writing C:\out\stage<stage>.done.
 #
 # THE LOCKS BELOW ARE REAL. A real lock needs the service pointed at session 1 (--session 1), because the
@@ -27,10 +30,11 @@ $results = "C:\out\results.txt"
 function Say([string]$text) { Add-Content $results "$(Get-Date -Format HH:mm:ss) $text" }
 $exe = "C:\Program Files\ScreenTime\ScreenTime.Service.exe"
 $flag = "C:\ProgramData\ScreenTime\stall-test.flag"
+$holdFlag = "C:\ProgramData\ScreenTime\hold-lock-test.flag"
 $trayLog = Join-Path $env:LOCALAPPDATA "ScreenTime\tray.log"
 $session = (Get-Process -Id $PID).SessionId
-if ($Stage -lt 1 -or $Stage -gt 3) {
-    Say "FAIL: -Stage must be 1, 2 or 3 (got '$Stage'); nothing ran"
+if ($Stage -lt 1 -or $Stage -gt 4) {
+    Say "FAIL: -Stage must be 1, 2, 3 or 4 (got '$Stage'); nothing ran"
     exit 1
 }
 
@@ -482,7 +486,7 @@ elseif ($Stage -eq 2) {
     Start-Sleep 3
     Stop-Computer -Force
 }
-else {
+elseif ($Stage -eq 3) {
     Say "stage 3: criterion 10 (a normal run with a healthy tray)"
     InstallService $Stage
     Say "gateway and enrol as Sam (1 minute of Screens time today)"
@@ -536,6 +540,82 @@ else {
     } else {
         Say "criterion 10 a normal run locked within 5 s of being used up: FAIL (used up at $(T $tUsed), locked at $(T $tLocked), $g10 s, WTS SessionFlags $flags10)"
     }
+    SayServiceSince $t0 "every ScreenTime.Service line since the restart at $(T $t0):"
+    Say "stage $Stage done"
+    Set-Content "C:\out\stage$Stage.done" "1"
+    Start-Sleep 3
+    Stop-Computer -Force
+}
+
+else {
+    Say "stage 4: criterion 11 (the lock loop does not queue behind slow work: another operation holds the service lock)"
+    InstallService $Stage
+    Say "gateway and enrol as Sam (today's allowance is 0 min: unlocked and already out of time)"
+    EnrolSam
+    Remove-Item $trayLog -Force -ErrorAction SilentlyContinue
+    Say "  tray.log cleared (a fresh tray must write the next pipe: connected line)"
+    SyncOnce
+    Say "the session is unlocked and out of time; the hold file goes on BEFORE the service starts, so no normal pass can lock first"
+    Say "criterion 11: another operation takes the service lock and keeps it (a healthy tray, so only the lock loop is tested)"
+    try { Set-Content $holdFlag "1" } catch { Say "  FAIL: could not create the hold file ($holdFlag): $($_.Exception.Message)" }
+    $tHold = Get-Date
+    Say "  hold file created ($holdFlag) at $(T $tHold), before the service starts"
+    SaySessionLock " (unlocked and out of time, before the service starts)"
+    $t0 = SetImagePath " --hold-lock-test-file $holdFlag"
+    SayDryNote "--hold-lock-test-file (and --session)"
+    $got = WaitTrayConnected 90 60
+    $svcPid = 0
+    $svc = Get-Process -Name ScreenTime.Service -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($svc) { $svcPid = $svc.Id }
+    Say "  service pid before the first disconnect: $svcPid at $(Get-Date -Format HH:mm:ss)"
+    $since = $t0.AddSeconds(-15)
+    $tWait = $null
+    $tDisc11 = $null
+    $tDisc11b = $null
+    $waitLine = WaitLog $since "lock loop: waited for the service lock \(hold test\)" 20
+    if ($waitLine) {
+        $tWait = $waitLine.TimeCreated
+        Say "  the lock loop gave up waiting at $(T $tWait): $(OneLine $waitLine)"
+    } else {
+        Say "  FAIL: no 'lock loop: waited for the service lock (hold test)' line within 20 s of the restart"
+    }
+    $holdLine = WaitLog $since "hold test: taking the service lock" 10
+    if ($holdLine) { Say "  the hold operation took the lock at $(T $holdLine.TimeCreated): $(OneLine $holdLine)" }
+    $discLine = WaitLog $tHold "disconnecting session \d+ without the service lock" 20
+    if ($discLine) {
+        $tDisc11 = $discLine.TimeCreated
+        Say "  the degraded pass disconnected at $(T $tDisc11): $(OneLine $discLine)"
+    } else {
+        Say "  FAIL: no 'disconnecting session ... without the service lock' line within 20 s of the hold file"
+    }
+    $lock11 = WaitRealLock 15
+    Say "  the session state became locked or disconnected $($lock11.Seconds) s after the hold file"
+    SaySessionLock " (while the service lock is held)"
+    # The same session again 10 s later: one disconnect is not enough if the kid unlocks again during a long stall.
+    if ($tDisc11) {
+        $discLineB = WaitLog ($tDisc11.AddSeconds(5)) "disconnecting session \d+ without the service lock" 20
+        if ($discLineB) {
+            $tDisc11b = $discLineB.TimeCreated
+            Say "  the degraded pass disconnected the same session again at $(T $tDisc11b): $(OneLine $discLineB)"
+        } else {
+            Say "  FAIL: the degraded pass did not disconnect the session again within 20 s of the first one"
+        }
+    }
+    $gapFirst = Gap $tHold $tDisc11
+    $gapRepeat = Gap $tDisc11 $tDisc11b
+    $restart = @(LogSince $tHold | Where-Object { "$($_.Message)" -match "watchdog:.*restarting the service" })
+    $svcNow = Get-Process -Name ScreenTime.Service -ErrorAction SilentlyContinue | Select-Object -First 1
+    $svcPidNow = 0
+    if ($svcNow) { $svcPidNow = $svcNow.Id }
+    Say "  service pid now: $svcPidNow (was $svcPid); watchdog restart lines since the hold file: $($restart.Count)"
+    Say "  from the hold file to the first disconnect: $gapFirst s (the card allows 15); first to second: $gapRepeat s (about 10)"
+    if ($tWait -and $tDisc11 -and $gapFirst -le 15 -and $lock11.Real -and $tDisc11b -and $gapRepeat -ge 9 -and $restart.Count -eq 0 -and $svcPidNow -eq $svcPid) {
+        Say "criterion 11 the lock loop locked the session without the service lock, and kept doing it: PASS (waited at $(T $tWait), disconnected at $(T $tDisc11) and $(T $tDisc11b), WTS SessionFlags $($lock11.Flags) / WTSConnectState $($lock11.State), no restart, pid $svcPid unchanged)"
+    } else {
+        Say "criterion 11 the lock loop locked the session without the service lock, and kept doing it: FAIL (waited at $(T $tWait), disconnected at $(T $tDisc11) and $(T $tDisc11b), gaps $gapFirst s and $gapRepeat s, WTS SessionFlags $($lock11.Flags) / WTSConnectState $($lock11.State), restart lines $($restart.Count), pid $svcPid -> $svcPidNow)"
+    }
+    if (Test-Path $holdFlag) { Remove-Item $holdFlag -Force -ErrorAction SilentlyContinue }
+    Say "  hold file deleted at $(Get-Date -Format HH:mm:ss); the service lock is free again"
     SayServiceSince $t0 "every ScreenTime.Service line since the restart at $(T $t0):"
     Say "stage $Stage done"
     Set-Content "C:\out\stage$Stage.done" "1"

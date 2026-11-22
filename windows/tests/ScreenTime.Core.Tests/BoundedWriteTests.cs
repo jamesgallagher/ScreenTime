@@ -36,7 +36,10 @@ public class BoundedWriteTests
         sw.Stop();
 
         Assert.Equal(WriteOutcome.GivenUp, outcome);
-        Assert.True(sw.ElapsedMilliseconds >= 3_000, $"took {sw.ElapsedMilliseconds} ms");
+        // The card's bound is "3 s plus 200 ms": the upper check is the requirement. The lower one only says the write
+        // really waited for the timeout, and it allows 100 ms of timer slack because Task.Delay can fire a millisecond
+        // early (seen once: 2999 ms).
+        Assert.True(sw.ElapsedMilliseconds >= 2_900, $"took {sw.ElapsedMilliseconds} ms");
         Assert.True(sw.ElapsedMilliseconds <= 3_200, $"took {sw.ElapsedMilliseconds} ms");
     }
 

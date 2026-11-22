@@ -18,6 +18,19 @@ public static class StallWatch
     public const int RestartAfterMs = 60_000;
 
     /// <summary>
+    /// Longer than the watchdog's own 5 s sleep: after a resume from sleep or hibernation the sleep takes far longer
+    /// than asked, and the look that follows must be skipped, or a PC that has just woken can end the service before the
+    /// lock loop has made its first pass (CARD-073).
+    /// </summary>
+    public const int ResumeAfterMs = 20_000;
+
+    /// <summary>True when the watchdog's last sleep took far longer than asked (the PC slept): skip this look.</summary>
+    public static bool Slept(long previousLookMs, long nowMs)
+    {
+        return nowMs - previousLookMs > ResumeAfterMs;
+    }
+
+    /// <summary>
     /// Decide the next watchdog action. Log once per stall, not on repeats: after the caller has logged,
     /// it passes <paramref name="alreadyLogged"/> as <c>true</c> and the verdict stays <see cref="StallVerdict.Ok"/>
     /// until the stall ends or the restart threshold is reached.

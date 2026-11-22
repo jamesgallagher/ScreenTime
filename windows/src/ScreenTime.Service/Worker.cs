@@ -26,10 +26,13 @@ namespace ScreenTime.Service;
 /// <c>StallTestFile</c> (<c>--stall-test-file</c>) is a test-only switch: while the file exists the 1-second lock loop
 /// sleeps instead of working, so the watchdog's restart can be tried in Windows Sandbox (CARD-073 criterion 8). It
 /// does nothing when the switch is absent, and it needs <c>--dry-lock</c> or the Sandbox run's <c>--real-lock-test</c>.
+/// <c>HoldLockTestFile</c> (<c>--hold-lock-test-file</c>) is a test-only switch too: while the file exists a background
+/// operation takes the service lock and keeps it, so the lock loop's 2 s bound and its no-lock pass can be seen
+/// (CARD-073 criterion 11). It does nothing when absent, and it needs <c>--dry-lock</c> or <c>--real-lock-test</c>.
 /// </summary>
 public sealed record ServiceOptions(string DataFolder, bool SecureFolder, string? TrayExe, bool DryLock, bool AsService, uint? Session = null,
     string? TrayOpen = null, string? FakeClockFile = null, string? FakeTimezoneFile = null, string? GamesRoot = null, bool UpdateAnytime = false,
-    string? StallTestFile = null);
+    string? StallTestFile = null, string? HoldLockTestFile = null);
 
 /// <summary>
 /// The service's worker: it opens the store, the clock and the config, starts the tracker, and runs four loops (session
@@ -72,7 +75,9 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
     private volatile bool _anyoneUsing;
     private long _lastPassTick;
     private bool _loggedLockWait;
-    private readonly HashSet<uint> _degradedSessions = new();
+    // When the degraded pass last disconnected each session (CARD-073): a kid who unlocks again during the same
+    // stall must be locked again, so the pass repeats every DegradedLock.RepeatMs per session.
+    private readonly Dictionary<uint, long> _degradedAt = new();
 
     /// <summary>True while an update is starting: the tray restart loop and exit judging are off for all sessions.</summary>
     private volatile bool _updateInProgress;
@@ -262,7 +267,7 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
                             }
                             // The stall, if there was one, is over.
                             _loggedLockWait = false;
-                            _degradedSessions.Clear();
+                            _degradedAt.Clear();
                         }
                         finally
                         {
@@ -286,10 +291,12 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
                             if (!OutOfTime(s.Sid, now)) continue;
                             // The keeper and s.Unlocked are not touched here: Windows sends the matching session
                             // event, which resets them under the lock.
-                            if (!_degradedSessions.Add(s.SessionId)) continue;
+                            long? lastAt = _degradedAt.TryGetValue(s.SessionId, out var at) ? at : null;
+                            if (!DegradedLock.Due(lastAt, now)) continue;
                             logger.LogWarning("{Kid}: out of time, disconnecting session {Session} without the service lock", KidName(s.Sid), s.SessionId);
                             if (options.DryLock) logger.LogWarning("dry run: would disconnect session {Session}", s.SessionId);
                             else Win.Disconnect(s.SessionId);
+                            _degradedAt[s.SessionId] = now;
                         }
                         Volatile.Write(ref _lastPassTick, Environment.TickCount64);
                     }
@@ -358,6 +365,36 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
             catch (OperationCanceledException) { }
         });
 
+        // The test-only hold switch (CARD-073 criterion 11): while the file exists a background operation takes the
+        // service lock and keeps it, so the run can see the lock loop's 2 s bound and its no-lock pass. It does
+        // nothing when the switch is absent.
+        var holdTask = Task.Run(async () =>
+        {
+            try
+            {
+                while (options.HoldLockTestFile is { } hold)
+                {
+                    if (!File.Exists(hold))
+                    {
+                        await Task.Delay(500, stoppingToken);
+                        continue;
+                    }
+                    logger.LogWarning("hold test: taking the service lock while {File} exists", hold);
+                    await TakeServiceLockAsync("hold test", Timeout.Infinite, stoppingToken);
+                    try
+                    {
+                        while (File.Exists(hold) && !stoppingToken.IsCancellationRequested) await Task.Delay(500, stoppingToken);
+                    }
+                    finally
+                    {
+                        LeaveServiceLock();
+                        logger.LogInformation("hold test: {File} is gone, the service lock is free", hold);
+                    }
+                }
+            }
+            catch (OperationCanceledException) { }
+        });
+
         // The stall watchdog (CARD-073, docs/SPEC.md §12.2 "Stall guard"): it never uses the service lock. Every 5 s
         // it looks at when the lock loop last finished a pass: 30 s means an error line naming the last holder, 60 s
         // means the process ends with a non-zero exit code, so Windows counts it as a failure and runs the recovery
@@ -367,17 +404,29 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
         {
             var logged = false;
             var lastSeen = Volatile.Read(ref _lastPassTick);
+            var previous = Environment.TickCount64;
             while (true)
             {
                 Thread.Sleep(5_000);
                 if (stoppingToken.IsCancellationRequested) return;
+                var now = Environment.TickCount64;
+                // A resume from sleep makes this sleep take far longer than asked (StallWatch.Slept): the look that
+                // follows would see hours since the last pass and end a service that has only just woken, so the state
+                // is reset as at a fresh start and this look makes no verdict (CARD-073).
+                if (StallWatch.Slept(previous, now))
+                {
+                    previous = now;
+                    lastSeen = Volatile.Read(ref _lastPassTick);
+                    logged = false;
+                    continue;
+                }
+                previous = now;
                 var last = Volatile.Read(ref _lastPassTick);
                 if (last != lastSeen)
                 {
                     lastSeen = last;
                     logged = false;
                 }
-                var now = Environment.TickCount64;
                 var verdict = StallWatch.Check(last, now, _anyoneUsing, logged);
                 if (verdict == StallVerdict.Log)
                 {
@@ -396,7 +445,7 @@ public sealed class Worker(SessionEvents events, ServiceOptions options, ILogger
         { IsBackground = true, Name = "stall-watch" };
         watchdog.Start();
 
-        await Task.WhenAll(eventsTask, timerTask, lockTask, syncTask, gamesTask, dnsTask);
+        await Task.WhenAll(eventsTask, timerTask, lockTask, syncTask, gamesTask, dnsTask, holdTask);
 
         foreach (var s in _sessions.Values) s.Cts.Cancel();
         tracker.OnChange(SessionChange.Shutdown, null, false, clock.NowMs());

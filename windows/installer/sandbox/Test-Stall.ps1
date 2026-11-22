@@ -1,4 +1,4 @@
-# CARD-073: proves criteria 5 to 10 in Windows Sandbox, in THREE separate boots. The guest
+# CARD-073: proves criteria 5 to 11 in Windows Sandbox, in separate boots (four by default). The guest
 # (in-sandbox-stall.ps1) takes -Stage 1/2/3; the host writes run-<n>.wsb, starts one fresh VM per stage and
 # waits for that stage's C:\out\stage<n>.done file, because a real lock or disconnect ends a Sandbox VM's
 # usefulness and a reboot from a locked or disconnected session never logs on again:
@@ -8,7 +8,10 @@
 #   stage 2 (criteria 8, 9): before it, the host clears the windows devices' usage segments and writes a new
 #     enrolment code, then the guest stalls the lock loop with --stall-test-file and proves the watchdog
 #     restart and the relock, and exactly one tray after it;
-#   stage 3 (criterion 10): the same clearing and a new code, then a normal run, the lock decision within 5 s.
+#   stage 3 (criterion 10): the same clearing and a new code, then a normal run, the lock decision within 5 s;
+#   stage 4 (criterion 11): another operation holds the service lock (--hold-lock-test-file) while the session is
+#     unlocked and out of time: the lock loop must time out after 2 s, disconnect without the lock, and repeat 10 s
+#     later, without the watchdog restarting the service. -Stages 4 runs only this one (the break-it step uses it).
 # After stage 3 the host waits 65 s and runs the criterion-9 tamper query. Every ImagePath carries
 # --real-lock-test (CARD-073): the Sandbox has no console session (WTSGetActiveConsoleSessionId = 4294967295), so
 # --session is unavoidable, and Program.cs refuses --session/--stall-test-file without a guard key -- either
@@ -17,7 +20,7 @@
 # after each lock, so the run shows the session really locking (SessionFlags 0) or disconnecting (state 4).
 # Run from the repo root, with Docker Desktop running, Windows Sandbox turned on and the PC unlocked:
 #   pwsh -File windows\installer\sandbox\Test-Stall.ps1 -Msi <path to ScreenTime.msi>
-param([Parameter(Mandatory)][string]$Msi)
+param([Parameter(Mandatory)][string]$Msi, [int[]]$Stages = @(1, 2, 3, 4))
 $ErrorActionPreference = "Stop"
 $here = $PSScriptRoot
 $root = Split-Path (Split-Path (Split-Path $here))
@@ -125,14 +128,14 @@ $hostVerdicts = @()
 $answered7 = $false
 $missingDone = @()
 
-foreach ($n in 1..3) {
-    "--- stage $n of 3 (a fresh Sandbox VM; the guest runs in-sandbox-stall.ps1 -Stage $n)"
+foreach ($n in $Stages) {
+    "--- stage $n of 4 (a fresh Sandbox VM; the guest runs in-sandbox-stall.ps1 -Stage $n)"
     if ($n -gt 1) {
         # Criterion 8's own setup: the session must be unlocked and ALREADY out of time when the stall flag goes on, so
         # today's allowance is 0 minutes for stage 2 and back to 1 minute for stage 3 (the guest creates the flag before
         # the service is started in stage 2).
         $allowance = 0
-        if ($n -eq 3) { $allowance = 1 }
+        if ($n -eq 1 -or $n -eq 3) { $allowance = 1 }
         $bed = pnpm --silent --filter '@screentime/server' exec tsx scripts/dev-bedtime.ts Sam 120 $allowance 2>&1
         $bed | ForEach-Object { "  $_" }
         # The stage's device enrols fresh under the same kid Sam: without this delete it would inherit the
@@ -230,7 +233,7 @@ foreach ($n in 1..3) {
     $stageVerdicts += (Stage-Verdict $n $seen $elapsed)
 }
 
-foreach ($n in 1..3) {
+foreach ($n in $Stages) {
     $have = @($stageVerdicts | Where-Object { $_ -like "stage $n verdict:*" })
     if ($have.Count -eq 0) { $stageVerdicts += "stage $n verdict: NOT RUN (the run stopped at an earlier stage)" }
 }
@@ -257,7 +260,7 @@ docker exec screentime-db-1 psql -U screentime -d screentime -At -c "select d.id
 docker exec screentime-db-1 psql -U screentime -d screentime -At -c "select s.id, d.name, to_char(s.started_at at time zone 'Australia/Sydney','HH24:MI:SS'), coalesce(to_char(s.ended_at at time zone 'Australia/Sydney','HH24:MI:SS'), '-') from usage_segments s join devices d on d.id = s.device_id where d.platform = 'windows' and s.started_at >= date_trunc('day', now() at time zone 'Australia/Sydney') at time zone 'Australia/Sydney' order by s.started_at"
 
 "--- summary"
-$summaryPattern = '^\d{2}:\d{2}:\d{2} criterion|stage [123] .*PASS|stage [123] .*FAIL'
+$summaryPattern = '^\d{2}:\d{2}:\d{2} criterion|stage [1234] .*PASS|stage [1234] .*FAIL'
 $criteria = @()
 if (Test-Path $results) { $criteria = @(Get-Content $results | Where-Object { $_ -match $summaryPattern }) }
 $criteria | ForEach-Object { $_ }
