@@ -23,6 +23,7 @@ import au.screentime.core.model.api.KidKind
 import au.screentime.core.model.api.PushTokenPut
 import au.screentime.core.model.api.SiteLookupIn
 import au.screentime.core.model.api.SiteLookupsUpload
+import au.screentime.core.model.api.valueOrNull
 import au.screentime.core.time.evaluate
 import au.screentime.kid.admin.KidDeviceAdminReceiver
 import au.screentime.kid.admin.Policies
@@ -62,6 +63,9 @@ import au.screentime.kid.update.AskedNote
 import au.screentime.kid.update.AppUpdater
 import au.screentime.kid.update.KidUpdateSource
 import au.screentime.kid.update.KidUpdates
+import au.screentime.kid.update.RemoteUpdateAction
+import au.screentime.kid.update.RemoteUpdateNote
+import au.screentime.kid.update.remoteUpdateAction
 import au.screentime.kid.sync.TrustedClock
 import au.screentime.kid.tamper.CaughtActivity
 import au.screentime.kid.apps.AppWatcher
@@ -114,6 +118,7 @@ class KidService : Service() {
     private lateinit var states: FileStateStore
     private lateinit var syncer: Syncer
     private var updater: AppUpdater? = null
+    private lateinit var remoteNote: RemoteUpdateNote
     private lateinit var notifier: Notifier
     private lateinit var parentStore: ParentModeStore
     private var parentApi: ParentModeApi? = null
@@ -247,6 +252,7 @@ class KidService : Service() {
         tamperApi = TamperApi(client)
         apps = AppWatcher(this, client)
         updater = AppUpdater(this, client, enrolment.serverUrl, token = { enrolment.deviceToken }, onReady = notifier::showUpdate)
+        remoteNote = RemoteUpdateNote(this)
         KidUpdates.source = KidUpdateSource(
             currentCode = { BuildConfig.VERSION_CODE },
             check = updater!!::checkNow,
@@ -571,6 +577,7 @@ class KidService : Service() {
             lastSyncElapsed = SystemClock.elapsedRealtime()
             lastSyncOk = ok
             if (ok) updater?.tick(screenOn(), sos.pending)
+            if (ok) actOnRemoteUpdate()
             if (ok) {
                 segments.prune(clock.nowMs() - KEEP_DAYS * 24 * 60 * MINUTE)
             } else {
@@ -578,6 +585,32 @@ class KidService : Service() {
             }
         }
         report()
+    }
+
+    /** A parent's remote "Update now" from the snapshot (docs/SPEC.md §12.11): the CARD-071 manual path, once per request, never during an SOS. */
+    private suspend fun actOnRemoteUpdate() {
+        val request = states.load()?.state?.appUpdate?.valueOrNull ?: return
+        val action = remoteUpdateAction(request.versionCode, request.requestedAt, BuildConfig.VERSION_CODE, remoteNote.read(), sos.pending || sos.active)
+        when (action) {
+            RemoteUpdateAction.NOTHING -> return
+            RemoteUpdateAction.WAIT -> { Log.i(TAG, "update: remote request ${request.versionCode} waits for the SOS"); return }
+            RemoteUpdateAction.ACT -> Unit
+        }
+        val updater = updater ?: return
+        // The file first: on mobile data too, because a parent asked (the offer is fetched with the same check the sheet uses).
+        val offer = try { updater.checkNow() } catch (e: CancellationException) { throw e } catch (e: Exception) { Log.w(TAG, "update: remote check failed: $e"); return }
+        if (offer == null || offer.versionCode != request.versionCode) {
+            Log.w(TAG, "update: remote request ${request.versionCode} is not offered now"); return
+        }
+        if (!updater.downloaded(offer) && !updater.download(offer)) {
+            Log.w(TAG, "update: remote request ${request.versionCode} could not be downloaded"); return
+        }
+        // Never install during an SOS: the same request is acted on after it ends.
+        if (sos.pending || sos.active) return
+        // Acted on once per requestedAt; written before the install commit, and NOT update_asked_at (no reopen).
+        remoteNote.write(Instant.parse(request.requestedAt).toEpochMilli())
+        Log.i(TAG, "update: remote request ${request.versionCode} installing")
+        updater.installNow(offer)
     }
 
     /** Sends the tamper events in the queue. An attempt recorded while they were on the way stays for the next sync. */
