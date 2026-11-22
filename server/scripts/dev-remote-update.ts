@@ -4,6 +4,8 @@
 // and the raw response body on one line. Usage (from the repo root, with DATABASE_URL and JWT_SECRET set):
 //   pnpm --filter @screentime/server exec tsx scripts/dev-remote-update.ts <deviceId> [api url]
 // The API is at http://localhost:8080 unless API_URL says otherwise or the third argument sets it.
+// After the POST it also prints one line from GET /v1/devices with this device's row, so a run can prove
+// appVersion and appUpdate from the real devices endpoint instead of the database columns.
 // Never run this against the production database.
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, isNull } from "drizzle-orm";
@@ -72,6 +74,20 @@ try {
   });
   const body = await response.text();
   console.log(`POST ${path} -> ${response.status} ${body}`);
+
+  const devicesResponse = await fetch(`${apiUrl}/v1/devices`, {
+    headers: { authorization: `Bearer ${token}` },
+  });
+  const devicesText = await devicesResponse.text();
+  if (!devicesResponse.ok) {
+    console.log(`GET /v1/devices -> ${devicesResponse.status} ${devicesText}`);
+  } else {
+    const list = JSON.parse(devicesText) as Array<{ id: string }>;
+    const row = list.find((d) => d.id === deviceId) ?? null;
+    console.log(
+      `GET /v1/devices -> ${devicesResponse.status} ${JSON.stringify(row)}`,
+    );
+  }
 } finally {
   await pg.end();
 }

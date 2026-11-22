@@ -267,9 +267,20 @@ while ($waited -lt 120) {
 }
 if ($versionMatched) { "app_version matched B (0.1.$bNum)" } else { "NOT RUN: app_version never became 0.1.$bNum within 120 s" }
 
-"--- 9. criterion 19: device row and appUpdate decision"
+"--- 9. criterion 19: the device row from GET /v1/devices"
 Push-Location $root
 try {
+  # The dev script POSTs first; after B is installed there is nothing newer to offer, so that POST
+  # returns 409 -- expected, printed, not a failure. Its GET /v1/devices line is the device row
+  # criterion 19 asks for and alone decides the two PASS/FAIL lines below.
+  $rowOutput = pnpm --silent --filter '@screentime/server' exec tsx scripts/dev-remote-update.ts $deviceId 2>&1
+  $rowOutput | ForEach-Object { "  $_" }
+  $rowLine = (($rowOutput | Select-String 'GET /v1/devices') | Select-Object -Last 1).Line
+  if (-not $rowLine) { $rowLine = "" }
+  $appVersionB = $rowLine -match ('"appVersion":"0\.1\.' + $bNum + '"')
+  $appUpdateNull = $rowLine -match '"appUpdate":null'
+
+  # Supporting output only (must not decide the two PASS/FAILs above): the same row from the database.
   $rowQuery = "select app_version, app_version_code, update_requested_code, update_requested_at from devices where id = '$deviceId'"
   "query: $rowQuery"
   $rowResult = docker exec screentime-db-1 psql -U screentime -d screentime -t -c $rowQuery
@@ -280,8 +291,6 @@ try {
   "appUpdate decision: $appUpdateResult"
 
   $installedB = $versionMatched
-  $appVersionB = $rowResult -match "0\.1\.$bNum"
-  $appUpdateNull = $appUpdateResult -eq "appUpdate null"
   if ($installedB) { "installed version B: PASS" } else { "installed version B: FAIL" }
   if ($appVersionB) { "appVersion B in row: PASS" } else { "appVersion B in row: FAIL" }
   if ($appUpdateNull) { "appUpdate null: PASS" } else { "appUpdate null: FAIL" }
