@@ -76,9 +76,16 @@ import au.screentime.kid.tamper.clockJumpMin
 import au.screentime.kid.tamper.isRepeat
 import au.screentime.kid.tamper.plusEvent
 import au.screentime.kid.tamper.tamperEvent
+import au.screentime.kid.usage.LockEvent
+import au.screentime.kid.usage.LockEvents
 import au.screentime.kid.usage.Recorder
 import au.screentime.kid.usage.dayStartMs
+import au.screentime.kid.usage.missedStartMs
+import au.screentime.kid.usage.missedStretch
+import au.screentime.kid.usage.notBeforeMs
 import au.screentime.kid.usage.todayInput
+import au.screentime.kid.usage.unlockedBefore
+import au.screentime.kid.usage.unlockedSince
 import io.ktor.client.engine.HttpClientEngine
 import io.ktor.client.engine.okhttp.OkHttp
 import java.time.Instant
@@ -91,6 +98,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -163,6 +171,14 @@ class KidService : Service() {
     /** Where the device's time was cut when an always-allowed app came to the front. */
     private var freeCutAt: Long? = null
 
+    /**
+     * Trusted time counting last started: the service started, or the device stopped being blocked, in parent mode, in
+     * an SOS or in an always-allowed app. A missed unlock is never recovered from before it (docs/SPEC.md §12.1).
+     */
+    private var countingSince = Long.MAX_VALUE
+
+    private lateinit var lockEvents: LockEvents
+
     /** A tamper attempt was recorded and the kid has not seen the caught screen for it yet. */
     private var caughtWanted = false
 
@@ -178,8 +194,10 @@ class KidService : Service() {
         override fun onReceive(context: Context, intent: Intent) {
             val at = clock.nowMs()
             when (intent.action) {
-                Intent.ACTION_USER_PRESENT, Intent.ACTION_SCREEN_ON -> scope.launch { onScreenOn(at) }
+                Intent.ACTION_USER_PRESENT -> scope.launch { onScreenOn(at, unlocked = true) }
+                Intent.ACTION_SCREEN_ON -> scope.launch { onScreenOn(at, unlocked = false) }
                 Intent.ACTION_SCREEN_OFF -> scope.launch {
+                    recoverQuickLook(at)
                     recorder.stop(at)
                     // A shared device ends parent mode at screen off (docs/SPEC.md §12.8).
                     if (endsParentModeAtScreenOff(states.load()?.state, parentModeOn = paused)) {
@@ -243,6 +261,7 @@ class KidService : Service() {
         segments = RoomSegmentStore(KidDatabase.open(this).segments())
         states = FileStateStore(this)
         recorder = Recorder(segments) { UUID.randomUUID().toString() }
+        lockEvents = LockEvents(this)
         val http = OkHttp.create()
         val client = ApiClient(enrolment.serverUrl, http, token = { enrolment.deviceToken })
         engine = http
@@ -300,7 +319,8 @@ class KidService : Service() {
         scope.launch {
             // A segment left open by a crash, a reboot or an update ends where it was last seen.
             recorder.closeOpen()
-            if (inUse()) recorder.start(clock.nowMs())
+            countingSince = clock.nowMs()
+            if (inUse()) recorder.start(countingSince)
             sync()
             // Android takes one permission back per restart, so with the screen still off the next one goes at once.
             giveBackLocationIfDone()
@@ -330,6 +350,8 @@ class KidService : Service() {
                 when {
                     inUse() -> {
                         apps?.tick()
+                        // In use with nothing open: the unlock was missed. Start where Android says it was.
+                        if (segments.open() == null) recoverMissedStart("check")
                         recorder.tick(clock.nowMs())
                         if (SystemClock.elapsedRealtime() - lastSyncElapsed >= 5 * MINUTE) sync() else report()
                     }
@@ -414,7 +436,8 @@ class KidService : Service() {
     private fun inLockTask(): Boolean =
         getSystemService(ActivityManager::class.java).lockTaskModeState != ActivityManager.LOCK_TASK_MODE_NONE
 
-    private suspend fun onScreenOn(at: Long) {
+    /** The screen came on ([unlocked] false) or Android said the kid unlocked it ([unlocked] true, USER_PRESENT). */
+    private suspend fun onScreenOn(at: Long, unlocked: Boolean) {
         showCaughtIfWanted()
         val stale = !lastSyncOk || SystemClock.elapsedRealtime() - lastSyncElapsed >= 2 * MINUTE
         if (blocked || paused || sosOn) {
@@ -423,10 +446,63 @@ class KidService : Service() {
             if (stale) sync() else report()
             return
         }
+        if (segments.open() != null) return
+        if (!inUse()) {
+            // Unlocked, yet Android still says the lock screen is up (seen on Ciara's tablet and Pixel, 25 Nov 2026):
+            // look again shortly. The check while in use and the screen off catch it too, from Android's own events.
+            if (unlocked && !free && screenOn() && getSystemService(KeyguardManager::class.java).isKeyguardLocked) {
+                Log.i(TAG, "unlock: the lock screen still looks up, looking again in ${UNLOCK_RETRY_MS / SECOND}s")
+                scope.launch {
+                    delay(UNLOCK_RETRY_MS)
+                    if (inUse() && segments.open() == null) {
+                        recoverMissedStart("after unlock")
+                        report()
+                    }
+                }
+            }
+            return
+        }
         // Screen on without a lock screen, or the unlock after it: only one segment either way.
-        if (!inUse() || segments.open() != null) return
         recorder.start(at)
         if (stale) sync() else report()
+    }
+
+    /**
+     * In use and counting, but nothing is open: the unlock was missed (docs/SPEC.md §12.1). Starts the segment where
+     * Android's events say the device was unlocked, not before counting started or the last segment ended, else now.
+     */
+    private suspend fun recoverMissedStart(why: String) {
+        val now = clock.nowMs()
+        val notBefore = notBeforeMs(countingSince, segments.since(now - RECENT_MS))
+        val since = unlockedSince(lockEventsUntil(now))
+        val at = missedStartMs(since, notBefore, now)
+        val note = if (since == null) ", Android gave no unlock" else ""
+        Log.i(TAG, "unlock: missed ($why), counting from ${(now - at) / SECOND}s ago$note")
+        recorder.start(at)
+    }
+
+    /**
+     * The screen went off at [offAt] with nothing open while counting: a look too short for the check while in use
+     * (docs/SPEC.md §12.1). Opens the missed stretch from Android's unlock, so the screen off closes it.
+     */
+    private suspend fun recoverQuickLook(offAt: Long) {
+        if (blocked || paused || sosOn || free || segments.open() != null) return
+        val notBefore = notBeforeMs(countingSince, segments.since(offAt - RECENT_MS))
+        val stretch = missedStretch(unlockedBefore(lockEventsUntil(offAt), offAt), notBefore, offAt) ?: return
+        Log.i(TAG, "unlock: missed (screen off), counting ${(stretch.second - stretch.first) / SECOND}s")
+        recorder.start(stretch.first)
+    }
+
+    /**
+     * Android's screen and lock screen events of the last [LOCK_LOOKBACK_MS], up to a second after [untilMs], moved
+     * from the device clock to the trusted clock.
+     */
+    private fun lockEventsUntil(untilMs: Long): List<LockEvent> {
+        val wallNow = System.currentTimeMillis()
+        val offset = clock.nowMs() - wallNow
+        return lockEvents.read(wallNow - LOCK_LOOKBACK_MS, wallNow + SECOND)
+            .map { it.copy(atMs = it.atMs + offset) }
+            .filter { it.atMs <= untilMs + SECOND }
     }
 
     /**
@@ -695,10 +771,12 @@ class KidService : Service() {
             if (otherwiseCounting) freeCutAt = at
             recorder.stop(at)
         }
-        if (!wasCounting && counting && inUse()) {
+        if (!wasCounting && counting) {
             // Only the always-allowed app left: the time starts again where it did.
             val at = if (wasFree && wasOtherwiseCounting) cutAt(front.endedMs, now, freeCutAt ?: now) else now
-            recorder.start(at)
+            // A missed unlock is never recovered from before this.
+            countingSince = at
+            if (inUse()) recorder.start(at)
         }
 
         StatusHub.status.value = status
@@ -756,6 +834,15 @@ class KidService : Service() {
 
         /** How often usage events are read while in use: a first use shows within this (docs/SPEC.md §12.4). */
         private const val APP_TICK_MS = 30_000L
+
+        /** How long after an unlock that Android still showed as locked the service looks again. */
+        private const val UNLOCK_RETRY_MS = 2_000L
+
+        /** How far back Android's screen and lock screen events are read for a missed unlock. */
+        private const val LOCK_LOOKBACK_MS = 12 * 60 * MINUTE
+
+        /** Segments this recent can hold the end a recovered segment must not start before. */
+        private const val RECENT_MS = 24 * 60 * MINUTE
 
         /** How long the block screen stays down after the kid opens an always-allowed app from it. */
         private const val FREE_OPEN_GRACE_MS = 5_000L
