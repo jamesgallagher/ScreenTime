@@ -49,10 +49,12 @@ class SearchesTest {
 
         val sent = ChromeSentSearch()
         val resultUrl = "google.com/search?q=how+to+bake+a+cake"
-        assertEquals(Found("google", "how to bake a cake"), sent.observe(resultUrl))
-        assertNull(sent.observe(resultUrl))
-        assertNull(sent.observe("google.com"))
-        assertEquals(Found("google", "how to bake a cake"), sent.observe(resultUrl))
+        assertEquals(Found("google", "how to bake a cake"), sent.observe(resultUrl, false, 1))
+        assertNull(sent.observe(resultUrl, false, 2))
+        assertNull(sent.observe("abandoned words", true, 3))
+        assertNull(sent.observe(resultUrl, false, 4))
+        assertNull(sent.observe("how to bake a cake", true, 5))
+        assertEquals(Found("google", "how to bake a cake"), sent.observe(resultUrl, false, 6))
     }
 
     @Test

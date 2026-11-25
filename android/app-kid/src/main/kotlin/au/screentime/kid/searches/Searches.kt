@@ -76,16 +76,24 @@ fun searchFromUrl(text: String): Found? {
 class ChromeSentSearch {
     private var lastEngine: String? = null
     private var lastQuery: String? = null
+    private var pendingQuery: String? = null
+    private var pendingAtMs = 0L
 
-    fun observe(address: String?): Found? {
+    fun observe(address: String?, focused: Boolean, atMs: Long): Found? {
         if (address == null) return null
         val found = searchFromUrl(address)
         if (found == null) {
-            lastEngine = null
-            lastQuery = null
+            if (focused) {
+                pendingQuery = cleanQuery(address)
+                pendingAtMs = atMs
+            }
             return null
         }
-        if (lastEngine == found.engine && lastQuery.equals(found.query, ignoreCase = true)) return null
+        val same = lastEngine == found.engine && lastQuery.equals(found.query, ignoreCase = true)
+        val wasSubmittedAgain = pendingQuery.equals(found.query, ignoreCase = true) && atMs - pendingAtMs in 0..60_000L
+        pendingQuery = null
+        pendingAtMs = 0
+        if (same && !wasSubmittedAgain) return null
         lastEngine = found.engine
         lastQuery = found.query
         return found

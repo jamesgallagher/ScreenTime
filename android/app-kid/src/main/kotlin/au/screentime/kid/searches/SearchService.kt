@@ -31,7 +31,7 @@ class SearchService : AccessibilityService() {
             val observed = inspect(root, pkg)
             val atMs = System.currentTimeMillis()
             when (pkg) {
-                CHROME -> chromeSearch.observe(observed.chromeAddress)?.let { record(it, pkg, atMs) }
+                CHROME -> chromeSearch.observe(observed.chromeAddress, observed.chromeFocused, atMs)?.let { record(it, pkg, atMs) }
                 GOOGLE_APP -> {
                     observed.googleBox?.let { googleSearch.text(it.text, it.isHint) }
                     if (observed.webView) googleSearch.resultsOpened()?.let { record(Found("google", it), pkg, atMs) }
@@ -74,6 +74,7 @@ class SearchService : AccessibilityService() {
 
     private fun inspect(root: AccessibilityNodeInfo, pkg: String): Observed {
         var chromeAddress: String? = null
+        var chromeFocused = false
         var googleBox: GoogleBox? = null
         var webView = false
 
@@ -82,6 +83,7 @@ class SearchService : AccessibilityService() {
             val viewId = node.viewIdResourceName
             if (pkg == CHROME && viewId == CHROME_URL_BAR) {
                 chromeAddress = node.text?.toString()
+                chromeFocused = node.isFocused
             } else if (pkg == GOOGLE_APP && viewId == GOOGLE_SEARCH_BOX) {
                 googleBox = GoogleBox(node.text?.toString().orEmpty(), node.isShowingHintText)
             }
@@ -98,11 +100,11 @@ class SearchService : AccessibilityService() {
         }
 
         walk(root, 0)
-        return Observed(chromeAddress, googleBox, webView)
+        return Observed(chromeAddress, chromeFocused, googleBox, webView)
     }
 
     private data class GoogleBox(val text: String, val isHint: Boolean)
-    private data class Observed(val chromeAddress: String?, val googleBox: GoogleBox?, val webView: Boolean)
+    private data class Observed(val chromeAddress: String?, val chromeFocused: Boolean, val googleBox: GoogleBox?, val webView: Boolean)
 
     private companion object {
         const val TAG = "Searches"
