@@ -4,7 +4,6 @@
  * read from the browsers' window titles. Same periods and device choice as the Apps report (lib/reports.ts).
  */
 import type {
-  SearchEngine,
   SiteCategory,
   SiteClassOverride,
   SiteKind,
@@ -21,7 +20,6 @@ import type { ReportPeriod } from '@/lib/reports';
 // PUT/DELETE /v1/sites/{site}/class (docs/SPEC.md §12.10, CARD-070). ----
 
 export type {
-  SearchEngine,
   SiteCategory,
   SiteClassOverride,
   SiteClassSource,
@@ -31,7 +29,6 @@ export type {
   SiteReportCategory,
   SiteReportDevice,
   SiteReportPage,
-  SiteReportSearch,
   SiteReportSite,
 } from '@screentime/schemas';
 
@@ -204,15 +201,9 @@ export function hasPc(report: SiteReport): boolean {
   return report.devices.some((d) => d.platform === 'windows' && d.sitesRecorded && (report.deviceId === null || d.deviceId === report.deviceId));
 }
 
-/** Searches and pages are kept 90 days: the period starts before the first kept day. */
+/** Pages are kept 90 days: the period starts before the first kept day. */
 export function titlesCut(report: SiteReport): boolean {
   return report.from < report.titlesKeptFrom;
-}
-
-const ENGINE_LABELS: Record<SearchEngine, string> = { google: 'Google', bing: 'Bing', duckduckgo: 'DuckDuckGo' };
-
-export function engineLabel(engine: SearchEngine): string {
-  return ENGINE_LABELS[engine];
 }
 
 const BROWSER_LABELS: Record<string, string> = {
@@ -229,14 +220,6 @@ export function browserLabel(pkg: string): string {
 /** A short time in a list: "<1m" under a minute. */
 export function shortTime(sec: number): string {
   return sec < 60 ? '<1m' : formatDuration(sec);
-}
-
-/** When a search was first made: the time on a day report, the day otherwise ("Thu 20 Nov"). */
-export function searchWhen(firstAt: string, period: ReportPeriod, timeZone: string): string {
-  if (period === 'day') return formatTimeOfDay(firstAt, timeZone);
-  return new Intl.DateTimeFormat('en-AU', { timeZone, weekday: 'short', day: 'numeric', month: 'short' })
-    .format(new Date(firstAt))
-    .replace(/,/g, '');
 }
 
 /** How many website rows show before "Show all". */

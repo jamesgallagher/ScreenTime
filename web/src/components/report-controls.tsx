@@ -1,6 +1,6 @@
 import type { DeviceForm, Kid } from '@screentime/schemas';
 import { Link } from '@tanstack/react-router';
-import { AppWindow, ChevronLeft, ChevronRight, Globe, Monitor, Smartphone, Tablet } from 'lucide-react';
+import { AppWindow, ChevronLeft, ChevronRight, Globe, Monitor, Search, Smartphone, Tablet } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -8,7 +8,7 @@ import { currentLabel, isCurrentPeriod, periodDates, periodLabel, type ReportPer
 import { splitByKind } from '@/lib/shared';
 import { cn } from '@/lib/utils';
 
-/** The controls the Apps and Websites reports share (docs/SPEC.md §12.9, §12.10). */
+/** The controls the Apps, Websites and Searches reports share (docs/SPEC.md §12.9, §12.10, §12.12). */
 
 const PERIODS: { value: ReportPeriod; label: string }[] = [
   { value: 'day', label: 'Day' },
@@ -18,8 +18,8 @@ const PERIODS: { value: ReportPeriod; label: string }[] = [
 
 export const FORM_ICONS: Record<DeviceForm, typeof Smartphone> = { phone: Smartphone, tablet: Tablet, pc: Monitor };
 
-/** Apps · Websites: the same kid, device, period and date carry over. */
-export function ReportSwitch({ active, search }: { active: 'apps' | 'websites'; search: ReportSearch }) {
+/** Apps · Websites · Searches: the same kid, device, period and date carry over. */
+export function ReportSwitch({ active, search }: { active: 'apps' | 'websites' | 'searches'; search: ReportSearch }) {
   const tab = (selected: boolean) =>
     cn(
       'inline-flex h-10 items-center gap-2 rounded-full px-4 text-sm font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-primary',
@@ -34,6 +34,10 @@ export function ReportSwitch({ active, search }: { active: 'apps' | 'websites'; 
       <Link to="/reports/websites" search={search} className={tab(active === 'websites')} aria-current={active === 'websites' ? 'page' : undefined}>
         <Globe className="size-4" />
         Websites
+      </Link>
+      <Link to="/reports/searches" search={search} className={tab(active === 'searches')} aria-current={active === 'searches' ? 'page' : undefined}>
+        <Search className="size-4" />
+        Searches
       </Link>
     </nav>
   );

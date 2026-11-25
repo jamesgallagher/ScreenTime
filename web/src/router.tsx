@@ -18,6 +18,7 @@ import { KidPage } from '@/pages/kid';
 import { KidsPage } from '@/pages/kids';
 import { NotFoundPage } from '@/pages/not-found';
 import { ReportsPage } from '@/pages/reports';
+import { SearchesPage } from '@/pages/searches';
 import { WebsitesPage } from '@/pages/websites';
 import { SettingsPage } from '@/pages/settings';
 import { SignInPage } from '@/pages/sign-in';
@@ -91,13 +92,22 @@ const websitesRoute = createRoute({
     return <WebsitesPage search={websitesRoute.useSearch()} />;
   },
 });
+/** docs/SPEC.md §12.12: the Searches report, next to Apps and Websites, with the same choices in the address. */
+const searchesRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/reports/searches',
+  validateSearch: parseReportSearch,
+  component: function SearchesRoute() {
+    return <SearchesPage search={searchesRoute.useSearch()} />;
+  },
+});
 const settingsRoute = createRoute({ getParentRoute: () => appRoute, path: '/settings', component: SettingsPage });
 const adminRoute = createRoute({ getParentRoute: () => appRoute, path: '/admin', component: AdminOnly });
 
 const routeTree = rootRoute.addChildren([
   signInRoute,
   downloadRoute,
-  appRoute.addChildren([todayRoute, inboxRoute, kidsRoute, kidRoute, reportsRoute, websitesRoute, settingsRoute, adminRoute]),
+  appRoute.addChildren([todayRoute, inboxRoute, kidsRoute, kidRoute, reportsRoute, websitesRoute, searchesRoute, settingsRoute, adminRoute]),
 ]);
 
 export const router = createRouter({ routeTree, defaultPreload: 'intent' });
