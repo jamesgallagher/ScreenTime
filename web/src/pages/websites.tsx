@@ -1,6 +1,6 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { useNavigate } from '@tanstack/react-router';
-import { ChevronDown, EyeOff, Globe, MoreVertical, Search, ShieldAlert } from 'lucide-react';
+import { Link, useNavigate } from '@tanstack/react-router';
+import { ChevronDown, EyeOff, Globe, MoreVertical, ShieldAlert } from 'lucide-react';
 import { useState } from 'react';
 import { PageHeader } from '@/components/page-header';
 import { DeviceChips, PeriodControls, ReportSwitch } from '@/components/report-controls';
@@ -18,7 +18,6 @@ import {
   browserLabel,
   categoryLabel,
   dayLabel,
-  engineLabel,
   fetchSiteReport,
   filterSites,
   hasPc,
@@ -26,7 +25,6 @@ import {
   kindLabel,
   notRecorded,
   ownerLine,
-  searchWhen,
   shortTime,
   type SiteCategory,
   siteDeviceSplit,
@@ -56,7 +54,7 @@ export function WebsitesPage({ search }: { search: ReportSearch }) {
   const navigate = useNavigate();
   const list = kids.data ?? [];
   const kid = list.find((k) => k.id === search.kid) ?? splitByKind(list).kids[0] ?? list[0];
-  const period = search.period ?? 'week';
+  const period = search.period ?? 'day';
   const date = search.date && search.date <= today ? search.date : today;
   const deviceId = kid && !isShared(kid) ? (search.device ?? null) : null;
   const [editing, setEditing] = useState<SiteReportSite | null>(null);
@@ -144,7 +142,7 @@ function Report({ report, timeZone, onEdit }: { report: SiteReport; timeZone: st
       {report.categories.length > 0 && <CategoriesCard report={report} filter={filter} onFilter={setFilter} />}
       <SitesCard report={report} timeZone={timeZone} filter={filter} onFilter={setFilter} onEdit={onEdit} />
       {report.behindTheScenes.length > 0 && <BehindCard report={report} timeZone={timeZone} onEdit={onEdit} />}
-      {hasPc(report) && <PcCard report={report} timeZone={timeZone} />}
+      {hasPc(report) && <PcCard report={report} />}
     </>
   );
 }
@@ -394,51 +392,39 @@ function BehindCard({ report, timeZone, onEdit }: { report: SiteReport; timeZone
   );
 }
 
-function PcCard({ report, timeZone }: { report: SiteReport; timeZone: string }) {
+function PcCard({ report }: { report: SiteReport }) {
   const cut = titlesCut(report);
   return (
     <Card>
       <CardHeader>
         <CardTitle>On PCs</CardTitle>
-        <CardDescription>Read from the browser window in front (Edge, Chrome, Brave, Firefox). Kept for 90 days.</CardDescription>
+        <CardDescription>Read from the browser window in front (Edge, Chrome, Brave, Firefox). Pages are kept for 90 days.</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-6">
         {cut && (
           <p className="rounded-xl bg-surface-variant px-3 py-2 text-sm text-muted">
-            Searches and pages before {dayLabel(report.titlesKeptFrom)} are no longer kept.
+            Pages before {dayLabel(report.titlesKeptFrom)} are no longer kept.
           </p>
         )}
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 gap-3">
           <Stat label="In a browser" value={report.browserSec === 0 ? '0m' : formatDuration(report.browserSec)} />
           <Stat
             label="Private windows"
             value={report.privateSec === 0 ? '0m' : shortTime(report.privateSec)}
             tone={report.privateSec > 0 ? 'warning' : undefined}
           />
-          <Stat label="Searches" value={String(report.searches.length)} />
         </div>
-        <section>
-          <h3 className="mb-2 text-sm font-semibold">Searches</h3>
-          {report.searches.length === 0 ? (
-            <p className="text-sm text-muted">No searches seen.</p>
-          ) : (
-            <ul className="flex flex-col">
-              {report.searches.map((s) => (
-                <li key={`${s.engine}:${s.query}`} className="flex items-center gap-3 border-t border-outline py-2.5 first:border-t-0">
-                  <Search className="size-4 shrink-0 text-muted" />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium">“{s.query}”</p>
-                    <p className="text-xs text-muted">
-                      {engineLabel(s.engine)} · {searchWhen(s.firstAt, report.period, timeZone)}
-                    </p>
-                  </div>
-                  {s.private && <PrivateBadge />}
-                  <span className="text-sm tabular-nums text-muted">{shortTime(s.sec)}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+        <p className="text-sm text-muted">
+          Searches are on the{' '}
+          <Link
+            to="/reports/searches"
+            search={{ kid: report.kidId, device: report.deviceId ?? undefined, period: report.period, date: report.from }}
+            className="font-medium text-primary underline-offset-2 hover:underline"
+          >
+            Searches
+          </Link>{' '}
+          tab.
+        </p>
         <section>
           <h3 className="mb-2 text-sm font-semibold">Pages</h3>
           {report.pages.length === 0 ? (

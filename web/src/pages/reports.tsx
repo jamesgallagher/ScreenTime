@@ -41,7 +41,7 @@ export function ReportsPage({ search }: { search: ReportSearch }) {
   const navigate = useNavigate();
   const list = kids.data ?? [];
   const kid = list.find((k) => k.id === search.kid) ?? splitByKind(list).kids[0] ?? list[0];
-  const period = search.period ?? 'week';
+  const period = search.period ?? 'day';
   const date = search.date && search.date <= today ? search.date : today;
   const deviceId = kid && !isShared(kid) ? (search.device ?? null) : null;
 

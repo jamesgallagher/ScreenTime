@@ -11,7 +11,6 @@ import {
   isWorthALook,
   notRecorded,
   ownerLine,
-  searchWhen,
   siteDeviceSplit,
   siteName,
   type SiteReport,
@@ -178,14 +177,10 @@ describe('the report', () => {
     expect(hasPc(report({ devices: [report().devices[0]!] }))).toBe(false);
   });
 
-  it('says when searches and pages before the period are gone', () => {
+  it('says when pages before the period are gone', () => {
     expect(titlesCut(report())).toBe(false);
     expect(titlesCut(report({ period: 'month', from: '2026-08-01', to: '2026-08-31' }))).toBe(true);
     expect(dayLabel('2026-08-23')).toBe('23 Aug');
   });
 
-  it('dates a search by its time on a day, by its day otherwise', () => {
-    expect(searchWhen('2026-11-20T04:05:00.000Z', 'day', SYDNEY)).toBe('3:05 pm');
-    expect(searchWhen('2026-11-20T04:05:00.000Z', 'week', SYDNEY)).toBe('Fri 20 Nov');
-  });
 });
