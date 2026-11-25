@@ -21,6 +21,7 @@ import kotlinx.coroutines.launch
 class SearchService : AccessibilityService() {
     private val io = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val googleSearch = GoogleAppSearch()
+    private val chromeSearch = ChromeSentSearch()
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         val pkg = event?.packageName?.toString() ?: return
@@ -30,7 +31,7 @@ class SearchService : AccessibilityService() {
             val observed = inspect(root, pkg)
             val atMs = System.currentTimeMillis()
             when (pkg) {
-                CHROME -> observed.chromeAddress?.let(::searchFromUrl)?.let { record(it, pkg, atMs) }
+                CHROME -> chromeSearch.observe(observed.chromeAddress)?.let { record(it, pkg, atMs) }
                 GOOGLE_APP -> {
                     observed.googleBox?.let { googleSearch.text(it.text, it.isHint) }
                     if (observed.webView) googleSearch.resultsOpened()?.let { record(Found("google", it), pkg, atMs) }

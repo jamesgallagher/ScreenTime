@@ -72,6 +72,26 @@ fun searchFromUrl(text: String): Found? {
     return cleanQuery(decoded)?.let { Found(engine, it) }
 }
 
+/** Emits a Chrome search once per transition into a result URL, not on every accessibility content event. */
+class ChromeSentSearch {
+    private var lastEngine: String? = null
+    private var lastQuery: String? = null
+
+    fun observe(address: String?): Found? {
+        if (address == null) return null
+        val found = searchFromUrl(address)
+        if (found == null) {
+            lastEngine = null
+            lastQuery = null
+            return null
+        }
+        if (lastEngine == found.engine && lastQuery.equals(found.query, ignoreCase = true)) return null
+        lastEngine = found.engine
+        lastQuery = found.query
+        return found
+    }
+}
+
 /**
  * Add one sighting. The same engine, case-insensitive words and package merge when the sighting is at most ten
  * minutes after that row's last sighting; every changed row gets a new version.

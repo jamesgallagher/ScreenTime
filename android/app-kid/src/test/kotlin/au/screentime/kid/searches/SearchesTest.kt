@@ -46,6 +46,13 @@ class SearchesTest {
             "en.wikipedia.org/wiki/Cake",
             "google.com/maps?q=cafe",
         ).forEach { assertNull(searchFromUrl(it), it) }
+
+        val sent = ChromeSentSearch()
+        val resultUrl = "google.com/search?q=how+to+bake+a+cake"
+        assertEquals(Found("google", "how to bake a cake"), sent.observe(resultUrl))
+        assertNull(sent.observe(resultUrl))
+        assertNull(sent.observe("google.com"))
+        assertEquals(Found("google", "how to bake a cake"), sent.observe(resultUrl))
     }
 
     @Test
