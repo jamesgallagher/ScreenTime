@@ -5,6 +5,7 @@ import java.net.URI
 import java.net.URISyntaxException
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
 
 /** A complete search found in a browser address or app search box. */
 data class Found(val engine: String, val query: String)
@@ -177,6 +178,12 @@ class YouTubeAppSearch {
     private var showingHint = false
     private var emitted = false
     private var typedSinceLastResult = false
+    var lastFingerprint: String? = null
+        private set
+
+    constructor(lastFingerprint: String? = null) {
+        this.lastFingerprint = lastFingerprint
+    }
 
     fun text(value: String, isHint: Boolean) {
         if (currentText != value || showingHint != isHint) {
@@ -191,12 +198,23 @@ class YouTubeAppSearch {
         if (emitted) return null
         if (resultText == null && showingHint) return null
         val query = cleanQuery(resultText ?: currentText) ?: return null
+        val fingerprint = queryFingerprint(query)
+        if (fingerprint == lastFingerprint && !typedSinceLastResult) {
+            emitted = true
+            return null
+        }
         emitted = true
-        val explicitlyTyped = typedSinceLastResult
+        val explicit = typedSinceLastResult
         typedSinceLastResult = false
-        return YouTubeSubmission(query, ignoreRecentReplay = !explicitlyTyped)
+        lastFingerprint = fingerprint
+        return YouTubeSubmission(query, ignoreRecentReplay = !explicit)
     }
 }
+
+private fun queryFingerprint(query: String): String =
+    MessageDigest.getInstance("SHA-256")
+        .digest(query.lowercase().toByteArray(StandardCharsets.UTF_8))
+        .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
 
 private const val REPEAT_WINDOW_MS = 10 * 60 * 1000L
 private val SCHEME = Regex("^[a-zA-Z][a-zA-Z0-9+.-]*://")

@@ -130,10 +130,10 @@ class SearchesTest {
         search.text("funny cats", false)
         assertEquals(YouTubeSubmission("funny cats", ignoreRecentReplay = false), search.resultsOpened("funny cats"))
         assertNull(search.resultsOpened())
-        assertEquals(
-            YouTubeSubmission("funny cats", ignoreRecentReplay = true),
-            YouTubeAppSearch().resultsOpened("funny cats"),
-        )
+        val reconnect = YouTubeAppSearch(search.lastFingerprint)
+        assertNull(reconnect.resultsOpened("funny cats"))
+        reconnect.text("funny cats", false)
+        assertEquals(YouTubeSubmission("funny cats", ignoreRecentReplay = false), reconnect.resultsOpened("funny cats"))
     }
 
     @Test

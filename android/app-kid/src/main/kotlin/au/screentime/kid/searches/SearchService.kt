@@ -21,7 +21,10 @@ import kotlinx.coroutines.launch
 class SearchService : AccessibilityService() {
     private val io = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val googleSearch = GoogleAppSearch()
-    private val youtubeSearch = YouTubeAppSearch()
+    private val youtubePrefs by lazy { getSharedPreferences(SEARCH_PREFS, Context.MODE_PRIVATE) }
+    private val youtubeSearch by lazy {
+        YouTubeAppSearch(youtubePrefs.getString(LAST_YOUTUBE_FINGERPRINT, null))
+    }
     private val chromeSearch = ChromeSentSearch()
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
@@ -42,6 +45,7 @@ class SearchService : AccessibilityService() {
                 YOUTUBE_APP -> {
                     observed.youtubeEdit?.let { youtubeSearch.text(it.text, it.isHint) }
                     observed.youtubeQuery?.let(youtubeSearch::resultsOpened)?.let { submission ->
+                        youtubePrefs.edit().putString(LAST_YOUTUBE_FINGERPRINT, youtubeSearch.lastFingerprint).apply()
                         record(Found("youtube", submission.query), pkg, atMs, submission.ignoreRecentReplay)
                     }
                 }
@@ -64,9 +68,9 @@ class SearchService : AccessibilityService() {
         if (!outsideParentMode(atMs, parentModeSpans(atMs))) return
         io.launch {
             try {
-                RoomSearchStore(KidDatabase.open(this@SearchService).searches())
+                val stored = RoomSearchStore(KidDatabase.open(this@SearchService).searches())
                     .record(SearchSighting(atMs, found.engine, found.query, pkg), ignoreRecentReplay)
-                Log.i(TAG, "searches: found ${found.engine} $pkg")
+                if (stored) Log.i(TAG, "searches: found ${found.engine} $pkg")
             } catch (e: Exception) {
                 Log.w(TAG, "searches: store failed ${e.javaClass.simpleName}")
             }
@@ -138,6 +142,8 @@ class SearchService : AccessibilityService() {
         const val GOOGLE_SEARCH_BOX = "com.google.android.googlequicksearchbox:id/googleapp_search_box"
         const val YOUTUBE_SEARCH_EDIT_TEXT = "com.google.android.youtube:id/search_edit_text"
         const val YOUTUBE_SEARCH_QUERY = "com.google.android.youtube:id/search_query"
+        const val SEARCH_PREFS = "search_capture"
+        const val LAST_YOUTUBE_FINGERPRINT = "last_youtube_fingerprint"
         const val SPANS = "spans"
     }
 }
