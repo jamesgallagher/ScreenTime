@@ -58,7 +58,6 @@ function report(over: Partial<SiteReport> = {}): SiteReport {
     behindTheScenes: [],
     browserSec: 0,
     privateSec: 0,
-    searches: [],
     pages: [],
     titlesKeptFrom: '2026-08-23',
     ...over,
