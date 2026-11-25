@@ -14,11 +14,12 @@ import {
 import type { AppDeps } from '../app.js';
 import { requireFamilyParent } from '../auth/guards.js';
 import { type FamilyTx, withFamily } from '../db/family.js';
-import { siteDaily, siteLookups, siteOverrides, siteTitles } from '../db/schema.js';
+import { devices, siteDaily, siteLookups, siteOverrides, siteTitles } from '../db/schema.js';
 import { requireDevice } from '../devices/auth.js';
 import { ApiError } from '../errors.js';
 import { bearer, errorResponses, deviceBearer, jsonBody, jsonResponse } from '../openapi.js';
 import type { createRouter } from '../router.js';
+import { fromTitles } from '../searches/fromTitles.js';
 
 type Router = ReturnType<typeof createRouter>;
 
@@ -191,7 +192,23 @@ export function registerSiteRoutes(app: Router, deps: AppDeps) {
           })),
         )
         .onConflictDoNothing()
-        .returning({ at: siteTitles.at });
+        .returning({
+          familyId: siteTitles.familyId,
+          kidId: siteTitles.kidId,
+          deviceId: siteTitles.deviceId,
+          at: siteTitles.at,
+          sec: siteTitles.sec,
+          package: siteTitles.package,
+          title: siteTitles.title,
+        });
+      await fromTitles(
+        tx,
+        rows.sort((a, b) => a.at.getTime() - b.at.getTime()),
+      );
+      await tx
+        .update(devices)
+        .set({ searchCapture: 'on', searchCaptureAt: sql`now()` })
+        .where(eq(devices.id, deviceId));
       return rows.length;
     });
     return c.json({ received }, 200);

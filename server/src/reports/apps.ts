@@ -95,7 +95,7 @@ export async function familyToday(_tx: FamilyTx, timezone: string): Promise<stri
 export function isRealDate(date: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
   const d = new Date(`${date}T00:00:00Z`);
-  return d.toISOString().slice(0, 10) === date;
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === date;
 }
 
 /** The first and last day of the period holding `date`: the day itself, Monday to Sunday, or the calendar month. */

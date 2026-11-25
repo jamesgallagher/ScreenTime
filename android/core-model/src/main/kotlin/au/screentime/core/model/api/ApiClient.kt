@@ -344,6 +344,17 @@ class ApiClient(
     }
 
     /**
+     * Upload completed searches.
+     *
+     * `POST /v1/device/searches`
+     */
+    suspend fun postDeviceSearches(
+        body: SearchesUpload,
+    ): SearchesReceived {
+        return call(HttpMethod.Post, "/v1/device/searches", auth = true, body = body, bodyType = typeInfo<SearchesUpload>()).body()
+    }
+
+    /**
      * Everything this device needs to enforce.
      *
      * `GET /v1/device/state`
@@ -405,6 +416,20 @@ class ApiClient(
         deviceId: String? = null,
     ): SiteReport {
         return call(HttpMethod.Get, "/v1/reports/sites", auth = true, query = listOf("kidId" to kidId, "period" to period, "date" to date, "deviceId" to deviceId)).body()
+    }
+
+    /**
+     * The searches report of a kid or shared device.
+     *
+     * `GET /v1/reports/searches`
+     */
+    suspend fun getReportsSearches(
+        kidId: String,
+        period: ReportPeriod,
+        date: String? = null,
+        deviceId: String? = null,
+    ): SearchReport {
+        return call(HttpMethod.Get, "/v1/reports/searches", auth = true, query = listOf("kidId" to kidId, "period" to period, "date" to date, "deviceId" to deviceId)).body()
     }
 
     /**

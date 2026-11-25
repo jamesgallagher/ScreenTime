@@ -114,6 +114,37 @@ public sealed record DeviceMeFamily(
     [property: JsonPropertyName("timezone")] string Timezone,
     [property: JsonPropertyName("emergencyNumber")] string EmergencyNumber);
 
+public sealed record SearchesReceived(
+    [property: JsonPropertyName("received")] int Received);
+
+public sealed record SearchesUpload(
+    [property: JsonPropertyName("capture")] SearchesUploadCapture Capture,
+    [property: JsonPropertyName("searches")] IReadOnlyList<SearchIn> Searches);
+
+[JsonConverter(typeof(JsonStringEnumConverter<SearchesUploadCapture>))]
+public enum SearchesUploadCapture
+{
+    [JsonStringEnumMemberName("on")] On,
+    [JsonStringEnumMemberName("off")] Off,
+}
+
+public sealed record SearchIn(
+    [property: JsonPropertyName("at")] string At,
+    [property: JsonPropertyName("lastAt")] string LastAt,
+    [property: JsonPropertyName("count")] int Count,
+    [property: JsonPropertyName("engine")] SearchEngine Engine,
+    [property: JsonPropertyName("query")] string Query,
+    [property: JsonPropertyName("package")] string Package);
+
+[JsonConverter(typeof(JsonStringEnumConverter<SearchEngine>))]
+public enum SearchEngine
+{
+    [JsonStringEnumMemberName("google")] Google,
+    [JsonStringEnumMemberName("bing")] Bing,
+    [JsonStringEnumMemberName("duckduckgo")] Duckduckgo,
+    [JsonStringEnumMemberName("youtube")] Youtube,
+}
+
 public sealed record DeviceState(
     [property: JsonPropertyName("serverTime")] string ServerTime,
     [property: JsonPropertyName("stateVersion")] string StateVersion,
@@ -518,6 +549,11 @@ public sealed record PushTokenPut(
 [JsonSerializable(typeof(DeviceMeDevice))]
 [JsonSerializable(typeof(DeviceMeKid))]
 [JsonSerializable(typeof(DeviceMeFamily))]
+[JsonSerializable(typeof(SearchesReceived))]
+[JsonSerializable(typeof(SearchesUpload))]
+[JsonSerializable(typeof(SearchesUploadCapture))]
+[JsonSerializable(typeof(SearchIn))]
+[JsonSerializable(typeof(SearchEngine))]
 [JsonSerializable(typeof(DeviceState))]
 [JsonSerializable(typeof(DeviceStateDevice))]
 [JsonSerializable(typeof(DeviceStateKid))]

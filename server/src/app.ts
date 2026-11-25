@@ -21,6 +21,7 @@ import type { Pusher } from './push.js';
 import { registerRequestRoutes } from './requests/routes.js';
 import { createRouter } from './router.js';
 import { registerSosRoutes } from './sos/routes.js';
+import { registerSearchRoutes } from './searches/routes.js';
 import { registerSiteRoutes } from './sites/routes.js';
 import { registerReportRoutes } from './reports/routes.js';
 import { registerSyncRoutes } from './sync/routes.js';
@@ -97,6 +98,7 @@ export function createApp(appDeps: AppDeps) {
   registerFamilyRoutes(app, deps);
   registerKidRoutes(app, deps);
   registerDeviceRoutes(app, deps);
+  registerSearchRoutes(app, deps);
   registerSyncRoutes(app, deps);
   registerReportRoutes(app, deps);
   registerGrantRoutes(app, deps);

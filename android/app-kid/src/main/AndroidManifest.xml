@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <!--
@@ -8,6 +9,10 @@
     -->
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" />
+    <!-- Granted once over adb so the kid app can keep its accessibility capture service enabled. -->
+    <uses-permission
+        android:name="android.permission.WRITE_SECURE_SETTINGS"
+        tools:ignore="ProtectedPermissions" />
     <!-- Scanning the enrolment QR code. Device Owner grants it, so the kid is never asked (docs/SPEC.md §12.1). -->
     <uses-permission android:name="android.permission.CAMERA" />
     <!-- Self-update (docs/SPEC.md §12.1). As Device Owner the install asks nobody. -->
@@ -101,6 +106,19 @@
             android:name=".service.KidService"
             android:exported="false"
             android:foregroundServiceType="systemExempted" />
+
+        <service
+            android:name=".searches.SearchService"
+            android:exported="true"
+            android:label="Screen Time"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/search_service" />
+        </service>
 
         <!-- FCM pushes, handed to KidService like a WebSocket frame (docs/SPEC.md §10, CARD-034b). -->
         <service

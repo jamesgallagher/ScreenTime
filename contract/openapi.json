@@ -974,6 +974,88 @@
           "family"
         ]
       },
+      "SearchesReceived": {
+        "type": "object",
+        "properties": {
+          "received": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "received"
+        ]
+      },
+      "SearchesUpload": {
+        "type": "object",
+        "properties": {
+          "capture": {
+            "type": "string",
+            "enum": [
+              "on",
+              "off"
+            ]
+          },
+          "searches": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SearchIn"
+            },
+            "maxItems": 500
+          }
+        },
+        "required": [
+          "capture",
+          "searches"
+        ]
+      },
+      "SearchIn": {
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "engine": {
+            "$ref": "#/components/schemas/SearchEngine"
+          },
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "package": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "at",
+          "lastAt",
+          "count",
+          "engine",
+          "query",
+          "package"
+        ]
+      },
+      "SearchEngine": {
+        "type": "string",
+        "enum": [
+          "google",
+          "bing",
+          "duckduckgo",
+          "youtube"
+        ]
+      },
       "DeviceState": {
         "type": "object",
         "properties": {
@@ -1917,12 +1999,6 @@
             "type": "integer",
             "minimum": 0
           },
-          "searches": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/SiteReportSearch"
-            }
-          },
           "pages": {
             "type": "array",
             "items": {
@@ -1946,7 +2022,6 @@
           "behindTheScenes",
           "browserSec",
           "privateSec",
-          "searches",
           "pages",
           "titlesKeptFrom"
         ]
@@ -2171,48 +2246,6 @@
           "minutes"
         ]
       },
-      "SiteReportSearch": {
-        "type": "object",
-        "properties": {
-          "engine": {
-            "$ref": "#/components/schemas/SearchEngine"
-          },
-          "query": {
-            "type": "string"
-          },
-          "sec": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "private": {
-            "type": "boolean"
-          },
-          "firstAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "deviceId": {
-            "type": "string",
-            "format": "uuid"
-          }
-        },
-        "required": [
-          "engine",
-          "query",
-          "sec",
-          "private",
-          "firstAt",
-          "deviceId"
-        ]
-      },
-      "SearchEngine": {
-        "type": "string",
-        "enum": [
-          "google",
-          "bing",
-          "duckduckgo"
-        ]
-      },
       "SiteReportPage": {
         "type": "object",
         "properties": {
@@ -2234,6 +2267,151 @@
           "page",
           "package",
           "sec",
+          "private"
+        ]
+      },
+      "SearchReport": {
+        "type": "object",
+        "properties": {
+          "kidId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "period": {
+            "$ref": "#/components/schemas/ReportPeriod"
+          },
+          "from": {
+            "$ref": "#/components/schemas/LocalDate"
+          },
+          "to": {
+            "$ref": "#/components/schemas/LocalDate"
+          },
+          "today": {
+            "$ref": "#/components/schemas/LocalDate"
+          },
+          "deviceId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "devices": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SearchReportDevice"
+            }
+          },
+          "searches": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SearchReportItem"
+            }
+          }
+        },
+        "required": [
+          "kidId",
+          "period",
+          "from",
+          "to",
+          "today",
+          "deviceId",
+          "devices",
+          "searches"
+        ]
+      },
+      "SearchReportDevice": {
+        "type": "object",
+        "properties": {
+          "deviceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "form": {
+            "$ref": "#/components/schemas/DeviceForm"
+          },
+          "platform": {
+            "$ref": "#/components/schemas/Platform"
+          },
+          "removedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "capture": {
+            "$ref": "#/components/schemas/SearchCapture"
+          }
+        },
+        "required": [
+          "deviceId",
+          "name",
+          "form",
+          "platform",
+          "removedAt",
+          "capture"
+        ]
+      },
+      "SearchCapture": {
+        "type": "string",
+        "enum": [
+          "on",
+          "off",
+          "never"
+        ]
+      },
+      "SearchReportItem": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string"
+          },
+          "engine": {
+            "$ref": "#/components/schemas/SearchEngine"
+          },
+          "package": {
+            "type": "string"
+          },
+          "appLabel": {
+            "type": "string"
+          },
+          "deviceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "private": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "query",
+          "engine",
+          "package",
+          "appLabel",
+          "deviceId",
+          "at",
+          "lastAt",
+          "count",
           "private"
         ]
       },
@@ -6156,6 +6334,62 @@
         }
       }
     },
+    "/v1/device/searches": {
+      "post": {
+        "tags": [
+          "device"
+        ],
+        "summary": "Upload completed searches",
+        "description": "Completed searches captured on this device. Searches more than 30 days old or more than 1 day ahead are skipped; repeats keep the later time and higher count.",
+        "security": [
+          {
+            "deviceAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchesUpload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Stored.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchesReceived"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the code or token is wrong or expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/device/state": {
       "get": {
         "tags": [
@@ -6461,6 +6695,108 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SiteReport"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the code or token is wrong or expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Signed in, but not allowed to do this.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/reports/searches": {
+      "get": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "The searches report of a kid or shared device",
+        "description": "Which completed searches the devices sent, by day, week (Monday to Sunday) or calendar month, on all devices or one. Removed devices with searches still show. `date` defaults to the family's today; one after it, or not a real date, is 422.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "kidId",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "$ref": "#/components/schemas/ReportPeriod"
+            },
+            "required": true,
+            "name": "period",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "$ref": "#/components/schemas/LocalDate"
+            },
+            "required": false,
+            "name": "date",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": false,
+            "name": "deviceId",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The report.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchReport"
                 }
               }
             }

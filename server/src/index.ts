@@ -7,6 +7,7 @@ import { startSweeps } from './jobs/sweep.js';
 import { createMailer } from './mailer.js';
 import { createPusher } from './push.js';
 import { backfillSites } from './sites/backfill.js';
+import { backfillSearches } from './searches/backfill.js';
 import { startClassifier } from './sites/classify.js';
 
 const config = loadConfig();
@@ -44,5 +45,6 @@ void backfillSites(db)
     if (filled > 0) console.log(`sites: backfill filled ${filled} rows, recounted ${recounted} days`);
   })
   .catch((err) => console.error('sites: backfill failed', err));
+void backfillSearches(db).catch((err) => console.error('searches: backfill failed', err));
 // Sorts new sites with the family's local LLM: a minute after start, then hourly (docs/SPEC.md §12.10).
 startClassifier(deps);

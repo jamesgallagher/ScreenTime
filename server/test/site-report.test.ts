@@ -316,11 +316,6 @@ describe.skipIf(!url)('the websites report', () => {
     const res = await report(`kidId=${kid}&period=week&date=2026-11-11`);
     expect(res.body.browserSec).toBe(472);
     expect(res.body.privateSec).toBe(77);
-    expect(res.body.searches).toEqual([
-      { engine: 'google', query: 'How To Draw', sec: 10, private: false, firstAt: '2026-11-11T02:09:00.000Z', deviceId: pc.id },
-      { engine: 'google', query: 'fortnite skins', sec: 50, private: false, firstAt: '2026-11-11T02:08:00.000Z', deviceId: pc.id },
-      { engine: 'bing', query: 'how to draw', sec: 67, private: true, firstAt: '2026-11-11T02:00:00.000Z', deviceId: pc.id },
-    ]);
     expect(res.body.pages).toEqual([
       { page: 'Wikipedia', package: 'msedge.exe', sec: 300, private: false },
       { page: 'Wikipedia', package: 'firefox.exe', sec: 15, private: true },
@@ -367,7 +362,6 @@ describe.skipIf(!url)('the websites report', () => {
     ]);
     expect(res.body.behindTheScenes.map((s: { site: string }) => s.site)).toEqual(['kastatic.org']);
     expect(res.body.browserSec).toBe(0);
-    expect(res.body.searches).toEqual([]);
     expect(res.body.pages).toEqual([]);
     expect(res.body.devices.map((d: { name: string }) => d.name)).toEqual(['Phone', 'PC', 'Tablet']);
   });
@@ -388,11 +382,6 @@ describe.skipIf(!url)('the websites report', () => {
     });
     expect(onPc.body.behindTheScenes).toEqual([]);
     expect(onPc.body.browserSec).toBe(472);
-    expect(onPc.body.searches).toEqual([
-      { engine: 'google', query: 'How To Draw', sec: 10, private: false, firstAt: '2026-11-11T02:09:00.000Z', deviceId: pc.id },
-      { engine: 'google', query: 'fortnite skins', sec: 50, private: false, firstAt: '2026-11-11T02:08:00.000Z', deviceId: pc.id },
-      { engine: 'bing', query: 'how to draw', sec: 67, private: true, firstAt: '2026-11-11T02:00:00.000Z', deviceId: pc.id },
-    ]);
     expect(onPc.body.pages).toEqual([
       { page: 'Wikipedia', package: 'msedge.exe', sec: 300, private: false },
       { page: 'Wikipedia', package: 'firefox.exe', sec: 15, private: true },
@@ -401,7 +390,6 @@ describe.skipIf(!url)('the websites report', () => {
 
     const onPhone = await report(`kidId=${kid}&period=week&date=2026-11-11&deviceId=${phone.id}`);
     expect(onPhone.body.browserSec).toBe(0);
-    expect(onPhone.body.searches).toEqual([]);
     expect(onPhone.body.pages).toEqual([]);
   });
 
@@ -413,7 +401,6 @@ describe.skipIf(!url)('the websites report', () => {
     expect(empty.body.sites).toEqual([]);
     expect(empty.body.behindTheScenes).toEqual([]);
     expect(empty.body.categories).toEqual([]);
-    expect(empty.body.searches).toEqual([]);
     expect(empty.body.pages).toEqual([]);
     expect(empty.body.browserSec).toBe(0);
     expect(empty.body.privateSec).toBe(0);
@@ -425,7 +412,6 @@ describe.skipIf(!url)('the websites report', () => {
       sites: [],
       behindTheScenes: [],
       categories: [],
-      searches: [],
       pages: [],
       browserSec: 0,
       privateSec: 0,

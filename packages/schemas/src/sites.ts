@@ -91,7 +91,7 @@ export const SiteClassSource = z.enum(['classifier', 'family_dns', 'parent']).me
 export type SiteClassSource = z.infer<typeof SiteClassSource>;
 
 /** The engine of a search read from a PC browser's title. */
-export const SearchEngine = z.enum(['google', 'bing', 'duckduckgo']).meta({ id: 'SearchEngine' });
+export const SearchEngine = z.enum(['google', 'bing', 'duckduckgo', 'youtube']).meta({ id: 'SearchEngine' });
 export type SearchEngine = z.infer<typeof SearchEngine>;
 
 /** Query of GET /v1/reports/sites. `date` defaults to the family's today. */
@@ -170,20 +170,6 @@ export const SiteReportCategory = z
   .meta({ id: 'SiteReportCategory' });
 export type SiteReportCategory = z.infer<typeof SiteReportCategory>;
 
-/** A search read from a PC browser's title, the same words on one engine added up. */
-export const SiteReportSearch = z
-  .object({
-    engine: SearchEngine,
-    query: z.string(),
-    sec: z.int().min(0),
-    /** Any of it in a private window. */
-    private: z.boolean(),
-    firstAt: z.iso.datetime(),
-    deviceId: z.uuid(),
-  })
-  .meta({ id: 'SiteReportSearch' });
-export type SiteReportSearch = z.infer<typeof SiteReportSearch>;
-
 /** A page title on a PC browser, the browser's own name and markers taken off. */
 export const SiteReportPage = z
   .object({
@@ -217,8 +203,6 @@ export const SiteReport = z
     browserSec: z.int().min(0),
     /** Of that, time in private windows. */
     privateSec: z.int().min(0),
-    /** Newest first. */
-    searches: z.array(SiteReportSearch),
     /** Most time first, at most 50. */
     pages: z.array(SiteReportPage),
     /** The first local date whose titles are still kept (90 days); searches and pages before it are gone. */

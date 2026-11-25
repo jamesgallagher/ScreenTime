@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="search_service_description">Lets Screen Time see what is searched for in Chrome, the Google app and YouTube. It keeps only searches that were sent.</string>
+</resources>
