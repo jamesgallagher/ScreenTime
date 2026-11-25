@@ -121,6 +121,16 @@ class SearchesTest {
     }
 
     @Test
+    fun `18 YouTube rule waits for the search_query result field`() {
+        val search = YouTubeAppSearch()
+        search.text("Search", true)
+        assertNull(search.resultsOpened())
+        search.text("funny cats", false)
+        assertEquals("funny cats", search.resultsOpened())
+        assertNull(search.resultsOpened())
+    }
+
+    @Test
     fun `21 withService adds ours and keeps existing accessibility services`() {
         val ours = "au.screentime.kid/au.screentime.kid.searches.SearchService"
         val bark = "com.pt.bark/com.pt.bark.services.accessibility.BarkAccessibilityService"

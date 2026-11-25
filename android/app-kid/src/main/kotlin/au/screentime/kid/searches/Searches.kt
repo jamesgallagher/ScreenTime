@@ -163,6 +163,15 @@ class GoogleAppSearch {
     }
 }
 
+/** The YouTube app's `search_query` result field is the submitted-search signal. */
+class YouTubeAppSearch {
+    private val state = GoogleAppSearch()
+
+    fun text(value: String, isHint: Boolean) = state.text(value, isHint)
+
+    fun resultsOpened(): String? = state.resultsOpened()
+}
+
 private const val REPEAT_WINDOW_MS = 10 * 60 * 1000L
 private val SCHEME = Regex("^[a-zA-Z][a-zA-Z0-9+.-]*://")
 private val GOOGLE_HOST = Regex("^(?:www\\.)?google\\.[a-z]{2,}(?:\\.[a-z]{2,})?$")

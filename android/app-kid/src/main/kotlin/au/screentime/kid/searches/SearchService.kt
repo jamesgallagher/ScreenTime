@@ -21,11 +21,12 @@ import kotlinx.coroutines.launch
 class SearchService : AccessibilityService() {
     private val io = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val googleSearch = GoogleAppSearch()
+    private val youtubeSearch = YouTubeAppSearch()
     private val chromeSearch = ChromeSentSearch()
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         val pkg = event?.packageName?.toString() ?: return
-        if (pkg != CHROME && pkg != GOOGLE_APP) return
+        if (pkg != CHROME && pkg != GOOGLE_APP && pkg != YOUTUBE_APP) return
         val root = rootInActiveWindow ?: return
         try {
             val observed = inspect(root, pkg)
@@ -35,6 +36,13 @@ class SearchService : AccessibilityService() {
                 GOOGLE_APP -> {
                     observed.googleBox?.let { googleSearch.text(it.text, it.isHint) }
                     if (observed.webView) googleSearch.resultsOpened()?.let { record(Found("google", it), pkg, atMs) }
+                }
+                YOUTUBE_APP -> {
+                    observed.youtubeEdit?.let { youtubeSearch.text(it.text, it.isHint) }
+                    observed.youtubeQuery?.let {
+                        youtubeSearch.text(it, isHint = false)
+                        youtubeSearch.resultsOpened()?.let { query -> record(Found("youtube", query), pkg, atMs) }
+                    }
                 }
             }
         } catch (e: Exception) {
@@ -76,6 +84,8 @@ class SearchService : AccessibilityService() {
         var chromeAddress: String? = null
         var chromeFocused = false
         var googleBox: GoogleBox? = null
+        var youtubeEdit: GoogleBox? = null
+        var youtubeQuery: String? = null
         var webView = false
 
         fun walk(node: AccessibilityNodeInfo, depth: Int) {
@@ -86,6 +96,10 @@ class SearchService : AccessibilityService() {
                 chromeFocused = node.isFocused
             } else if (pkg == GOOGLE_APP && viewId == GOOGLE_SEARCH_BOX) {
                 googleBox = GoogleBox(node.text?.toString().orEmpty(), node.isShowingHintText)
+            } else if (pkg == YOUTUBE_APP && viewId == YOUTUBE_SEARCH_EDIT_TEXT) {
+                youtubeEdit = GoogleBox(node.text?.toString().orEmpty(), node.isShowingHintText)
+            } else if (pkg == YOUTUBE_APP && viewId == YOUTUBE_SEARCH_QUERY) {
+                youtubeQuery = node.text?.toString()
             }
             if (pkg == GOOGLE_APP && node.className?.toString()?.contains("WebView") == true) webView = true
 
@@ -100,11 +114,18 @@ class SearchService : AccessibilityService() {
         }
 
         walk(root, 0)
-        return Observed(chromeAddress, chromeFocused, googleBox, webView)
+        return Observed(chromeAddress, chromeFocused, googleBox, youtubeEdit, youtubeQuery, webView)
     }
 
     private data class GoogleBox(val text: String, val isHint: Boolean)
-    private data class Observed(val chromeAddress: String?, val chromeFocused: Boolean, val googleBox: GoogleBox?, val webView: Boolean)
+    private data class Observed(
+        val chromeAddress: String?,
+        val chromeFocused: Boolean,
+        val googleBox: GoogleBox?,
+        val youtubeEdit: GoogleBox?,
+        val youtubeQuery: String?,
+        val webView: Boolean,
+    )
 
     private companion object {
         const val TAG = "Searches"
@@ -114,6 +135,8 @@ class SearchService : AccessibilityService() {
         const val YOUTUBE_APP = "com.google.android.youtube"
         const val CHROME_URL_BAR = "com.android.chrome:id/url_bar"
         const val GOOGLE_SEARCH_BOX = "com.google.android.googlequicksearchbox:id/googleapp_search_box"
+        const val YOUTUBE_SEARCH_EDIT_TEXT = "com.google.android.youtube:id/search_edit_text"
+        const val YOUTUBE_SEARCH_QUERY = "com.google.android.youtube:id/search_query"
         const val SPANS = "spans"
     }
 }
