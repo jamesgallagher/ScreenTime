@@ -84,7 +84,11 @@ class FileStateStore(context: Context) : StateStore {
 
 /** Search outbox in kid.db: changed rows first, at most 5,000 waiting, sent rows pruned after ten minutes. */
 class RoomSearchStore(private val dao: SearchDao) {
-    suspend fun record(sighting: SearchSighting) {
+    suspend fun record(sighting: SearchSighting, ignoreRecentReplay: Boolean = false) {
+        if (ignoreRecentReplay) {
+            val previous = dao.recent(sighting.engine, sighting.query, sighting.packageName)
+            if (previous != null && sighting.atMs - previous.lastAtMs in 0..REPEAT_WINDOW_MS) return
+        }
         dao.record(sighting)
         val waiting = dao.count()
         if (waiting > MAX_WAITING) dao.deleteOldest(waiting - MAX_WAITING)
@@ -100,5 +104,6 @@ class RoomSearchStore(private val dao: SearchDao) {
 
     private companion object {
         const val MAX_WAITING = 5_000
+        const val REPEAT_WINDOW_MS = 10 * 60 * 1000L
     }
 }

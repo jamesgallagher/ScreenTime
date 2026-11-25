@@ -78,8 +78,12 @@ class ChromeSentSearch {
     private var lastQuery: String? = null
     private var pendingQuery: String? = null
     private var pendingAtMs = 0L
+    private var hasObservedSearch = false
+    var ignoreRecentReplay: Boolean = false
+        private set
 
     fun observe(address: String?, focused: Boolean, atMs: Long): Found? {
+        ignoreRecentReplay = false
         if (address == null) return null
         val found = searchFromUrl(address)
         if (found == null) {
@@ -91,11 +95,13 @@ class ChromeSentSearch {
         }
         val same = lastEngine == found.engine && lastQuery.equals(found.query, ignoreCase = true)
         val wasSubmittedAgain = pendingQuery.equals(found.query, ignoreCase = true) && atMs - pendingAtMs in 0..60_000L
+        ignoreRecentReplay = !wasSubmittedAgain && (!hasObservedSearch || same)
         pendingQuery = null
         pendingAtMs = 0
         if (same && !wasSubmittedAgain) return null
         lastEngine = found.engine
         lastQuery = found.query
+        hasObservedSearch = true
         return found
     }
 }
@@ -163,13 +169,33 @@ class GoogleAppSearch {
     }
 }
 
+data class YouTubeSubmission(val query: String, val ignoreRecentReplay: Boolean)
+
 /** The YouTube app's `search_query` result field is the submitted-search signal. */
 class YouTubeAppSearch {
-    private val state = GoogleAppSearch()
+    private var currentText = ""
+    private var showingHint = false
+    private var emitted = false
+    private var typedSinceLastResult = false
 
-    fun text(value: String, isHint: Boolean) = state.text(value, isHint)
+    fun text(value: String, isHint: Boolean) {
+        if (currentText != value || showingHint != isHint) {
+            emitted = false
+            if (!isHint && cleanQuery(value) != null) typedSinceLastResult = true
+        }
+        currentText = value
+        showingHint = isHint
+    }
 
-    fun resultsOpened(): String? = state.resultsOpened()
+    fun resultsOpened(resultText: String? = null): YouTubeSubmission? {
+        if (emitted) return null
+        if (resultText == null && showingHint) return null
+        val query = cleanQuery(resultText ?: currentText) ?: return null
+        emitted = true
+        val explicitlyTyped = typedSinceLastResult
+        typedSinceLastResult = false
+        return YouTubeSubmission(query, ignoreRecentReplay = !explicitlyTyped)
+    }
 }
 
 private const val REPEAT_WINDOW_MS = 10 * 60 * 1000L

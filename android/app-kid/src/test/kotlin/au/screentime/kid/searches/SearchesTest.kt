@@ -50,11 +50,13 @@ class SearchesTest {
         val sent = ChromeSentSearch()
         val resultUrl = "google.com/search?q=how+to+bake+a+cake"
         assertEquals(Found("google", "how to bake a cake"), sent.observe(resultUrl, false, 1))
+        assertTrue(sent.ignoreRecentReplay)
         assertNull(sent.observe(resultUrl, false, 2))
         assertNull(sent.observe("abandoned words", true, 3))
         assertNull(sent.observe(resultUrl, false, 4))
         assertNull(sent.observe("how to bake a cake", true, 5))
         assertEquals(Found("google", "how to bake a cake"), sent.observe(resultUrl, false, 6))
+        assertFalse(sent.ignoreRecentReplay)
     }
 
     @Test
@@ -126,9 +128,12 @@ class SearchesTest {
         search.text("Search", true)
         assertNull(search.resultsOpened())
         search.text("funny cats", false)
-        assertEquals("funny cats", search.resultsOpened())
+        assertEquals(YouTubeSubmission("funny cats", ignoreRecentReplay = false), search.resultsOpened("funny cats"))
         assertNull(search.resultsOpened())
-        assertNull(YouTubeAppSearch().resultsOpened())
+        assertEquals(
+            YouTubeSubmission("funny cats", ignoreRecentReplay = true),
+            YouTubeAppSearch().resultsOpened("funny cats"),
+        )
     }
 
     @Test

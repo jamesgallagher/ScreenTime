@@ -32,15 +32,17 @@ class SearchService : AccessibilityService() {
             val observed = inspect(root, pkg)
             val atMs = System.currentTimeMillis()
             when (pkg) {
-                CHROME -> chromeSearch.observe(observed.chromeAddress, observed.chromeFocused, atMs)?.let { record(it, pkg, atMs) }
+                CHROME -> chromeSearch.observe(observed.chromeAddress, observed.chromeFocused, atMs)?.let {
+                    record(it, pkg, atMs, chromeSearch.ignoreRecentReplay)
+                }
                 GOOGLE_APP -> {
                     observed.googleBox?.let { googleSearch.text(it.text, it.isHint) }
                     if (observed.webView) googleSearch.resultsOpened()?.let { record(Found("google", it), pkg, atMs) }
                 }
                 YOUTUBE_APP -> {
                     observed.youtubeEdit?.let { youtubeSearch.text(it.text, it.isHint) }
-                    if (observed.youtubeQuery != null) {
-                        youtubeSearch.resultsOpened()?.let { query -> record(Found("youtube", query), pkg, atMs) }
+                    observed.youtubeQuery?.let(youtubeSearch::resultsOpened)?.let { submission ->
+                        record(Found("youtube", submission.query), pkg, atMs, submission.ignoreRecentReplay)
                     }
                 }
             }
@@ -58,12 +60,12 @@ class SearchService : AccessibilityService() {
         super.onDestroy()
     }
 
-    private fun record(found: Found, pkg: String, atMs: Long) {
+    private fun record(found: Found, pkg: String, atMs: Long, ignoreRecentReplay: Boolean = false) {
         if (!outsideParentMode(atMs, parentModeSpans(atMs))) return
         io.launch {
             try {
                 RoomSearchStore(KidDatabase.open(this@SearchService).searches())
-                    .record(SearchSighting(atMs, found.engine, found.query, pkg))
+                    .record(SearchSighting(atMs, found.engine, found.query, pkg), ignoreRecentReplay)
                 Log.i(TAG, "searches: found ${found.engine} $pkg")
             } catch (e: Exception) {
                 Log.w(TAG, "searches: store failed ${e.javaClass.simpleName}")

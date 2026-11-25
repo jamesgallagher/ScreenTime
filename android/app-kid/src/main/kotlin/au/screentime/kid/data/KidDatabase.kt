@@ -139,6 +139,12 @@ abstract class SearchDao {
     abstract suspend fun pending(limit: Int): List<SearchEntity>
 
     @Query(
+        "SELECT * FROM searches WHERE engine = :engine AND packageName = :packageName " +
+            "AND query = :query COLLATE NOCASE ORDER BY lastAtMs DESC LIMIT 1",
+    )
+    abstract suspend fun recent(engine: String, query: String, packageName: String): SearchEntity?
+
+    @Query(
         "UPDATE searches SET sentVersion = :version WHERE atMs = :atMs AND engine = :engine " +
             "AND query = :query AND packageName = :packageName AND sentVersion < :version",
     )
