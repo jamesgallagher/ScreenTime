@@ -99,7 +99,7 @@ class SearchService : AccessibilityService() {
             if (pkg == CHROME && viewId == CHROME_URL_BAR) {
                 chromeAddress = node.text?.toString()
                 chromeFocused = node.isFocused
-            } else if (pkg == GOOGLE_APP && viewId == GOOGLE_SEARCH_BOX) {
+            } else if (pkg == GOOGLE_APP && (viewId == GOOGLE_SEARCH_BOX || viewId == GOOGLE_SRP_SEARCH_BOX_TEXT)) {
                 googleBox = GoogleBox(node.text?.toString().orEmpty(), node.isShowingHintText)
             } else if (pkg == YOUTUBE_APP && viewId == YOUTUBE_SEARCH_EDIT_TEXT) {
                 youtubeEdit = GoogleBox(node.text?.toString().orEmpty(), node.isShowingHintText)
@@ -140,6 +140,7 @@ class SearchService : AccessibilityService() {
         const val YOUTUBE_APP = "com.google.android.youtube"
         const val CHROME_URL_BAR = "com.android.chrome:id/url_bar"
         const val GOOGLE_SEARCH_BOX = "com.google.android.googlequicksearchbox:id/googleapp_search_box"
+        const val GOOGLE_SRP_SEARCH_BOX_TEXT = "com.google.android.googlequicksearchbox:id/googleapp_srp_search_box_text"
         const val YOUTUBE_SEARCH_EDIT_TEXT = "com.google.android.youtube:id/search_edit_text"
         const val YOUTUBE_SEARCH_QUERY = "com.google.android.youtube:id/search_query"
         const val SEARCH_PREFS = "search_capture"
