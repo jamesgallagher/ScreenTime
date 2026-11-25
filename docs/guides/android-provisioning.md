@@ -104,6 +104,7 @@ Then, for both:
 ```powershell
 & $adb shell dpm set-device-owner au.screentime.kid/.admin.KidDeviceAdminReceiver
 & $adb shell cmd appops set au.screentime.kid GET_USAGE_STATS allow
+& $adb shell pm grant au.screentime.kid android.permission.WRITE_SECURE_SETTINGS
 ```
 
 The first prints `Success: Device owner set to package ...`. The second gives the app usage access, which Device Owner cannot grant: it is how the app sees the first use of each app and adds up daily app limits.
@@ -114,11 +115,12 @@ The first prints `Success: Device owner set to package ...`. The second gives th
 & $adb shell cmd role add-role-holder android.app.role.CALL_REDIRECTION au.screentime.kid
 ```
 
-Check them. The answers are `... au.screentime.kid/.admin.KidDeviceAdminReceiver,DeviceOwner`, `GET_USAGE_STATS: allow` and (phone) `au.screentime.kid`:
+Check them. The answers are `... au.screentime.kid/.admin.KidDeviceAdminReceiver,DeviceOwner`, `GET_USAGE_STATS: allow`, `WRITE_SECURE_SETTINGS: granted=true` and (phone) `au.screentime.kid`:
 
 ```powershell
 & $adb shell cmd device_policy list-owners
 & $adb shell cmd appops get au.screentime.kid GET_USAGE_STATS
+& $adb shell dumpsys package au.screentime.kid | Select-String WRITE_SECURE_SETTINGS
 & $adb shell cmd role get-role-holders android.app.role.CALL_REDIRECTION
 ```
 
@@ -147,6 +149,16 @@ If it says `Not allowed to set the device owner because there are already some a
 The new device appears in the parent web app under Devices, with its version.
 
 If you tap **No**, the device forgets the code. Remove the device in the parent app, then pair again with a new code.
+
+## Searches on a device that is already set up
+
+In parent mode, turn USB debugging on, connect to a PC and run:
+
+```powershell
+& $adb shell pm grant au.screentime.kid android.permission.WRITE_SECURE_SETTINGS
+```
+
+Then turn USB debugging off. Without a PC, turn **Screen Time** on in Settings → Accessibility. If Android asks, open Screen Time's App info first and allow **Allow restricted settings**. Without the adb grant, the app cannot turn its accessibility service back on.
 
 ## 6. Then, on the kid's device
 
