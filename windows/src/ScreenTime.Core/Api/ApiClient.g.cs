@@ -20,6 +20,11 @@ public sealed class ApiClient(HttpClient http, Func<string?> token) : ApiClientB
     public Task<DeviceMe> GetDeviceMeAsync(CancellationToken cancellationToken = default) =>
         SendAsync(HttpMethod.Get, "v1/device/me", auth: true, ApiJsonContext.Default.DeviceMe, cancellationToken);
 
+    /// <summary>Upload completed searches.</summary>
+    /// <remarks><c>POST /v1/device/searches</c></remarks>
+    public Task<SearchesReceived> PostDeviceSearchesAsync(SearchesUpload body, CancellationToken cancellationToken = default) =>
+        SendAsync(HttpMethod.Post, "v1/device/searches", auth: true, body, ApiJsonContext.Default.SearchesUpload, ApiJsonContext.Default.SearchesReceived, cancellationToken);
+
     /// <summary>Everything this device needs to enforce.</summary>
     /// <remarks><c>GET /v1/device/state</c></remarks>
     public Task<Conditional<DeviceState>> GetDeviceStateAsync(string? ifNoneMatch = null, CancellationToken cancellationToken = default) =>

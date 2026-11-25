@@ -73,6 +73,10 @@ export const SearchIn = z
     query: z.string().trim().min(1).max(200),
     package: z.string().min(1).max(200),
   })
+  .refine((search) => Date.parse(search.lastAt) >= Date.parse(search.at), {
+    path: ['lastAt'],
+    message: 'lastAt must be on or after at',
+  })
   .meta({ id: 'SearchIn' });
 export type SearchIn = z.infer<typeof SearchIn>;
 

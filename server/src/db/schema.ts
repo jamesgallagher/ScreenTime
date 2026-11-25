@@ -204,12 +204,15 @@ export const devices = pgTable(
     revokedAt: ts('revoked_at'),
     updateRequestedAt: ts('update_requested_at'),
     updateRequestedCode: integer('update_requested_code'),
+    searchCapture: text('search_capture'),
+    searchCaptureAt: ts('search_capture_at'),
   },
   (t) => [
     uniqueIndex('devices_token_hash_key').on(t.tokenHash),
     check('devices_platform', sql`${t.platform} in ('android', 'windows')`),
     check('devices_form', sql`${t.form} in ${FORMS}`),
     check('devices_pool', sql`${t.pool} in ${POOLS}`),
+    check('devices_search_capture', sql`${t.searchCapture} is null or ${t.searchCapture} in ('on', 'off')`),
   ],
 );
 
@@ -648,6 +651,38 @@ export const siteTitles = pgTable(
     primaryKey({ columns: [t.deviceId, t.at, t.package] }),
     index('site_titles_kid_at_idx').on(t.kidId, t.at),
     index('site_titles_at_idx').on(t.at),
+  ],
+);
+
+/** A complete search sent by an Android device or read from a PC browser title (docs/SPEC.md §12.12). */
+export const searches = pgTable(
+  'searches',
+  {
+    familyId: familyId(),
+    kidId: uuid('kid_id')
+      .notNull()
+      .references(() => kids.id),
+    deviceId: uuid('device_id')
+      .notNull()
+      .references(() => devices.id),
+    at: ts('at').notNull(),
+    lastAt: ts('last_at').notNull(),
+    count: integer('count').notNull(),
+    engine: text('engine').notNull(),
+    query: text('query').notNull(),
+    package: text('package').notNull(),
+    private: boolean('private'),
+    source: text('source').notNull(),
+    receivedAt: ts('received_at').notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.deviceId, t.at, t.package] }),
+    index('searches_kid_at_idx').on(t.kidId, t.at),
+    check('searches_count', sql`${t.count} between 1 and 1000`),
+    check('searches_engine', sql`${t.engine} in ('google', 'bing', 'duckduckgo', 'youtube')`),
+    check('searches_query', sql`char_length(${t.query}) between 1 and 200`),
+    check('searches_source', sql`${t.source} in ('android', 'title')`),
+    check('searches_last_at', sql`${t.lastAt} >= ${t.at}`),
   ],
 );
 

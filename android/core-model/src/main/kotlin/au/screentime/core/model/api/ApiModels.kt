@@ -370,6 +370,41 @@ data class DeviceMeFamily(
 )
 
 @Serializable
+data class SearchesReceived(
+    val received: Int,
+)
+
+@Serializable
+data class SearchesUpload(
+    val capture: SearchesUploadCapture,
+    val searches: List<SearchIn>,
+)
+
+@Serializable
+enum class SearchesUploadCapture(override val wire: String) : ApiEnum {
+    @SerialName("on") ON("on"),
+    @SerialName("off") OFF("off");
+}
+
+@Serializable
+data class SearchIn(
+    val at: String,
+    val lastAt: String,
+    val count: Int,
+    val engine: SearchEngine,
+    val query: String,
+    val `package`: String,
+)
+
+@Serializable
+enum class SearchEngine(override val wire: String) : ApiEnum {
+    @SerialName("google") GOOGLE("google"),
+    @SerialName("bing") BING("bing"),
+    @SerialName("duckduckgo") DUCKDUCKGO("duckduckgo"),
+    @SerialName("youtube") YOUTUBE("youtube");
+}
+
+@Serializable
 data class DeviceState(
     val serverTime: String,
     val stateVersion: String,
@@ -755,6 +790,48 @@ data class SiteReportPage(
     val `package`: String,
     val sec: Int,
     val private: Boolean,
+)
+
+@Serializable
+data class SearchReport(
+    val kidId: String,
+    val period: ReportPeriod,
+    val from: String,
+    val to: String,
+    val today: String,
+    val deviceId: String?,
+    val devices: List<SearchReportDevice>,
+    val searches: List<SearchReportItem>,
+)
+
+@Serializable
+data class SearchReportDevice(
+    val deviceId: String,
+    val name: String,
+    val form: DeviceForm,
+    val platform: Platform,
+    val removedAt: String?,
+    val capture: SearchCapture,
+)
+
+@Serializable
+enum class SearchCapture(override val wire: String) : ApiEnum {
+    @SerialName("on") ON("on"),
+    @SerialName("off") OFF("off"),
+    @SerialName("never") NEVER("never");
+}
+
+@Serializable
+data class SearchReportItem(
+    val query: String,
+    val engine: SearchEngine,
+    val `package`: String,
+    val appLabel: String,
+    val deviceId: String,
+    val at: String,
+    val lastAt: String,
+    val count: Int,
+    val private: Boolean?,
 )
 
 @Serializable

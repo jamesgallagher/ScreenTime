@@ -9,7 +9,6 @@ import {
   type SiteReportCategory,
   type SiteReportDevice,
   type SiteReportPage,
-  type SiteReportSearch,
   type SiteReportSite,
 } from '@screentime/schemas';
 import type { FamilyTx } from '../db/family.js';
@@ -170,7 +169,6 @@ export async function buildSiteReport(
     behindTheScenes: behind,
     browserSec: titles.browserSec,
     privateSec: titles.privateSec,
-    searches: titles.searches,
     pages: titles.pages,
     titlesKeptFrom: addDays(today, -89),
   });
@@ -296,7 +294,7 @@ function aggregateOf(row: SiteDailyRow): SiteAggregate {
  * The label of each package, as in the Apps report: `device_apps` on the report's devices, else `device_programs`
  * there, else either on any of the kid's devices, else the package.
  */
-async function packageLabels(tx: FamilyTx, kidId: string, ids: string[]): Promise<Map<string, string>> {
+export async function packageLabels(tx: FamilyTx, kidId: string, ids: string[]): Promise<Map<string, string>> {
   const appRows = ids.length
     ? await tx.select().from(deviceApps).where(and(eq(deviceApps.kidId, kidId), inArray(deviceApps.deviceId, ids)))
     : [];
@@ -329,15 +327,15 @@ async function packageLabels(tx: FamilyTx, kidId: string, ids: string[]): Promis
   return labels;
 }
 
-/** The searches, pages and browser time of the report's PCs (docs/SPEC.md §12.10 "Title rules"). */
+/** The pages and browser time of the report's PCs (docs/SPEC.md §12.10 "Title rules"). */
 async function titleParts(
   tx: FamilyTx,
   kidId: string,
   ids: string[],
   start: Date,
   end: Date,
-): Promise<{ browserSec: number; privateSec: number; searches: SiteReportSearch[]; pages: SiteReportPage[] }> {
-  if (ids.length === 0) return { browserSec: 0, privateSec: 0, searches: [], pages: [] };
+): Promise<{ browserSec: number; privateSec: number; pages: SiteReportPage[] }> {
+  if (ids.length === 0) return { browserSec: 0, privateSec: 0, pages: [] };
   const rows = await tx
     .select()
     .from(siteTitles)
@@ -352,35 +350,13 @@ async function titleParts(
 
   let browserSec = 0;
   let privateSec = 0;
-  const searches = new Map<string, { engine: SiteReportSearch['engine']; query: string; sec: number; private: boolean; firstAt: Date; deviceId: string }>();
   const pages = new Map<string, SiteReportPage>();
   for (const row of rows) {
     const parsed = parseTitle(row.package, row.title);
     browserSec += row.sec;
     if (parsed.private) privateSec += row.sec;
 
-    if (parsed.search) {
-      const key = `${parsed.search.engine}\u0000${parsed.search.query.toLowerCase().trim()}`;
-      const found = searches.get(key);
-      if (!found) {
-        searches.set(key, {
-          engine: parsed.search.engine,
-          query: parsed.search.query,
-          sec: row.sec,
-          private: parsed.private,
-          firstAt: row.at,
-          deviceId: row.deviceId,
-        });
-      } else {
-        found.sec += row.sec;
-        found.private ||= parsed.private;
-        if (row.at < found.firstAt) {
-          found.firstAt = row.at;
-          found.deviceId = row.deviceId;
-          found.query = parsed.search.query;
-        }
-      }
-    } else if (parsed.page) {
+    if (!parsed.search && parsed.page) {
       const key = `${row.package}\u0000${parsed.page}`;
       const found = pages.get(key);
       if (!found) pages.set(key, { page: parsed.page, package: row.package, sec: row.sec, private: parsed.private });
@@ -394,10 +370,6 @@ async function titleParts(
   return {
     browserSec,
     privateSec,
-    searches: [...searches.values()]
-      .sort((a, b) => b.firstAt.getTime() - a.firstAt.getTime())
-      .slice(0, 200)
-      .map((s) => ({ ...s, firstAt: s.firstAt.toISOString() })),
     pages: [...pages.values()].sort((a, b) => b.sec - a.sec || a.page.localeCompare(b.page)).slice(0, 50),
   };
 }
