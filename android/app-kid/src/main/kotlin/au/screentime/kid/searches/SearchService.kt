@@ -39,8 +39,7 @@ class SearchService : AccessibilityService() {
                 }
                 YOUTUBE_APP -> {
                     observed.youtubeEdit?.let { youtubeSearch.text(it.text, it.isHint) }
-                    observed.youtubeQuery?.let {
-                        youtubeSearch.text(it, isHint = false)
+                    if (observed.youtubeQuery != null) {
                         youtubeSearch.resultsOpened()?.let { query -> record(Found("youtube", query), pkg, atMs) }
                     }
                 }

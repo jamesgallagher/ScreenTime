@@ -128,6 +128,7 @@ class SearchesTest {
         search.text("funny cats", false)
         assertEquals("funny cats", search.resultsOpened())
         assertNull(search.resultsOpened())
+        assertNull(YouTubeAppSearch().resultsOpened())
     }
 
     @Test
