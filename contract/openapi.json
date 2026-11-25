@@ -1917,12 +1917,6 @@
             "type": "integer",
             "minimum": 0
           },
-          "searches": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/SiteReportSearch"
-            }
-          },
           "pages": {
             "type": "array",
             "items": {
@@ -1946,7 +1940,6 @@
           "behindTheScenes",
           "browserSec",
           "privateSec",
-          "searches",
           "pages",
           "titlesKeptFrom"
         ]
@@ -2169,48 +2162,6 @@
           "label",
           "browser",
           "minutes"
-        ]
-      },
-      "SiteReportSearch": {
-        "type": "object",
-        "properties": {
-          "engine": {
-            "$ref": "#/components/schemas/SearchEngine"
-          },
-          "query": {
-            "type": "string"
-          },
-          "sec": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "private": {
-            "type": "boolean"
-          },
-          "firstAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "deviceId": {
-            "type": "string",
-            "format": "uuid"
-          }
-        },
-        "required": [
-          "engine",
-          "query",
-          "sec",
-          "private",
-          "firstAt",
-          "deviceId"
-        ]
-      },
-      "SearchEngine": {
-        "type": "string",
-        "enum": [
-          "google",
-          "bing",
-          "duckduckgo"
         ]
       },
       "SiteReportPage": {

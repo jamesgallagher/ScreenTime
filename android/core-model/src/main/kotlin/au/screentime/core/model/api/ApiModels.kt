@@ -663,7 +663,6 @@ data class SiteReport(
     val behindTheScenes: List<SiteReportSite>,
     val browserSec: Int,
     val privateSec: Int,
-    val searches: List<SiteReportSearch>,
     val pages: List<SiteReportPage>,
     val titlesKeptFrom: String,
 )
@@ -749,23 +748,6 @@ data class SiteReportApp(
     val browser: Boolean,
     val minutes: Int,
 )
-
-@Serializable
-data class SiteReportSearch(
-    val engine: SearchEngine,
-    val query: String,
-    val sec: Int,
-    val private: Boolean,
-    val firstAt: String,
-    val deviceId: String,
-)
-
-@Serializable
-enum class SearchEngine(override val wire: String) : ApiEnum {
-    @SerialName("google") GOOGLE("google"),
-    @SerialName("bing") BING("bing"),
-    @SerialName("duckduckgo") DUCKDUCKGO("duckduckgo");
-}
 
 @Serializable
 data class SiteReportPage(

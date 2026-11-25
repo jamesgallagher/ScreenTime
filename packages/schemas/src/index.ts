@@ -148,12 +148,20 @@ export {
   SiteReportDevice,
   SiteReportPage,
   SiteReportQuery,
-  SiteReportSearch,
   SiteReportSite,
   SiteTitleIn,
   SiteTitlesReceived,
   SiteTitlesUpload,
 } from './sites.js';
+export {
+  SearchCapture,
+  SearchIn,
+  SearchReport,
+  SearchReportDevice,
+  SearchReportItem,
+  SearchesReceived,
+  SearchesUpload,
+} from './searches.js';
 export {
   AppReport,
   AppReportApp,
