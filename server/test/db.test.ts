@@ -53,6 +53,7 @@ describe.skipIf(!url)('database', () => {
       'parent_sessions',
       'parents',
       'schedule_versions',
+      'searches',
       'site_classes',
       'site_daily',
       'site_lookups',
