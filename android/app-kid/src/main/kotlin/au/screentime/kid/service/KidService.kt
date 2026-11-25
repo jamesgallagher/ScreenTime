@@ -8,10 +8,13 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.database.ContentObserver
 import android.content.pm.ServiceInfo
 import android.net.ConnectivityManager
 import android.net.Network
 import android.os.IBinder
+import android.os.Handler
+import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
 import android.os.Bundle
@@ -21,6 +24,10 @@ import au.screentime.core.model.api.ApiClient
 import au.screentime.core.model.api.DeviceEventKind
 import au.screentime.core.model.api.KidKind
 import au.screentime.core.model.api.PushTokenPut
+import au.screentime.core.model.api.SearchEngine
+import au.screentime.core.model.api.SearchIn
+import au.screentime.core.model.api.SearchesUpload
+import au.screentime.core.model.api.SearchesUploadCapture
 import au.screentime.core.model.api.SiteLookupIn
 import au.screentime.core.model.api.SiteLookupsUpload
 import au.screentime.core.model.api.valueOrNull
@@ -34,6 +41,7 @@ import au.screentime.kid.data.FileStateStore
 import au.screentime.kid.data.KidDatabase
 import au.screentime.kid.data.PrefsClockStore
 import au.screentime.kid.data.RoomSegmentStore
+import au.screentime.kid.data.RoomSearchStore
 import au.screentime.kid.enrol.EnrolmentStore
 import au.screentime.kid.live.Answer
 import au.screentime.kid.live.LiveChannel
@@ -67,6 +75,7 @@ import au.screentime.kid.update.RemoteUpdateAction
 import au.screentime.kid.update.RemoteUpdateNote
 import au.screentime.kid.update.remoteUpdateAction
 import au.screentime.kid.sync.TrustedClock
+import au.screentime.kid.searches.SearchCapture
 import au.screentime.kid.tamper.CaughtActivity
 import au.screentime.kid.apps.AppWatcher
 import au.screentime.kid.tamper.TamperApi
@@ -123,6 +132,8 @@ class KidService : Service() {
     private lateinit var clock: TrustedClock
     private lateinit var recorder: Recorder
     private lateinit var segments: RoomSegmentStore
+    private lateinit var searchCapture: SearchCapture
+    private var accessibilityServicesObserver: ContentObserver? = null
     private lateinit var states: FileStateStore
     private lateinit var syncer: Syncer
     private var updater: AppUpdater? = null
@@ -248,6 +259,8 @@ class KidService : Service() {
         }
         // Again on every start, so an app update gets the policies it added (Lock Task in CARD-033).
         Policies.apply(this)
+        searchCapture = SearchCapture(this)
+        searchCapture.ensureOn()
         // The sites (docs/SPEC.md §12.10): DNS lookups reach the admin receiver, and Chrome's Secure DNS is off.
         turnOnSites()
 
@@ -313,6 +326,18 @@ class KidService : Service() {
         registerReceiver(packages, packageFilter, Context.RECEIVER_NOT_EXPORTED)
         getSystemService(ConnectivityManager::class.java).registerDefaultNetworkCallback(network)
         started = true
+        val servicesObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
+            override fun onChange(selfChange: Boolean) {
+                scope.launch { searchCapture.ensureOn() }
+            }
+        }
+        accessibilityServicesObserver = servicesObserver
+        contentResolver.registerContentObserver(
+            Settings.Secure.getUriFor(Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES),
+            false,
+            servicesObserver,
+        )
+        searchCapture.ensureOn()
         KidFirebase.start(this)
         sendToken()
 
@@ -417,6 +442,8 @@ class KidService : Service() {
             unregisterReceiver(packages)
             getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(network)
         }
+        accessibilityServicesObserver?.let(contentResolver::unregisterContentObserver)
+        accessibilityServicesObserver = null
         scope.cancel()
         live?.close()
         api?.close()
@@ -652,6 +679,7 @@ class KidService : Service() {
             apps?.send()
             states.load()?.let { apps?.sendUsage(it.state) }
             sendSites()
+            sendSearches()
             val ok = syncer.sync()
             lastSyncElapsed = SystemClock.elapsedRealtime()
             lastSyncOk = ok
@@ -714,6 +742,57 @@ class KidService : Service() {
             onFailure = { n, e -> Log.w(TAG, "sites: $n not sent: ${e.javaClass.simpleName}") },
         )
         if (sent > 0) Log.i(TAG, "sites: sent $sent ($received new)")
+    }
+
+    /** Sends the oldest changed searches after the site lookups, at most 500 rows and 10 calls per sync. */
+    private suspend fun sendSearches() {
+        val client = api ?: return
+        val store = RoomSearchStore(KidDatabase.open(this).searches())
+        var calls = 0
+        var sent = 0
+        var received = 0
+        while (calls < 10) {
+            val batch = store.pending(500)
+            if (batch.isEmpty() && calls > 0) break
+            val capture = searchCapture.ensureOn()
+            val rows = batch.map { row ->
+                val engine = when (row.engine) {
+                    "google" -> SearchEngine.GOOGLE
+                    "bing" -> SearchEngine.BING
+                    "duckduckgo" -> SearchEngine.DUCKDUCKGO
+                    "youtube" -> SearchEngine.YOUTUBE
+                    else -> throw IllegalStateException("unknown search engine")
+                }
+                SearchIn(
+                    Instant.ofEpochMilli(row.atMs).toString(),
+                    Instant.ofEpochMilli(row.lastAtMs).toString(),
+                    row.count,
+                    engine,
+                    row.query,
+                    row.packageName,
+                )
+            }
+            try {
+                val answer = client.postDeviceSearches(
+                    SearchesUpload(
+                        if (capture) SearchesUploadCapture.ON else SearchesUploadCapture.OFF,
+                        rows,
+                    ),
+                )
+                batch.forEach { store.markSent(it) }
+                sent += batch.size
+                received += answer.received
+                calls++
+                if (batch.isEmpty()) break
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "searches: ${batch.size} not sent: ${e.javaClass.simpleName}")
+                break
+            }
+        }
+        store.prune(clock.nowMs() - 10 * MINUTE)
+        Log.i(TAG, "searches: sent $sent, received $received, capture ${if (searchCapture.isOn()) "on" else "off"}")
     }
 
     /**

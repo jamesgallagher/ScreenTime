@@ -16,6 +16,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import au.screentime.kid.usage.LocalSegment
 import au.screentime.kid.usage.PendingSegment
 import au.screentime.kid.usage.SegmentStore
+import au.screentime.kid.searches.SearchRow
+import au.screentime.kid.searches.SearchSighting
+import au.screentime.kid.searches.addSighting
 
 /** One row per segment. [version] goes up with every change; [sentVersion] is the version the server has. */
 @Entity(tableName = "segments")
@@ -103,11 +106,73 @@ abstract class SiteLookupDao {
     abstract suspend fun count(): Int
 }
 
+/** One complete search waiting to be sent to the server. */
+@Entity(tableName = "searches", primaryKeys = ["atMs", "engine", "query", "packageName"])
+data class SearchEntity(
+    val atMs: Long,
+    val lastAtMs: Long,
+    val count: Int,
+    val engine: String,
+    val query: String,
+    val packageName: String,
+    val version: Long,
+    val sentVersion: Long,
+)
+
+@Dao
+abstract class SearchDao {
+    @Query("SELECT * FROM searches ORDER BY atMs, lastAtMs, engine, query, packageName")
+    protected abstract suspend fun all(): List<SearchEntity>
+
+    @Upsert
+    protected abstract suspend fun upsert(row: SearchEntity)
+
+    @Transaction
+    open suspend fun record(sighting: SearchSighting) {
+        val previous = all()
+        val rows = addSighting(previous.map { it.toSearchRow() }, sighting)
+        val oldVersions = previous.associate { it.key() to it.version }
+        rows.filter { oldVersions[it.key()] != it.version }.forEach { upsert(it.toEntity()) }
+    }
+
+    @Query("SELECT * FROM searches WHERE version > sentVersion ORDER BY atMs, engine, query, packageName LIMIT :limit")
+    abstract suspend fun pending(limit: Int): List<SearchEntity>
+
+    @Query(
+        "UPDATE searches SET sentVersion = :version WHERE atMs = :atMs AND engine = :engine " +
+            "AND query = :query AND packageName = :packageName AND sentVersion < :version",
+    )
+    abstract suspend fun markSent(atMs: Long, engine: String, query: String, packageName: String, version: Long)
+
+    @Query("DELETE FROM searches WHERE lastAtMs < :beforeMs AND version = sentVersion")
+    abstract suspend fun prune(beforeMs: Long)
+
+    @Query("SELECT COUNT(*) FROM searches")
+    abstract suspend fun count(): Int
+
+    @Query(
+        "DELETE FROM searches WHERE rowid IN " +
+            "(SELECT rowid FROM searches ORDER BY atMs, engine, query, packageName LIMIT :toDelete)",
+    )
+    abstract suspend fun deleteOldest(toDelete: Int)
+
+    private fun SearchEntity.key() = SearchKey(atMs, engine, query, packageName)
+
+    private fun SearchRow.key() = SearchKey(atMs, engine, query, packageName)
+
+    private fun SearchEntity.toSearchRow() = SearchRow(atMs, lastAtMs, count, engine, query, packageName, version, sentVersion)
+
+    private fun SearchRow.toEntity() = SearchEntity(atMs, lastAtMs, count, engine, query, packageName, version, sentVersion)
+
+    private data class SearchKey(val atMs: Long, val engine: String, val query: String, val packageName: String)
+}
+
 /** The kid app's database, in app-private storage (never backed up). Later cards add their outboxes here. */
-@Database(entities = [SegmentRow::class, SiteLookupRow::class], version = 2, exportSchema = false)
+@Database(entities = [SegmentRow::class, SiteLookupRow::class, SearchEntity::class], version = 3, exportSchema = false)
 abstract class KidDatabase : RoomDatabase() {
     abstract fun segments(): SegmentDao
     abstract fun siteLookups(): SiteLookupDao
+    abstract fun searches(): SearchDao
 
     companion object {
         /**
@@ -123,6 +188,17 @@ abstract class KidDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `searches` (`atMs` INTEGER NOT NULL, `lastAtMs` INTEGER NOT NULL, " +
+                        "`count` INTEGER NOT NULL, `engine` TEXT NOT NULL, `query` TEXT NOT NULL, " +
+                        "`packageName` TEXT NOT NULL, `version` INTEGER NOT NULL, `sentVersion` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`atMs`, `engine`, `query`, `packageName`))",
+                )
+            }
+        }
+
         @Volatile private var instance: KidDatabase? = null
 
         /**
@@ -132,7 +208,7 @@ abstract class KidDatabase : RoomDatabase() {
         fun open(context: Context): KidDatabase =
             instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(context.applicationContext, KidDatabase::class.java, "kid.db")
-                    .addMigrations(MIGRATION_1_2)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                     .build()
                     .also { instance = it }
             }

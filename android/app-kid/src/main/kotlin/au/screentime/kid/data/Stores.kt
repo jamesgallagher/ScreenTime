@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.AtomicFile
 import au.screentime.core.model.api.ApiJson
 import au.screentime.core.model.api.DeviceState
+import au.screentime.kid.searches.SearchSighting
 import au.screentime.kid.sync.CachedState
 import au.screentime.kid.sync.ClockAnchor
 import au.screentime.kid.sync.ClockStore
@@ -78,5 +79,26 @@ class FileStateStore(context: Context) : StateStore {
             file.failWrite(out)
             throw e
         }
+    }
+}
+
+/** Search outbox in kid.db: changed rows first, at most 5,000 waiting, sent rows pruned after ten minutes. */
+class RoomSearchStore(private val dao: SearchDao) {
+    suspend fun record(sighting: SearchSighting) {
+        dao.record(sighting)
+        val waiting = dao.count()
+        if (waiting > MAX_WAITING) dao.deleteOldest(waiting - MAX_WAITING)
+    }
+
+    suspend fun pending(limit: Int) = dao.pending(limit)
+
+    suspend fun markSent(row: SearchEntity) {
+        dao.markSent(row.atMs, row.engine, row.query, row.packageName, row.version)
+    }
+
+    suspend fun prune(beforeMs: Long) = dao.prune(beforeMs)
+
+    private companion object {
+        const val MAX_WAITING = 5_000
     }
 }
