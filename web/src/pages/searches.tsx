@@ -122,7 +122,7 @@ function Report({ report, timeZone }: { report: SearchReport; timeZone: string }
     <>
       {off.length > 0 && (
         <p className="rounded-xl bg-warning/15 px-3 py-2 text-sm text-on-surface">
-          <span className="font-medium">Searches are off on {namesList(off)}.</span> Someone turned off ST Kid under Settings → Accessibility and it
+          <span className="font-medium">Searches are off on {namesList(off)}.</span> Someone turned off Screen Time under Settings → Accessibility and it
           could not turn itself back on. Turn it on again there, or run the set-up step in the guide.
         </p>
       )}
