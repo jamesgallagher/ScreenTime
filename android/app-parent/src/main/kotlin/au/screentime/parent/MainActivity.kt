@@ -40,17 +40,19 @@ import au.screentime.parent.push.ParentModeAsk
 import au.screentime.parent.push.ParentModeScreen
 import au.screentime.parent.push.ParentModeViewModel
 import au.screentime.parent.push.Push
+import au.screentime.parent.reports.ReportsViewModel
 import au.screentime.parent.today.TodayViewModel
 import kotlinx.coroutines.launch
 
 /**
- * The parent app's main activity (docs/SPEC.md §16.4): the sign-in, the app lock, and the four tabs.
+ * The parent app's main activity (docs/SPEC.md §16.4): the sign-in, the app lock, and the five tabs.
  */
 class MainActivity : ComponentActivity() {
     private val signIn: SignInViewModel by viewModels()
     private val today: TodayViewModel by viewModels()
     private val inbox: InboxViewModel by viewModels()
     private val kids: KidsViewModel by viewModels()
+    private val reports: ReportsViewModel by viewModels()
     private val parentMode: ParentModeViewModel by viewModels()
     private val session get() = (application as ParentApp).session
 
@@ -75,6 +77,7 @@ class MainActivity : ComponentActivity() {
                     today.clear()
                     inbox.clear()
                     kids.clear()
+                    reports.clear()
                     ask = null
                 }
                 if (state is SessionState.SignedIn) {
@@ -91,7 +94,7 @@ class MainActivity : ComponentActivity() {
                         locked -> LockScreen(onUnlock = ::askToUnlock)
                         s.me.family == null -> NoFamilyScreen(s.me, ::signOut)
                         ask != null -> ParentModeScreen(ask!!, parentMode) { ask = null }
-                        else -> HomeScreen(s.me, today, inbox, kids, session, secure = isSecure(), ::signOut) { w ->
+                        else -> HomeScreen(s.me, today, inbox, kids, reports, session, secure = isSecure(), ::signOut) { w ->
                             ask = ParentModeAsk(w.requestId, w.kidName, w.deviceName)
                         }
                     }
