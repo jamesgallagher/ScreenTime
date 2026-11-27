@@ -30,6 +30,16 @@ function Ui {
 }
 function Tap-Text([string]$text, [int]$wait = 2) {
     $node = (Ui).SelectNodes('//node') | Where-Object { $_.text -eq $text } | Select-Object -First 1
+    if (-not $node) {
+        # A report list left scrolled down hides the kind switch and the chips: page toward the top and look again.
+        foreach ($try in 1..4) {
+            & $adb shell input swipe 540 700 540 1600 300
+            Start-Sleep -Seconds 1
+            Write-Host "  looking for '$text': paged toward the top"
+            $node = (Ui).SelectNodes('//node') | Where-Object { $_.text -eq $text } | Select-Object -First 1
+            if ($node) { break }
+        }
+    }
     if (-not $node) { throw "No '$text' on screen" }
     $b = [regex]::Matches($node.bounds, '\d+') | ForEach-Object { [int]$_.Value }
     & $adb shell input tap ([int](($b[0] + $b[2]) / 2)) ([int](($b[1] + $b[3]) / 2))
@@ -49,6 +59,14 @@ function Tap-Desc([string]$desc, [int]$wait = 2) {
         }
     }
     if (-not $node) { throw "No content-desc '$desc' on screen" }
+    $b = [regex]::Matches($node.bounds, '\d+') | ForEach-Object { [int]$_.Value }
+    & $adb shell input tap ([int](($b[0] + $b[2]) / 2)) ([int](($b[1] + $b[3]) / 2))
+    Start-Sleep -Seconds $wait
+}
+# Android's notification question writes "Don’t allow" with a typographic apostrophe (U+2019), so match a pattern.
+function Tap-Match([string]$pattern, [int]$wait = 2) {
+    $node = (Ui).SelectNodes('//node') | Where-Object { $_.text -match $pattern } | Select-Object -First 1
+    if (-not $node) { throw "No text matching '$pattern' on screen" }
     $b = [regex]::Matches($node.bounds, '\d+') | ForEach-Object { [int]$_.Value }
     & $adb shell input tap ([int](($b[0] + $b[2]) / 2)) ([int](($b[1] + $b[3]) / 2))
     Start-Sleep -Seconds $wait
@@ -91,15 +109,16 @@ function Wait-Health {
 # The full text of a report, from the top of the list to the bottom, so a check never misses a word below the fold.
 # (A pull at the top only reloads the same report, so scrolling toward the top first is safe.)
 function Collect-Screen([int]$maxSwipes = 3) {
+    # Diagnostics go to the host: a Write-Output here would join the function's returned string as another array item.
     $screens = @(Screen-Text)
-    Write-Output "  screen: $($screens[0])"
+    Write-Host "  screen: $($screens[0])"
     for ($i = 0; $i -lt 4; $i++) {
         & $adb shell input swipe 540 700 540 1600 300
         Start-Sleep -Seconds 2
         $s = Screen-Text
         if ($s -ne $screens[-1]) {
             $screens += $s
-            Write-Output "  screen (scrolled toward the top $($i + 1)): $s"
+            Write-Host "  screen (scrolled toward the top $($i + 1)): $s"
         } else { break }
     }
     for ($i = 0; $i -lt $maxSwipes; $i++) {
@@ -108,7 +127,7 @@ function Collect-Screen([int]$maxSwipes = 3) {
         $s = Screen-Text
         if ($s -eq $screens[-1]) { break }
         $screens += $s
-        Write-Output "  screen (paged down $($i + 1)): $s"
+        Write-Host "  screen (paged down $($i + 1)): $s"
     }
     return ($screens -join ' ||| ')
 }
@@ -161,8 +180,8 @@ Start-Sleep -Seconds 1
 Tap-Text 'Sign in' 5
 $asked = Screen-Text
 Write-Output "  after sign in: $asked"
-if ($asked.Contains("Don't allow")) {
-    Tap-Text "Don't allow" 3
+if ($asked.Contains('notifications')) {
+    Tap-Match '^Don.t allow$' 3
     Write-Output '  answered the notification question with Dont allow'
 }
 $parentMain = Wait-Screen 'Kids' 30
@@ -222,6 +241,14 @@ Write-Output '--- 7. Criterion 44: Searches, Yesterday'
 Tap-Text 'Searches' 3
 Check-Words 'criterion 44' @('volcano facts', 'Google in Chrome', 'roblox promo codes', 'Google app', 'Searches', '2')
 Shot 'card075-searches'
+# Collect-Screen left the list scrolled down; a pull only refreshes from the top, so page back up first.
+for ($i = 0; $i -lt 4; $i++) {
+    $before = Screen-Text
+    & $adb shell input swipe 540 700 540 1600 300
+    Start-Sleep -Seconds 1
+    if ((Screen-Text) -eq $before) { break }
+}
+Write-Output "  screen at the top: $(Screen-Text)"
 
 Write-Output '--- 8. Criterion 45: the server stopped, pull down on Searches'
 docker stop screentime-api-1
