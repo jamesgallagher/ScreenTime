@@ -50,6 +50,8 @@ import au.screentime.parent.inbox.Waiting
 import au.screentime.parent.inbox.WaitingStrip
 import au.screentime.parent.kids.KidsScreen
 import au.screentime.parent.kids.KidsViewModel
+import au.screentime.parent.reports.ReportsScreen
+import au.screentime.parent.reports.ReportsViewModel
 import au.screentime.parent.sos.SosActivity
 import au.screentime.parent.sos.SosAlarm
 import au.screentime.parent.sos.SosNews
@@ -62,21 +64,23 @@ import java.time.ZoneId
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-/** The four tabs of the parent app (docs/SPEC.md §16.4). */
+/** The five tabs of the parent app (docs/SPEC.md §16.4). */
 enum class Tab(val label: String, val icon: Int) {
     TODAY("Today", R.drawable.ic_today),
     INBOX("Inbox", R.drawable.ic_inbox),
     KIDS("Kids", R.drawable.ic_kids),
+    REPORTS("Reports", R.drawable.ic_reports),
     SETTINGS("Settings", R.drawable.ic_settings),
 }
 
-/** The home screen: the four tabs and the bottom navigation (docs/SPEC.md §16.4). */
+/** The home screen: the five tabs and the bottom navigation (docs/SPEC.md §16.4). */
 @Composable
 fun HomeScreen(
     me: Me,
     today: TodayViewModel,
     inbox: InboxViewModel,
     kids: KidsViewModel,
+    reports: ReportsViewModel,
     session: Session,
     secure: Boolean,
     onSignOut: () -> Unit,
@@ -179,6 +183,7 @@ fun HomeScreen(
                     Tab.TODAY -> TodayScreen(today)
                     Tab.INBOX -> InboxScreen(inbox, familyZone)
                     Tab.KIDS -> KidsScreen(kids, familyZone)
+                    Tab.REPORTS -> ReportsScreen(reports, kids, familyZone)
                     Tab.SETTINGS -> SettingsScreen(me, secure, onSignOut, sosActive = !activeSos.isNullOrEmpty())
                 }
             }

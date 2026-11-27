@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Reports tab: three rounded bars, 24 dp. Compose tints it. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="960"
+    android:viewportHeight="960">
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M200,800Q183,800 171.5,788.5Q160,777 160,760L160,480Q160,463 171.5,451.5Q183,440 200,440L280,440Q297,440 308.5,451.5Q320,463 320,480L320,760Q320,777 308.5,788.5Q297,800 280,800L200,800ZM440,800Q423,800 411.5,788.5Q400,777 400,760L400,200Q400,183 411.5,171.5Q423,160 440,160L520,160Q537,160 548.5,171.5Q560,183 560,200L560,760Q560,777 548.5,788.5Q537,800 520,800L440,800ZM680,800Q663,800 651.5,788.5Q640,777 640,760L640,600Q640,583 651.5,571.5Q663,560 680,560L760,560Q777,560 788.5,571.5Q800,583 800,600L800,760Q800,777 788.5,788.5Q777,800 760,800L680,800Z" />
+</vector>
