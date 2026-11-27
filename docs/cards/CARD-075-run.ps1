@@ -266,9 +266,15 @@ Check 'criterion 45: roblox promo codes still on screen' ($offline.Contains('rob
 docker start screentime-api-1
 Check 'server health returned' (Wait-Health)
 
-Write-Output '--- 9. Cleanup'
+Write-Output '--- 9. Criterion 46: the database rows behind the screens, then cleanup'
 $reportDevices = Db "select name, platform from devices where name like 'Report %'"
 Write-Output "  devices: $reportDevices"
+$reportApps = Db "select d.name, u.package, u.seconds from app_usage_daily u join devices d on d.id = u.device_id where d.name like 'Report %' order by d.name, u.seconds desc"
+Write-Output "  app_usage_daily: $reportApps"
+$reportSites = Db "select d.name, s.site, s.package, s.minutes from site_daily s join devices d on d.id = s.device_id where d.name like 'Report %' order by d.name, s.minutes desc"
+Write-Output "  site_daily: $reportSites"
+$reportSearches = Db "select d.name, s.query, s.package, s.at from searches s join devices d on d.id = s.device_id where d.name like 'Report %' order by s.at desc"
+Write-Output "  searches: $reportSearches"
 Get-Process emulator*, qemu-system* -ErrorAction SilentlyContinue | Stop-Process -Force -Confirm:$false
 & $adb kill-server 2>&1 | Out-Null
 & "$Repo\android\gradlew.bat" -p "$Repo\android" --stop 2>&1 | Out-Null
