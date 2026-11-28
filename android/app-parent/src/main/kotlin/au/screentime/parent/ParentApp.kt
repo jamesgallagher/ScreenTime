@@ -9,6 +9,8 @@ import au.screentime.parent.push.createChannels
 import au.screentime.parent.update.ParentUpdater
 import au.screentime.parent.kids.RemoteUpdates
 import au.screentime.parent.kids.ServerDeviceUpdates
+import au.screentime.parent.reports.Reports
+import au.screentime.parent.reports.ServerReports
 import au.screentime.parent.update.ParentUpdates
 import io.ktor.client.engine.okhttp.OkHttp
 
@@ -28,5 +30,7 @@ class ParentApp : Application() {
         ParentUpdates.source = ParentUpdater(this, session)
         // The device row's Update now (docs/SPEC.md §12.11): ask the server for this device's update.
         RemoteUpdates.source = ServerDeviceUpdates(session)
+        // The Reports tab (docs/SPEC.md §12.9): the real Apps, Websites and Searches reports from the server.
+        Reports.source = ServerReports(session)
     }
 }

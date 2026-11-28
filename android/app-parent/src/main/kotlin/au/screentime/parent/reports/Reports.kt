@@ -54,9 +54,9 @@ interface ReportsSource {
     suspend fun clearSiteClass(site: String)
 }
 
-/** The app's one [ReportsSource]. Until CARD-075 it is [FakeReports]. */
+/** The app's one [ReportsSource]; set once when the app starts (`ParentApp`). */
 object Reports {
-    var source: ReportsSource = FakeReports
+    lateinit var source: ReportsSource
 }
 
 // ---- Pure helpers: periods. ----
